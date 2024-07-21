@@ -11,7 +11,7 @@ Currently, we provide only model weights for mammalian species and Tiberius does
 
 Clone the repository, including learnMSA as submodule:
 ```
-git clone --recursive https://github.com/LarsGab/gene_pred_deepl
+git clone --recursive https://github.com/Gaius-Augustus/Tiberius
 ```
 In case you cloned the repository without the submodule, you can load the submodule with:
 ```

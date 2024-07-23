@@ -133,3 +133,6 @@ wget https://bioinf.uni-greifswald.de/bioinf/tiberius/anno/Homo_sapiens.gtf.gz
 wget https://bioinf.uni-greifswald.de/bioinf/tiberius/anno/Bos_taurus.gtf.gz
 wget https://bioinf.uni-greifswald.de/bioinf/tiberius/anno/Delphinapterus_leucas.gtf.gz
 ```
+
+## What to cite
+Gabriel, Lars, et al. "Tiberius: End-to-End Deep Learning with an HMM for Gene Prediction." bioRxiv, 21 July 2024, doi:10.1101/2024.07.21.604459. https://www.biorxiv.org/content/early/2024/07/23/2024.07.21.604459.

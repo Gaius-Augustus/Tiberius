@@ -1,9 +1,13 @@
 # Tiberius: End-to-End Deep Learning with an HMM for Gene Prediction
 
+For more information, see the [Tiberius preprint](https://doi.org/10.1101/2024.07.21.604459).
+
+
 Tiberius is a deep learning-based *ab initio* gene structure prediction tool that end-to-end integrates convolutional
 and long short-term memory layers with a differentiable HMM layer. It can be used to predict gene structures from **genomic sequences only**, while matching the accuracy of tool that use extrinsic evidence.
 
 Currently, we provide only model weights for mammalian species and Tiberius does not predict alternative splicing variants. 
+
 
 ## Installation
 

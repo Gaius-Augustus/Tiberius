@@ -246,12 +246,13 @@ class Transcript:
                 self.add_line(stop)
 
     def redo_phase(self):
-        self.transcript_lines['CDS'] = sorted(self.transcript_lines['CDS'], 
-                                              key=lambda x: x[3], reverse=self.strand=='-')
-        phase = 0
-        for line in self.transcript_lines['CDS']:
-            line[7] = phase
-            phase = (3 - (line[4] - line[3] + 1 - phase)%3)%3
+        if 'CDS' in self.transcript_lines:
+            self.transcript_lines['CDS'] = sorted(self.transcript_lines['CDS'], 
+                                                key=lambda x: x[3], reverse=self.strand=='-')
+            phase = 0
+            for line in self.transcript_lines['CDS']:
+                line[7] = phase
+                phase = (3 - (line[4] - line[3] + 1 - phase)%3)%3
     
     def check_splits(self):        
         for k in self.transcript_lines.keys():

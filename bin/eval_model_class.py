@@ -1061,9 +1061,10 @@ class PredictionGTF:
         remove_tx = []                
         for tx in anno.transcripts.values():
             tx.check_splits()
-            tx.redo_phase()
             if filt and tx.get_cds_len() < 201:
                 remove_tx.append(tx.id)
+            else:                
+                tx.redo_phase()
             
         for tx in remove_tx:
             anno.transcripts.pop(tx)

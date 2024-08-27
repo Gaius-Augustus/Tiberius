@@ -173,7 +173,6 @@ def read_species(file_name):
         species = f_h.read().strip().split('\n')
     return [s for s in species if s and s[0] != '#']
 
-
 def train_clamsa(generator, model_save_dir, config, val_data=None, model_load=None, model_load_lstm=None):
     """Train simple CNN model that uses only CLAMSA as input.
 

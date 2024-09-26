@@ -18,7 +18,7 @@ To install TensorFlow 2.10 with GPU support using Conda, follow these steps:
 2. and sign back in via SSH or close and re-open your terminal window. Reactivate your conda session and install Tensorflow.
 
     ```shell
-    conda activate tf
+    conda activate tf2_10
     python3 -m pip install tensorflow==2.10 numpy==1.24
     ```
 

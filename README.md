@@ -9,8 +9,10 @@ and long short-term memory layers with a differentiable HMM layer. It can be use
 Currently, we provide only model weights for mammalian species and Tiberius does not predict alternative splicing variants. 
 
 
-## Installation
 
+:warning: **We will be migrating Tiberius from TensorFlow 2.10 to TensorFlow 2.17 during the week of October 7–12., which will make the installation of a compatible TensorFlow version easier.**
+
+## Installation
 ### Git Repositories
 
 Clone the repository, including learnMSA as submodule:

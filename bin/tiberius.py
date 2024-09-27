@@ -223,7 +223,7 @@ def main():
     anno_outp.add_transcripts(out_tx, f'anno')
     anno_outp.norm_tx_format()
     anno_outp.find_genes()
-    anno_outp.rename_tx_ids()        
+    anno_outp.rename_tx_ids() 
     anno_outp.write_anno(gtf_out)
 
     prot_seq_out = ""

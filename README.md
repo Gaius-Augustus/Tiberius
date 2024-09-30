@@ -107,6 +107,14 @@ tar -xzvf tiberius_denovo_weights.tgz
 python bin/tiberius.py --genome input.fasta --out output.gtf --model_lstm path/to/tiberius_denovo_weights
 ```
 
+### Running Tiberius on Differnet GPUs
+
+Tiberius can run on any GPU with at least 8GB of memory. However, you will need to adjust the batch size to match the memory capacity of your GPU using the `--batch_size` argument. Below is a list of recommended batch sizes for different GPUs:
+Here is a list of GPUs to batch siezes:
+- **A100 (80GB):** batch size of 16
+- **RTX 3090 (25GB):** batch size of 8
+- **RTX 2070 (8GB):** batch size of 2
+
 
 Tiberius produces a GTF file containing the predicted gene structures. It can also generate FASTA-formatted files of coding sequences and protein sequences when locations are specified using the `--codingseq` and `--protseq` options, respectively.
 

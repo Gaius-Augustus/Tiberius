@@ -146,4 +146,5 @@ wget https://bioinf.uni-greifswald.de/bioinf/tiberius/anno/Delphinapterus_leucas
 [Human genome annotation](https://genome.ucsc.edu/s/MaSta/Tiberius_hg38) track on UCSC Genome Browser.
 
 ## What to cite
-Gabriel, Lars, et al. "Tiberius: End-to-End Deep Learning with an HMM for Gene Prediction." bioRxiv, 21 July 2024, doi:10.1101/2024.07.21.604459. https://www.biorxiv.org/content/early/2024/07/23/2024.07.21.604459.
+Gabriel, Lars, et al. "Tiberius: End-to-End Deep Learning with an HMM for Gene Prediction." bioRxiv, 21 July 2024, doi:10.1101/2024.07.21.604459. https://www.biorxiv.org/content/early/2024/07/23/2024.07.21.604459.  
+[Popular science podcast on this paper generated with NotebookLM](https://bioinf.uni-greifswald.de/bioinf/tiberius/pod/Tiberius.wav)

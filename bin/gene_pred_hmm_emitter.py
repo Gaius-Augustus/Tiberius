@@ -1,7 +1,6 @@
 import tensorflow as tf
 import numpy as np
 import sys
-sys.path.append("../../tmp_work/learnMSA")
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
 from learnMSA.protein_language_models.MvnMixture import MvnMixture, DefaultDiagBijector
 import kmer
@@ -50,11 +49,7 @@ class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):
             assert embedding_dim is not None, "If emit_embeddings=True, embedding_dim must be given."
         else:
             assert embedding_dim is None, "If emit_embeddings=False, embedding_dim must not be given."
-        
-    def cell_init(self, cell):
-        """ Automatically called when the owner cell is created.
-        """
-        pass #nothing to do here in this case
+
         
     def build(self, input_shape):
         if self.built:
@@ -75,6 +70,7 @@ class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):
                                             name="embedding_emission_kernel")
         self.built = True
         
+
     def recurrent_init(self):
         """ Automatically called before each recurrent run. Should be used for setups that
             are only required once per application of the recurrent layer.
@@ -92,6 +88,7 @@ class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):
         """
         return tf.nn.softmax(self.emission_kernel)
         
+
     def call(self, inputs, end_hints=None, training=False):
         """ 
         Args: 
@@ -123,9 +120,11 @@ class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):
             emit = tf.concat([left_end, emit[..., 1:-1, :], right_end], axis=-2)
         return emit
     
+
     def get_prior_log_density(self):
         # Can be used for regularization in the future.
         return [[0.]]
+
 
     def duplicate(self, model_indices=None, share_kernels=False):
         init = ConstantInitializer(self.emission_kernel.numpy())
@@ -145,6 +144,7 @@ class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):
                 emitter_copy.embedding_emission_kernel = self.embedding_emission_kernel
             emitter_copy.built = True
         return emitter_copy
+
 
     def get_config(self):
         return {"num_models": self.num_models,

@@ -1,7 +1,6 @@
 import tensorflow as tf
 import numpy as np
 import sys
-sys.path.append("../../tmp_work/learnMSA")
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
 
 

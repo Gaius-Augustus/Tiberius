@@ -85,8 +85,7 @@ def main():
         'Tiberius_nosm': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_nosm_weights.tgz',
         'Tiberius_denovo': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models//tiberius_denovo_weights.tgz'
         }
-    
-    sys.path.append(args.learnMSA)    
+       
     from eval_model_class import PredictionGTF
     from models import make_weighted_cce_loss        
     from genome_anno import Anno
@@ -288,8 +287,6 @@ def parseCmd():
         help='Genome sequence file in FASTA format.')
     parser.add_argument('--parallel_factor',  type=int, default=817,
         help='Parallel factor used in Viterbi. Use the factor of w_size that is closest to sqrt(w_size) (817 works well for 500004)')
-    parser.add_argument('--learnMSA',  type=str, default='../learnMSA',
-        help='Path to the learnMSA repository')
     parser.add_argument('--no_softmasking', action='store_true',
         help='Disables softmasking.')
     parser.add_argument('--clamsa', type=str, default='',

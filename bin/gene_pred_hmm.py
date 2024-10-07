@@ -1,22 +1,16 @@
 import tensorflow as tf
 import numpy as np
-from learnMSA.msa_hmm.MsaHmmCell import MsaHmmCell
-from learnMSA.msa_hmm.MsaHmmLayer import MsaHmmLayer
+from learnMSA.msa_hmm.MsaHmmCell import HmmCell
+# replace this import later, when learnMSA renames "MsaHmmLayer" properly to "HmmLayer"
+from learnMSA.msa_hmm.MsaHmmLayer import MsaHmmLayer as HmmLayer
 from learnMSA.msa_hmm.Viterbi import viterbi
 from gene_pred_hmm_emitter import SimpleGenePredHMMEmitter, GenePredHMMEmitter
 from gene_pred_hmm_transitioner import SimpleGenePredHMMTransitioner, GenePredHMMTransitioner, GenePredMultiHMMTransitioner
     
 
 
-def configure_cell_workaround(cell, simple=False, num_models=1):
-    # ignore this as well, will change in the future when the Cell is refactored for general (i.e. non-MSA) usage
-    cell.num_states = 1+6*num_models if simple else 1+14*num_models
-    cell.max_num_states = cell.num_states
-    cell.state_size = (tf.TensorShape([cell.max_num_states]), tf.TensorShape([1]))
-    cell.output_size = tf.TensorShape([cell.max_num_states])
 
-
-class GenePredHMMLayer(MsaHmmLayer):
+class GenePredHMMLayer(HmmLayer):
     """A layer that implements a gene prediction HMM.
     Args:
         num_models: The number of sub-HMMs.
@@ -159,14 +153,12 @@ class GenePredHMMLayer(MsaHmmLayer):
                                                         starting_distribution_trainable=self.trainable_starting_distribution,
                                                         transitions_trainable=self.trainable_transitions)
         # configure the cell
-        self.cell = MsaHmmCell(length=[1], #ignore this argument, it's meaningless for this HMM
-                                dim=input_shape[-1],
-                                emitter=emitter, 
-                                transitioner=transitioner,
-                                name="gene_pred_hmm_cell")
-        configure_cell_workaround(self.cell, simple=self.simple, num_models=self.num_models)
+        self.cell = HmmCell([emitter.num_states],
+                            dim=input_shape[-1],
+                            emitter=emitter, 
+                            transitioner=transitioner,
+                            name="gene_pred_hmm_cell")
         super(GenePredHMMLayer, self).build(input_shape)
-        configure_cell_workaround(self.reverse_cell, self.simple, num_models=self.num_models)
 
 
     def concat_inputs(self, inputs, nucleotides, embeddings=None):

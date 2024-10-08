@@ -343,14 +343,14 @@ def parseCmd():
     This script will write input and output data as 100 tfrecord files as tfrecords/speciesName_i.tfrecords""")
     parser.add_argument('--species', type=str, default='',
         help='')
-    parser.add_argument('--gtf', type=str, default='',
+    parser.add_argument('--gtf', type=str, default='', required=True,
         help='Annotation in GTF format.')
-    parser.add_argument('--fasta', type=str, default='',
+    parser.add_argument('--fasta', type=str, default='', required=True,
         help='Genome sequence in FASTA format.')
-    parser.add_argument('--out', type=str,
+    parser.add_argument('--out', type=str, required=True,
         help='Prefix of output files')
     parser.add_argument('--wsize', type=int,
-        help='')
+        help='', required=True)
     # parser.add_argument('--no_transition', action='store_true',
     #     help='')
     parser.add_argument('--transformer', action='store_true',

@@ -10,7 +10,7 @@ For following instructions, we will assume that the files are named after the sp
     python bin/get_longest_isoform.py --gtf ${SPECIES}.gtf --out ${SPECIES}.longest.gtf
     ```
 
-2. Create tfrecords files for each species. This will create 100 tfrecords files for each genome in the directory `$tfrecords`. The tfrecords files will contain the genomic sequences and the gene annotations in the format that is require for training:
+2. Create tfrecords files for each species. This will create 100 tfrecords files for each genome in the directory `$tfrecords`. The tfrecords files will contain the genomic sequences and the gene annotations, split into trainings examples with a sequence length of `${seq_size}`, in the format that is required for training. For training with the mammalian genomes, we used a `${seq_size}` of `9999`, which has proven to be a reasonable choice.
 
     ```shell
     python bin/write_tfrecord_species.py --fasta ${SPECIES}.fa --gtf ${SPECIES}.longest.gtf --out $tfrecords/${SPECIES}

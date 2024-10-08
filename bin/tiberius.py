@@ -84,7 +84,10 @@ def main():
         'Tiberius_default': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_weights.tgz',
         'Tiberius_nosm': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_nosm_weights.tgz',
         'Tiberius_denovo': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models//tiberius_denovo_weights.tgz'
-        }
+    }
+    
+    if args.learnMSA:
+        sys.path.insert(0, args.learnMSA)  
        
     from eval_model_class import PredictionGTF
     from models import make_weighted_cce_loss        
@@ -291,6 +294,9 @@ def parseCmd():
         help='Disables softmasking.')
     parser.add_argument('--clamsa', type=str, default='',
         help='')
+    parser.add_argument('--learnMSA',  type=str, default='',
+        #help='Path to the learnMSA repository (only required if it is not installed with pip)')
+        help=argparse.SUPPRESS)                        
     parser.add_argument('--codingseq', type=str, default='',
         help='Ouputs the coding sequences of all predicted genes as a FASTA file.')
     parser.add_argument('--protseq', type=str, default='',

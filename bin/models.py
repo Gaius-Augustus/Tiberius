@@ -6,14 +6,14 @@ from tensorflow.keras.layers import (Conv1D, SimpleRNN, Conv1DTranspose, MaxPool
 #from transformers import TFLongformerModel, LongformerConfig, BertConfig, TFBertModel, TransfoXLConfig, TFTransfoXLModel
 import sys 
 import numpy as np
+from tensorflow import keras
 from tensorflow.keras import backend as K
 #from transformers.models.longformer.modeling_tf_longformer import shape_list, get_initializer
-from transformers import TFLongformerModel, LongformerConfig, AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM
+# from transformers import TFLongformerModel, LongformerConfig, AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM
 from gene_pred_hmm import class3_emission_matrix, GenePredHMMLayer, make_5_class_emission_kernel, make_15_class_emission_kernel, make_aggregation_matrix
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
 from tensorflow.keras.callbacks import Callback
 from sklearn.metrics import confusion_matrix
-
 
 class EpochSave(tf.keras.callbacks.Callback):
     def __init__(self, model_save_dir):
@@ -215,7 +215,8 @@ def lstm_model(units=200, filter_size=64,
         inp_clamsa = Input(shape=(None, 4), name='clamsa_input')
         inp = [main_input, inp_clamsa]
         
-        main_input = tf.concat([main_input, inp_clamsa], axis=-1)
+        # main_input = tf.concat([main_input, inp_clamsa], axis=-1)
+        main_input = keras.layers.Concatenate(axis=-1)([main_input, inp_clamsa])
         inp_size+=4
     else:
         inp = main_input
@@ -239,7 +240,8 @@ def lstm_model(units=200, filter_size=64,
     
     # Add input to the convolutions
     cnn_out = x
-    x = tf.concat([inp_embedding, cnn_out], axis=-1)
+    # x = tf.concat([inp_embedding, cnn_out], axis=-1)
+    x = keras.layers.Concatenate(axis=-1)([inp_embedding, cnn_out])
     
     if multi_loss:
         y_cnn = Dense(output_size, activation='relu', name='cnn_dense')(x)
@@ -294,7 +296,8 @@ def lstm_model(units=200, filter_size=64,
     if residual_conv:
         x = Dense(pool_size * 30, activation='relu', name='dense')(x)
         x = Reshape((-1, 30), name='Reshape2')(x)
-        x = tf.concat([x, cnn_out], axis=-1)
+        # x = tf.concat([x, cnn_out], axis=-1)
+        x = keras.layers.Concatenate(axis=-1)([x, cnn_out])
         x = Dense(output_size, name='out_dense')(x)
     else:
         if stride > 1:
@@ -313,29 +316,29 @@ def lstm_model(units=200, filter_size=64,
     return Model(inputs=inp, outputs=outputs)
 
 
-def add_transformer2lstm(model_load_lstm, max_token_len=5502, cnn_size=128):
-    lstm_model = tf.keras.models.load_model(model_load_lstm, 
-                                            custom_objects={"custom_cce_f1_loss": custom_cce_f1_loss(2)})
-    input_ids = Input(shape=(None,), dtype='int32', name='input_ids')
-    attention_mask = Input(shape=(None,), dtype='int32', name='attention_mask')# run transformer
-    transformer_model = TFEsmForMaskedLM.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
-    transformer_model.trainable=False
-    trans_out = transformer_model(input_ids,
-                                  attention_mask=attention_mask,
-                                  output_hidden_states=True)
-    trans_out = trans_out['hidden_states'][-1][:,1:]
-    trans_out = Dense(134*6, name='dense_transformer', kernel_initializer='zeros')(trans_out)
-    trans_out = tf.reshape(trans_out, (-1, tf.shape(trans_out)[1]*6, cnn_size+6))
-    trans_out = tf.reshape(trans_out, (-1, tf.shape(trans_out)[1]*18, cnn_size+6))
+# def add_transformer2lstm(model_load_lstm, max_token_len=5502, cnn_size=128):
+#     lstm_model = tf.keras.models.load_model(model_load_lstm, 
+#                                             custom_objects={"custom_cce_f1_loss": custom_cce_f1_loss(2)})
+#     input_ids = Input(shape=(None,), dtype='int32', name='input_ids')
+#     attention_mask = Input(shape=(None,), dtype='int32', name='attention_mask')# run transformer
+#     transformer_model = TFEsmForMaskedLM.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
+#     transformer_model.trainable=False
+#     trans_out = transformer_model(input_ids,
+#                                   attention_mask=attention_mask,
+#                                   output_hidden_states=True)
+#     trans_out = trans_out['hidden_states'][-1][:,1:]
+#     trans_out = Dense(134*6, name='dense_transformer', kernel_initializer='zeros')(trans_out)
+#     trans_out = tf.reshape(trans_out, (-1, tf.shape(trans_out)[1]*6, cnn_size+6))
+#     trans_out = tf.reshape(trans_out, (-1, tf.shape(trans_out)[1]*18, cnn_size+6))
     
-    x = lstm_model.input
-    for layer in lstm_model.layers:     
-        if layer.name == 'tf.concat':
-            x = tf.concat([lstm_model.input, x], axis=-1)
-            x = tf.keras.layers.Add()([x, trans_out])
-        else:
-            x = layer(x)            
-    return Model(inputs=[lstm_model.input, input_ids, attention_mask], outputs=x)
+#     x = lstm_model.input
+#     for layer in lstm_model.layers:     
+#         if layer.name == 'tf.concat':
+#             x = tf.concat([lstm_model.input, x], axis=-1)
+#             x = tf.keras.layers.Add()([x, trans_out])
+#         else:
+#             x = layer(x)            
+#     return Model(inputs=[lstm_model.input, input_ids, attention_mask], outputs=x)
 
 
 def reduce_lstm_output_7(x, new_size=5):
@@ -424,7 +427,9 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
     else:
         emb = None
     
-    x = model.output
+    x = model.output    
+    x = x[0] if isinstance(x, list) else x
+    
     if x.shape[-1] > output_size:
         if x.shape[-1] == 7:
             x = reduce_lstm_output_7(x, new_size=output_size)
@@ -435,7 +440,13 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
             raise ValueError(f"Invalid combination of loaded output size ({x.shape[-1]}) and requested output size ({output_size}).")
     x = tf.keras.layers.Lambda(lambda x: x, name='lstm_out')(x)
 
-    nuc = tf.cast(inputs[0][...,:5] if isinstance(inputs, list) else inputs[...,:5], tf.float32)
+    # nuc = tf.cast(inputs[0][...,:5] if isinstance(inputs, list) else inputs[...,:5], tf.float32)
+    nuc = keras.layers.Lambda(
+        lambda inputs: tf.cast(
+            inputs[0][..., :5] if isinstance(inputs, list) else inputs[..., :5], 
+            tf.float32
+        )
+    )(inputs)
 
     if output_size == 5:
         emitter_init = make_5_class_emission_kernel(smoothing=1e-6, introns_shared=share_intron_parameters, num_models=num_hmm)
@@ -585,216 +596,216 @@ def get_positional_encoding(seq_len, d_model):
     pos_encoding = pos_encoding[tf.newaxis, ...]
     return pos_encoding
 
-def transformer_encoder(units, d_model, num_heads, dropout, name="transformer_layer"):
-    inputs = tf.keras.Input(shape=(None, d_model), name="inputs")
+# def transformer_encoder(units, d_model, num_heads, dropout, name="transformer_layer"):
+#     inputs = tf.keras.Input(shape=(None, d_model), name="inputs")
     
-    # MultiHead Attention layer
-    attention = tf.keras.layers.MultiHeadAttention(
-        num_heads=num_heads, key_dim=d_model, dropout=dropout, name="attention")(inputs, inputs)
-    add_attention = tf.add(inputs, attention)
-    out1 = LayerNormalization(epsilon=1e-6, name="norm_1")(add_attention)
+#     # MultiHead Attention layer
+#     attention = tf.keras.layers.MultiHeadAttention(
+#         num_heads=num_heads, key_dim=d_model, dropout=dropout, name="attention")(inputs, inputs)
+#     add_attention = tf.add(inputs, attention)
+#     out1 = LayerNormalization(epsilon=1e-6, name="norm_1")(add_attention)
     
-    # Feed-forward layer
-    ffnn = tf.keras.Sequential([
-        tf.keras.layers.Dense(units, activation='relu'),
-        tf.keras.layers.Dense(d_model),
-    ], name="ffnn")
-    ffnn_out = ffnn(out1)
-    add_ffnn = tf.add(out1, ffnn_out)
-    out2 = LayerNormalization(epsilon=1e-6, name="norm_2")(add_ffnn)
+#     # Feed-forward layer
+#     ffnn = tf.keras.Sequential([
+#         tf.keras.layers.Dense(units, activation='relu'),
+#         tf.keras.layers.Dense(d_model),
+#     ], name="ffnn")
+#     ffnn_out = ffnn(out1)
+#     add_ffnn = tf.add(out1, ffnn_out)
+#     out2 = LayerNormalization(epsilon=1e-6, name="norm_2")(add_ffnn)
     
-    return tf.keras.Model(inputs=inputs, outputs=out2, name=name)
+#     return tf.keras.Model(inputs=inputs, outputs=out2, name=name)
 
-def build_bert_model(max_sequence_length,inp_size):
-    configuration = BertConfig(hidden_size=inp_size, 
-                            num_hidden_layers=2, 
-                            num_attention_heads=9)
-    transformer_model = TFBertModel(configuration)
-    input_layer = tf.keras.layers.Input(shape=(max_sequence_length,inp_size), dtype=tf.float32)
-    embedding_layer = transformer_model(None,                            
-                            inputs_embeds=tf.cast(input_layer, tf.float32))[0]  
-    return tf.keras.Model(inputs=input_layer, outputs=embedding_layer)
+# def build_bert_model(max_sequence_length,inp_size):
+#     configuration = BertConfig(hidden_size=inp_size, 
+#                             num_hidden_layers=2, 
+#                             num_attention_heads=9)
+#     transformer_model = TFBertModel(configuration)
+#     input_layer = tf.keras.layers.Input(shape=(max_sequence_length,inp_size), dtype=tf.float32)
+#     embedding_layer = transformer_model(None,                            
+#                             inputs_embeds=tf.cast(input_layer, tf.float32))[0]  
+#     return tf.keras.Model(inputs=input_layer, outputs=embedding_layer)
 
-def build_transformer_xl_model(max_sequence_length,inp_size):            
-    configuration = TransfoXLConfig(d_embed=inp_size, d_model=inp_size,
-                                   n_layer=4, n_heads=9, d_head=9, mem_len=800)
-    transformer_model = TFTransfoXLModel(configuration)
+# def build_transformer_xl_model(max_sequence_length,inp_size):            
+#     configuration = TransfoXLConfig(d_embed=inp_size, d_model=inp_size,
+#                                    n_layer=4, n_heads=9, d_head=9, mem_len=800)
+#     transformer_model = TFTransfoXLModel(configuration)
     
-    input_layer = tf.keras.layers.Input(shape=(max_sequence_length,inp_size), dtype=tf.float32)
-    embedded = PositionalEmbeddingLayer(max_sequence_length, inp_size)(input_layer)
+#     input_layer = tf.keras.layers.Input(shape=(max_sequence_length,inp_size), dtype=tf.float32)
+#     embedded = PositionalEmbeddingLayer(max_sequence_length, inp_size)(input_layer)
     
-    embedding_layer = transformer_model(None,
-                            inputs_embeds=tf.cast(embedded, tf.float32))[0]
-    
-
-    return tf.keras.Model(inputs=input_layer, outputs=embedding_layer)
-
-def build_transformer_model(max_sequence_length,inp_size):            
-    configuration = LongformerConfig(hidden_size=inp_size, 
-                                    num_hidden_layers=12,#12, 
-                                    num_attention_heads=23,
-                                    max_position_embeddings=max_sequence_length,
-                                    #attention_window=500
-                                    )
-    transformer_model = TFLongformerModel(configuration)
-    
-    # Remove word embeddings and pooler layers
-    transformer_model.longformer.embeddings.word_embeddings = None
-    transformer_model.longformer.pooler = None
-    input_layer = tf.keras.layers.Input(shape=(max_sequence_length,inp_size), dtype=tf.float32)
-    #embedded = TFPositionalLongformerEmbeddings(configuration)(input_layer)
-    embedded = PositionalEmbeddingLayer(max_sequence_length, inp_size)(input_layer)
-    embedding_layer = transformer_model(None,
-                            inputs_embeds=tf.cast(embedded, tf.float32))[0]
-
-    return tf.keras.Model(inputs=input_layer, outputs=embedding_layer)
-
-def lm_model_phase(filter_size=64, 
-              kernel_size=9, numb_conv=2, pool_size=10, seq_size=99999):
-    # Define input shape
-    input_shape = (None, 5)
-    # Define input layer
-    main_input = Input(shape=input_shape, name='main_input')
-    x = Conv1D(filter_size, kernel_size, padding='same',
-                       activation="relu")(main_input) 
-    
-    # Convolutional layers
-    for i in range(numb_conv-1):
-        x = BatchNormalization(name=f'batch_normalization{i}')(x)  
-        x = Conv1D(filter_size, kernel_size, padding='same',
-                       activation="relu")(x)
-    
-    x = tf.concat([main_input, x], axis=-1)   
-    
-    # Reshape layer
-    if pool_size > 1:
-        x = Reshape((-1, pool_size * (filter_size+5)), name='R1')(x)
-
-    #x = PositionalEmbeddingLayer(max_length=seq_size // pool_size, embed_dim=pool_size * (filter_size+5))(x)
-    #position_tensor = tf.tile(tf.expand_dims(tf.range(0, seq_size // pool_size), axis=0), [batch_size, 1])
-    
-    
-    
+#     embedding_layer = transformer_model(None,
+#                             inputs_embeds=tf.cast(embedded, tf.float32))[0]
     
 
-    x = build_transformer_model(seq_size // pool_size, pool_size * (filter_size+5))(x)
-    
-    #x = build_bert_model(8192, pool_size * (filter_size+5))(x)
-    x = Dense(pool_size * 7, activation='relu', name='dense')(x)
-    if pool_size > 1:
-        x = Reshape((-1, pool_size, 7), name='R2')(x)
-    x1, x2 = tf.split(x, [3, 4], axis=-1)
-    
-    #x2 = Reshape((-1, pool_size, 3), name='R3')(x2)  
-    x1 = Activation('softmax', name='main')(x1)
-    x2 = Activation('softmax', name='main2')(x2)
-    
-    outputs = [x1, x2]
-    # Define model
-    model = Model(inputs=main_input, outputs=outputs)
-    return model
+#     return tf.keras.Model(inputs=input_layer, outputs=embedding_layer)
 
-def transformer_model(units=200, d_model=256, num_heads=4, filter_size=64, kernel_size=9, 
-                        numb_conv=2, numb_transformer=2, dropout_rate=0.0, pool_size=10, 
-                        stride=0, multi_loss=False, output_size=7):
-    # Input
-    outputs = []
-    input_shape = (None, 6)    
-    main_input = Input(shape=input_shape, name='main_input')
-    #inp_embedding = Dense(filter_size, activation="relu", name="inp_embed")(main_input)
+# def build_transformer_model(max_sequence_length,inp_size):            
+#     configuration = LongformerConfig(hidden_size=inp_size, 
+#                                     num_hidden_layers=12,#12, 
+#                                     num_attention_heads=23,
+#                                     max_position_embeddings=max_sequence_length,
+#                                     #attention_window=500
+#                                     )
+#     transformer_model = TFLongformerModel(configuration)
+    
+#     # Remove word embeddings and pooler layers
+#     transformer_model.longformer.embeddings.word_embeddings = None
+#     transformer_model.longformer.pooler = None
+#     input_layer = tf.keras.layers.Input(shape=(max_sequence_length,inp_size), dtype=tf.float32)
+#     #embedded = TFPositionalLongformerEmbeddings(configuration)(input_layer)
+#     embedded = PositionalEmbeddingLayer(max_sequence_length, inp_size)(input_layer)
+#     embedding_layer = transformer_model(None,
+#                             inputs_embeds=tf.cast(embedded, tf.float32))[0]
 
-    if stride > 1:
-        x = Conv1D(filter_size, kernel_size, strides=stride, padding='valid',
-            activation="relu", name='initial_conv')(main_input) 
-        inp_embedding = x
-    else:
-        # First convolution
-        inp_embedding = main_input
-        x = Conv1D(filter_size, kernel_size, padding='same',
-                        activation="relu", name='initial_conv')(main_input)     
+#     return tf.keras.Model(inputs=input_layer, outputs=embedding_layer)
+
+# def lm_model_phase(filter_size=64, 
+#               kernel_size=9, numb_conv=2, pool_size=10, seq_size=99999):
+#     # Define input shape
+#     input_shape = (None, 5)
+#     # Define input layer
+#     main_input = Input(shape=input_shape, name='main_input')
+#     x = Conv1D(filter_size, kernel_size, padding='same',
+#                        activation="relu")(main_input) 
     
-    # Convolutional layers
-    for i in range(numb_conv-1):
-        x = BatchNormalization(name=f'batch_normalization{i+1}')(x)
-        x = Conv1D(filter_size, kernel_size, padding='same',
-                       activation="relu", name=f'conv_{i+1}')(x)
+#     # Convolutional layers
+#     for i in range(numb_conv-1):
+#         x = BatchNormalization(name=f'batch_normalization{i}')(x)  
+#         x = Conv1D(filter_size, kernel_size, padding='same',
+#                        activation="relu")(x)
     
-    # Add input to the convolutions
-    x = tf.concat([inp_embedding, x], axis=-1)
+#     x = tf.concat([main_input, x], axis=-1)   
     
-    if multi_loss:
-        y_cnn = Dense(output_size, activation='relu', name='cnn_dense')(x)
-        y_cnn = Activation('softmax', name='out_cnn')(y_cnn)
-        outputs.append(y_cnn)
-    #x = main_input
-    # Reshape layer
-    if pool_size > 1:
-        x = Reshape((-1, pool_size * (filter_size+6)), name='R1')(x)
-        #x = Reshape((-1, pool_size * (6)), name='R1')(x)
+#     # Reshape layer
+#     if pool_size > 1:
+#         x = Reshape((-1, pool_size * (filter_size+5)), name='R1')(x)
+
+#     #x = PositionalEmbeddingLayer(max_length=seq_size // pool_size, embed_dim=pool_size * (filter_size+5))(x)
+#     #position_tensor = tf.tile(tf.expand_dims(tf.range(0, seq_size // pool_size), axis=0), [batch_size, 1])
+    
+    
+    
+    
+
+#     x = build_transformer_model(seq_size // pool_size, pool_size * (filter_size+5))(x)
+    
+#     #x = build_bert_model(8192, pool_size * (filter_size+5))(x)
+#     x = Dense(pool_size * 7, activation='relu', name='dense')(x)
+#     if pool_size > 1:
+#         x = Reshape((-1, pool_size, 7), name='R2')(x)
+#     x1, x2 = tf.split(x, [3, 4], axis=-1)
+    
+#     #x2 = Reshape((-1, pool_size, 3), name='R3')(x2)  
+#     x1 = Activation('softmax', name='main')(x1)
+#     x2 = Activation('softmax', name='main2')(x2)
+    
+#     outputs = [x1, x2]
+#     # Define model
+#     model = Model(inputs=main_input, outputs=outputs)
+#     return model
+
+# def transformer_model(units=200, d_model=256, num_heads=4, filter_size=64, kernel_size=9, 
+#                         numb_conv=2, numb_transformer=2, dropout_rate=0.0, pool_size=10, 
+#                         stride=0, multi_loss=False, output_size=7):
+#     # Input
+#     outputs = []
+#     input_shape = (None, 6)    
+#     main_input = Input(shape=input_shape, name='main_input')
+#     #inp_embedding = Dense(filter_size, activation="relu", name="inp_embed")(main_input)
+
+#     if stride > 1:
+#         x = Conv1D(filter_size, kernel_size, strides=stride, padding='valid',
+#             activation="relu", name='initial_conv')(main_input) 
+#         inp_embedding = x
+#     else:
+#         # First convolution
+#         inp_embedding = main_input
+#         x = Conv1D(filter_size, kernel_size, padding='same',
+#                         activation="relu", name='initial_conv')(main_input)     
+    
+#     # Convolutional layers
+#     for i in range(numb_conv-1):
+#         x = BatchNormalization(name=f'batch_normalization{i+1}')(x)
+#         x = Conv1D(filter_size, kernel_size, padding='same',
+#                        activation="relu", name=f'conv_{i+1}')(x)
+    
+#     # Add input to the convolutions
+#     x = tf.concat([inp_embedding, x], axis=-1)
+    
+#     if multi_loss:
+#         y_cnn = Dense(output_size, activation='relu', name='cnn_dense')(x)
+#         y_cnn = Activation('softmax', name='out_cnn')(y_cnn)
+#         outputs.append(y_cnn)
+#     #x = main_input
+#     # Reshape layer
+#     if pool_size > 1:
+#         x = Reshape((-1, pool_size * (filter_size+6)), name='R1')(x)
+#         #x = Reshape((-1, pool_size * (6)), name='R1')(x)
         
-    x = Dense(128, activation="relu", name="resize_for_longformer")(x)  # 768 is one of the standard sizes for Longformer
-    # Integrate Longformer layers
-    for i in range(numb_transformer):
-        # The TFLongformerModel returns a tuple. The first item is the sequence of hidden-states at the output of the last layer.
-        config = LongformerConfig()
-
-        # Adjust parameters as needed, for instance:
-        config.num_hidden_layers = 3  # adjust the number of layers
-        config.num_attention_heads = 4  # adjust the number of attention heads
-        config.intermediate_size = 72  # adjust the size of intermediate layers in the feed-forward network
-        config.hidden_size = 128  # adjust the size of embeddings and hidden states
-
-        # Instantiate the model
-        longformer_model = TFLongformerModel(config)
-        
-        #longformer_model = TFLongformerModel.from_pretrained('allenai/longformer-base-4096')
-        pos_encoding = get_positional_encoding(tf.shape(x)[1], 128)
-        x += pos_encoding
-
-
-        longformer_outputs = longformer_model(None, inputs_embeds=x)
-        x_longformer = longformer_outputs.last_hidden_state
-        x = tf.keras.layers.Add()([x, x_longformer])
-        
-#     x = Dense(d_model, activation="relu", name="resize_to_d_model")(x)
-#     pos_encoding = get_positional_encoding(tf.shape(x)[1], d_model)
-#     x += pos_encoding
-    
-#     # transformer
+#     x = Dense(128, activation="relu", name="resize_for_longformer")(x)  # 768 is one of the standard sizes for Longformer
+#     # Integrate Longformer layers
 #     for i in range(numb_transformer):
-#         x = transformer_encoder(units=d_model, d_model=d_model, num_heads=num_heads, 
-#                                  dropout=dropout_rate, name=f'transformer_{i+1}')(x)
-#         if dropout_rate:
-#             x = Dropout(dropout_rate, name=f'dropout_{i+1}')(x)
+#         # The TFLongformerModel returns a tuple. The first item is the sequence of hidden-states at the output of the last layer.
+#         config = LongformerConfig()
+
+#         # Adjust parameters as needed, for instance:
+#         config.num_hidden_layers = 3  # adjust the number of layers
+#         config.num_attention_heads = 4  # adjust the number of attention heads
+#         config.intermediate_size = 72  # adjust the size of intermediate layers in the feed-forward network
+#         config.hidden_size = 128  # adjust the size of embeddings and hidden states
+
+#         # Instantiate the model
+#         longformer_model = TFLongformerModel(config)
+        
+#         #longformer_model = TFLongformerModel.from_pretrained('allenai/longformer-base-4096')
+#         pos_encoding = get_positional_encoding(tf.shape(x)[1], 128)
+#         x += pos_encoding
+
+
+#         longformer_outputs = longformer_model(None, inputs_embeds=x)
+#         x_longformer = longformer_outputs.last_hidden_state
+#         x = tf.keras.layers.Add()([x, x_longformer])
+        
+# #     x = Dense(d_model, activation="relu", name="resize_to_d_model")(x)
+# #     pos_encoding = get_positional_encoding(tf.shape(x)[1], d_model)
+# #     x += pos_encoding
+    
+# #     # transformer
+# #     for i in range(numb_transformer):
+# #         x = transformer_encoder(units=d_model, d_model=d_model, num_heads=num_heads, 
+# #                                  dropout=dropout_rate, name=f'transformer_{i+1}')(x)
+# #         if dropout_rate:
+# #             x = Dropout(dropout_rate, name=f'dropout_{i+1}')(x)
         
     
-    # Output layer
-    #x = Dense(pool_size * 6, activation='relu', name='dense')(x)
+#     # Output layer
+#     #x = Dense(pool_size * 6, activation='relu', name='dense')(x)
     
-    if stride > 1:
-        x = Conv1DTranspose(output_size, kernel_size, strides=stride, padding='valid',
-            activation="relu", name='transpose_conv')(x) 
-    else:
-        x = Dense(pool_size * output_size, activation='relu', name='dense')(x)
+#     if stride > 1:
+#         x = Conv1DTranspose(output_size, kernel_size, strides=stride, padding='valid',
+#             activation="relu", name='transpose_conv')(x) 
+#     else:
+#         x = Dense(pool_size * output_size, activation='relu', name='dense')(x)
 
-    if pool_size > 1:
-        x = Reshape((-1, output_size), name='Reshape2')(x)
+#     if pool_size > 1:
+#         x = Reshape((-1, output_size), name='Reshape2')(x)
 
 
-    #x1, x2 = tf.split(x, [3, 4], axis=-1)
+#     #x1, x2 = tf.split(x, [3, 4], axis=-1)
     
-    #x2 = Reshape((-1, pool_size, 3), name='R3')(x2)  
-    #x1 = Activation('softmax', name='class')(x1)
-    #x2 = Activation('softmax', name='phase')(x2)
+#     #x2 = Reshape((-1, pool_size, 3), name='R3')(x2)  
+#     #x1 = Activation('softmax', name='class')(x1)
+#     #x2 = Activation('softmax', name='phase')(x2)
 
-    y_end = Activation('softmax', name='out')(x)
+#     y_end = Activation('softmax', name='out')(x)
     
-    outputs.append(y_end)
+#     outputs.append(y_end)
 
-    # Define model
-    model = Model(inputs=main_input, outputs=outputs)
+#     # Define model
+#     model = Model(inputs=main_input, outputs=outputs)
 
-    return model
+#     return model
 
 def weighted_categorical_crossentropy(class_weights, overall_weight):
     def loss(y_true, y_pred):        

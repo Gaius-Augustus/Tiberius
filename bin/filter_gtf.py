@@ -3,7 +3,7 @@
 #
 # Merge a number of GTF files and filter their transcripts.
 # 
-# Transformers 4.31.0
+# 
 # ==============================================================
 
 import sys, os, re, json, sys, csv

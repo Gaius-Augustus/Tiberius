@@ -21,8 +21,8 @@ def parseCmd():
         help='')
     parser.add_argument('--clamsa', action='store_true',
         help='')
-    parser.add_argument('--nuc_trans', action='store_true',
-        help='')
+    # parser.add_argument('--nuc_trans', action='store_true',
+    #     help='')
     parser.add_argument('--data',  type=str, default='',
         help='')
     parser.add_argument('--val_data',  type=str, default='',

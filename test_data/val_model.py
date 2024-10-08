@@ -7,7 +7,7 @@ import subprocess as sp
 import numpy as np
 from gene_pred_hmm import  GenePredHMMLayer
 import tensorflow as tf
-from transformers import AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM
+# from transformers import AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM
 import tensorflow.keras as keras
 from learnMSA.msa_hmm.Viterbi import viterbi
 
@@ -22,7 +22,7 @@ def decode_one_hot(encoded_seq):
         decoded_seq_str = [''.join(seq) for seq in decoded_seq]
         return decoded_seq_str
     
-def load_val_data(file, hmm_factor=False, reduce_output=True, trans=True):
+def load_val_data(file, hmm_factor=False, reduce_output=True, ):
     data = np.load(file)
     x_val = data["array1"]
     y_val = data["array2"]
@@ -43,27 +43,27 @@ def load_val_data(file, hmm_factor=False, reduce_output=True, trans=True):
         hints = np.concatenate([start[:,:,tf.newaxis,:], end[:,:,tf.newaxis,:]],-2)
         return ([np.array(x_val), hints], [y_val, y_val])
     
-    if trans:
-        x_val = x_val[:,:99036]
-        y_val = y_val[:,:99036]
-        tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
-        max_token_len = 5502
-        x_token = np.reshape(x_val[:,:,:5], (-1, max_token_len, 5))
-        x_token = decode_one_hot(x_token)
-        x_token = tokenizer.batch_encode_plus(x_token, return_tensors="tf", 
-                  padding="max_length", max_length=max_token_len//6+1)  
-        x_token['input_ids'] = x_token['input_ids'].numpy()
-        x_token['input_ids'] = x_token['input_ids'].reshape(
-                x_val.shape[0],-1,
-                x_token['input_ids'].shape[1])
-        x_token['attention_mask'] = x_token['attention_mask'].numpy()
-        x_token['attention_mask'] = x_token['attention_mask'].reshape(
-                x_val.shape[0],-1,
-                x_token['attention_mask'].shape[1])
+    # if trans:
+    #     x_val = x_val[:,:99036]
+    #     y_val = y_val[:,:99036]
+    #     tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
+    #     max_token_len = 5502
+    #     x_token = np.reshape(x_val[:,:,:5], (-1, max_token_len, 5))
+    #     x_token = decode_one_hot(x_token)
+    #     x_token = tokenizer.batch_encode_plus(x_token, return_tensors="tf", 
+    #               padding="max_length", max_length=max_token_len//6+1)  
+    #     x_token['input_ids'] = x_token['input_ids'].numpy()
+    #     x_token['input_ids'] = x_token['input_ids'].reshape(
+    #             x_val.shape[0],-1,
+    #             x_token['input_ids'].shape[1])
+    #     x_token['attention_mask'] = x_token['attention_mask'].numpy()
+    #     x_token['attention_mask'] = x_token['attention_mask'].reshape(
+    #             x_val.shape[0],-1,
+    #             x_token['attention_mask'].shape[1])
         
-        x = [[np.expand_dims(x_val[i],0), x_token['input_ids'][i], x_token['attention_mask'][i]] for i in range(x_val.shape[0])]
-        return x, y_val
-    return (x_val, y_val)
+    #     x = [[np.expand_dims(x_val[i],0), x_token['input_ids'][i], x_token['attention_mask'][i]] for i in range(x_val.shape[0])]
+    #     return x, y_val
+    # return (x_val, y_val)
 
 def main():
     args = parseCmd()    

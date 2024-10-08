@@ -10,7 +10,7 @@
 import sys
 import tensorflow as tf
 import numpy as np
-from transformers import AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM
+# from transformers import AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM
 
 class DataGenerator:
     """DataGenerator class for reading and processing TFRecord files 
@@ -22,8 +22,8 @@ class DataGenerator:
         shuffle (bool): Whether to shuffle the data.
         repeat (bool): Whether to repeat the data set.
         output_size (int): Number of class labels in traings examples.
-        trans (bool): Whether the data should fit the transformer only model.
-        trans_lstm (bool): Whether the data should fit the transformer-LSTM hybrid model.
+        trans (bool): Whether the data should fit the transformer only model. (deprecated!!)
+        trans_lstm (bool): Whether the data should fit the transformer-LSTM hybrid model. (deprecated!!)
         seq_weights (int): Weight of positons around exon borders. They aren't used if 0.
         softmasking (bool): Whether softmasking track should be added to input.
         clamsa (bool): Whether Clamsa track should be prepared as additional input,
@@ -36,7 +36,7 @@ class DataGenerator:
                  filter=False,
                  output_size=5,
                 hmm_factor=None,
-                trans=False, trans_lstm=False, 
+                # trans=False, trans_lstm=False, 
                  seq_weights=0, softmasking=True,
                 clamsa=False,
                 oracle=False):
@@ -48,8 +48,8 @@ class DataGenerator:
         self.seq_weights = seq_weights
         self.output_size = output_size
         self.hmm_factor = hmm_factor
-        self.trans=trans
-        self.trans_lstm=trans_lstm
+        # self.trans=trans
+        # self.trans_lstm=trans_lstm
         self.softmasking=softmasking
         self.clamsa = clamsa
         self.oracle = oracle
@@ -273,29 +273,30 @@ class DataGenerator:
                     y_new[:,:,2] = np.sum(y_batch[:,:,[5, 8, 13]], axis=-1)
                     y_new[:,:,3] = np.sum(y_batch[:,:,[6, 9, 11, 14]], axis=-1)
                 y_batch = y_new
-        if self.trans_lstm:
-            # prepare tokens for transformer lstm as additional input for the model
-            y_batch = y_batch[:,:99036]
-            x_batch = x_batch[:,:99036]
-            tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
-            max_token_len = 5502
-            x_token = np.reshape(x_batch[:,:,:5], (-1, max_token_len, 5))
-            x_token = self.decode_one_hot(x_token)
-            x_token = tokenizer.batch_encode_plus(x_token, return_tensors="tf", 
-                      padding="max_length", max_length=max_token_len//6+1)  
+        # if self.trans_lstm:
+        #     # prepare tokens for transformer lstm as additional input for the model
+        #     y_batch = y_batch[:,:99036]
+        #     x_batch = x_batch[:,:99036]
+        #     tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
+        #     max_token_len = 5502
+        #     x_token = np.reshape(x_batch[:,:,:5], (-1, max_token_len, 5))
+        #     x_token = self.decode_one_hot(x_token)
+        #     x_token = tokenizer.batch_encode_plus(x_token, return_tensors="tf", 
+        #               padding="max_length", max_length=max_token_len//6+1)  
             
-            X = [x_batch, x_token['input_ids'], x_token['attention_mask']]
-            Y = y_batch                
-        elif self.trans:            
-            # prepare tokens for transformer lstm as input for the model
-            tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
-            max_len = 5994
-            x_batch = self.decode_one_hot(x_batch[:,:,:5])
-            x_batch = tokenizer.batch_encode_plus(x_batch, return_tensors="tf", 
-                      padding="max_length", max_length=tokenizer.model_max_length)
-            X = [x_batch['input_ids'], x_batch['attention_mask']]
-            Y = y_batch            
-        elif self.hmm_factor:
+        #     X = [x_batch, x_token['input_ids'], x_token['attention_mask']]
+        #     Y = y_batch                
+        # elif self.trans:            
+        #     # prepare tokens for transformer lstm as input for the model
+        #     tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
+        #     max_len = 5994
+        #     x_batch = self.decode_one_hot(x_batch[:,:,:5])
+        #     x_batch = tokenizer.batch_encode_plus(x_batch, return_tensors="tf", 
+        #               padding="max_length", max_length=tokenizer.model_max_length)
+        #     X = [x_batch['input_ids'], x_batch['attention_mask']]
+        #     Y = y_batch            
+        # elif self.hmm_factor:
+        if self.hmm_factor:
             # deprecated by the parallelization of the HMM
             step_width = y_batch.shape[1] // self.hmm_factor
             start = y_batch[:,::step_width,:] # shape (batch_size, hmm_factor, 5)

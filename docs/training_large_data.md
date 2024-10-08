@@ -20,7 +20,7 @@ For following instructions, we will assume that the files are named after the sp
     You can create tfrecords files with the ClaMSA data with the following command:
 
     ```shell
-    python bin/write_tfrecord_species.py --fasta ${SPECIES}.fa --gtf ${SPECIES}.longest.gtf --out $tfrecords/${SPECIES} --clamsa $clamsa/{prefix} --seq_names $seq_names
+    python bin/write_tfrecord_species.py --fasta ${SPECIES}.fa --gtf ${SPECIES}.longest.gtf --out $tfrecords/${SPECIES} --clamsa $clamsa/{prefix} --seq_names $seq_names  --wsize ${seq_size}
     
     ```
 

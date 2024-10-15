@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import sys
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
+from learnMSA.msa_hmm.Utility import deserialize
 from learnMSA.protein_language_models.MvnMixture import MvnMixture, DefaultDiagBijector
 import kmer
 
@@ -23,7 +24,7 @@ class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):
     """
     def __init__(self, 
                 num_models=1,
-                init="zeros", 
+                init=ConstantInitializer(0.), 
                 trainable_emissions=True,
                 emit_embeddings=True, 
                 embedding_dim=None, 
@@ -157,6 +158,12 @@ class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):
                 "initial_variance": self.initial_variance,
                 "temperature": self.temperature,
                 "share_intron_parameters": self.share_intron_parameters}
+    
+
+    @classmethod
+    def from_config(cls, config):
+        config["init"] = deserialize(config["init"])
+        return cls(**config)
 
 
 
@@ -185,7 +192,7 @@ class GenePredHMMEmitter(SimpleGenePredHMMEmitter):
                 intron_begin_pattern,
                 intron_end_pattern,
                 l2_lambda=0.01,
-                nucleotide_kernel_init="zeros",
+                nucleotide_kernel_init=ConstantInitializer(0.),
                 trainable_nucleotides_at_exons=False,
                 **kwargs):
         """ Args:
@@ -343,6 +350,13 @@ class GenePredHMMEmitter(SimpleGenePredHMMEmitter):
             "nucleotide_kernel_init": self.nucleotide_kernel_init,
             "trainable_nucleotides_at_exons": self.trainable_nucleotides_at_exons})
         return config
+    
+
+    @classmethod
+    def from_config(cls, config):
+        config["init"] = deserialize(config["init"])
+        config["nucleotide_kernel_init"] = deserialize(config["nucleotide_kernel_init"])
+        return cls(**config)
 
 
 

@@ -4,6 +4,8 @@ from learnMSA.msa_hmm.MsaHmmCell import HmmCell
 # replace this import later, when learnMSA renames "MsaHmmLayer" properly to "HmmLayer"
 from learnMSA.msa_hmm.MsaHmmLayer import MsaHmmLayer as HmmLayer
 from learnMSA.msa_hmm.Viterbi import viterbi
+from learnMSA.msa_hmm.Utility import deserialize
+from learnMSA.msa_hmm.Initializers import ConstantInitializer
 from gene_pred_hmm_emitter import SimpleGenePredHMMEmitter, GenePredHMMEmitter
 from gene_pred_hmm_transitioner import SimpleGenePredHMMTransitioner, GenePredHMMTransitioner, GenePredMultiHMMTransitioner
     
@@ -50,7 +52,7 @@ class GenePredHMMLayer(HmmLayer):
                 initial_exon_len=100,
                 initial_intron_len=10000,
                 initial_ir_len=10000,
-                emitter_init="zeros",
+                emitter_init=ConstantInitializer(0.),
                 starting_distribution_init="zeros",
                 trainable_emissions=True,
                 trainable_transitions=True,
@@ -267,6 +269,7 @@ class GenePredHMMLayer(HmmLayer):
         if "starting_distribution_trainable" in config:
             config["trainable_starting_distribution"] = config["starting_distribution_trainable"]
             del config["starting_distribution_trainable"]
+        config["emitter_init"] = deserialize(config["emitter_init"])
         return cls(**config)
 
 

@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import sys
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
+from learnMSA.msa_hmm.Utility import deserialize
 
 
 
@@ -206,6 +207,12 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
                 "starting_distribution_init": self.starting_distribution_init,
                 "starting_distribution_trainable": self.starting_distribution_trainable,
                 "transitions_trainable": self.transitions_trainable}
+
+
+    @classmethod
+    def from_config(cls, config):
+        config["init"] = deserialize(config["init"])
+        return cls(**config)
 
 
                 

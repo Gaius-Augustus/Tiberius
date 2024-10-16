@@ -101,12 +101,24 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
         """
         if values is None:
             values = tf.reshape(self.transition_kernel, [-1])
+        #reorder row-major, assume single model, so all indices triples start with (0,..)
+        row_major_order = np.argsort([i*self.num_states+j for _,i,j in self.indices])
+        ordered_indices = self.indices[row_major_order]
+        ordered_values = tf.gather(values, row_major_order)
+        exp_kernel = tf.math.exp(ordered_values)
         sparse_kernel =  tf.sparse.SparseTensor(
-                                        indices=self.indices,
-                                        values=values, 
+                                        indices=ordered_indices,
+                                        values=exp_kernel, 
                                         dense_shape=[1, self.num_states, self.num_states])
-        sparse_kernel = tf.sparse.reorder(sparse_kernel) #required for tf.sparse.softmax
-        A_sparse = tf.sparse.softmax(sparse_kernel) #ignores implicit zeros
+        dense_kernel = tf.sparse.to_dense(sparse_kernel)
+        #tf.sparse.softmax can currently not used due to problems with TF 2.17
+        #this is a workaround
+        dense_probs = dense_kernel / tf.reduce_sum(dense_kernel, axis=-1, keepdims=True)
+        probs_vec = tf.gather_nd(dense_probs, ordered_indices)
+        A_sparse =  tf.sparse.SparseTensor(
+                                        indices=ordered_indices,
+                                        values=probs_vec, 
+                                        dense_shape=[1, self.num_states, self.num_states])
         return A_sparse
 
     

@@ -75,6 +75,7 @@ class BatchSave(tf.keras.callbacks.Callback):
 
 def custom_cce_f1_loss(f1_factor, batch_size, 
                     include_reading_frame=True, use_cce=True, from_logits=False):
+    @tf.function
     def loss_(y_true, y_pred):
         y_true = tf.cast(y_true, y_pred.dtype)
         if use_cce:

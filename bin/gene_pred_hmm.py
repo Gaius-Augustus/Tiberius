@@ -159,6 +159,7 @@ class GenePredHMMLayer(HmmLayer):
                             dim=input_shape[-1],
                             emitter=emitter, 
                             transitioner=transitioner,
+                            use_fake_step_counter=True,
                             name="gene_pred_hmm_cell")
         super(GenePredHMMLayer, self).build(input_shape)
 

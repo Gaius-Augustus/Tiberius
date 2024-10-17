@@ -12,8 +12,14 @@ from tensorflow.keras import backend as K
 # from transformers import TFLongformerModel, LongformerConfig, AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM
 from gene_pred_hmm import class3_emission_matrix, GenePredHMMLayer, make_5_class_emission_kernel, make_15_class_emission_kernel, make_aggregation_matrix
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
+from learnMSA.msa_hmm.Training import Identity
 from tensorflow.keras.callbacks import Callback
 from sklearn.metrics import confusion_matrix
+
+class Cast(tf.keras.layers.Layer):
+    def call(self, x):
+        return tf.cast(x[0][..., :5] if isinstance(x, list) else x[..., :5], tf.float32)
+    
 
 class EpochSave(tf.keras.callbacks.Callback):
     def __init__(self, model_save_dir):
@@ -381,6 +387,7 @@ def reduce_lstm_output_5(x, new_size=3):
         raise ValueError("Invalid new_size")
     return x_out
 
+
 def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9, 
                   output_size=5, num_hmm=1, l2_lambda=0.01, hmm_factor=9,
                  batch_size=32, seq_len=99999,
@@ -439,16 +446,18 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
         else:
             #if this happens, implement more reduction functions
             raise ValueError(f"Invalid combination of loaded output size ({x.shape[-1]}) and requested output size ({output_size}).")
-    x = tf.keras.layers.Lambda(lambda x: x, name='lstm_out')(x)
+    x = Identity(name='lstm_out')(x)
+    # x = tf.keras.layers.Lambda(lambda x: x, name='lstm_out')(x)
 
     # nuc = tf.cast(inputs[0][...,:5] if isinstance(inputs, list) else inputs[...,:5], tf.float32)
-    nuc = keras.layers.Lambda(
-        lambda inputs: tf.cast(
-            inputs[0][..., :5] if isinstance(inputs, list) else inputs[..., :5], 
-            tf.float32
-        )
-    )(inputs)
-
+    # nuc = keras.layers.Lambda(
+    #     lambda inputs: tf.cast(
+    #         inputs[0][..., :5] if isinstance(inputs, list) else inputs[..., :5], 
+    #         tf.float32
+    #     )
+    # )(inputs)
+    nuc = Cast()(inputs)
+    
     if output_size == 5:
         emitter_init = make_5_class_emission_kernel(smoothing=1e-6, introns_shared=share_intron_parameters, num_models=num_hmm)
     elif output_size == 15:
@@ -498,7 +507,8 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
 
     if output_size < 15:
         y = Activation('softmax')(y_hmm)
-        y = tf.keras.layers.Lambda(lambda y: tf.matmul(y, A), name='hmm_out')(y)
+        # y = tf.keras.layers.Lambda(lambda y: tf.matmul(y, A), name='hmm_out')(y)
+        y = Identity(name='hmm_out')(lambda y: tf.matmul(y, A))
     else:
         #y = Activation('softmax', name='hmm_out')(y_hmm)
         y = y_hmm

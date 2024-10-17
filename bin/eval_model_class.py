@@ -191,6 +191,7 @@ class PredictionGTF:
                 self.model = keras.models.load_model(self.model_path, 
                                         custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.batch_size),
                                             'loss_': custom_cce_f1_loss(2, self.batch_size)})
+                
                 if self.hmm:
                     try:
                         lstm_output=self.model.get_layer('out').output
@@ -200,7 +201,9 @@ class PredictionGTF:
                                     inputs=self.model.input, 
                                     outputs=lstm_output
                                     )
-                    self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
+                    # self.lstm_model.compile(run_eagerly=True)
+                    # self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
+                    self.gene_pred_hmm_layer = self.model.layers[-1]
 
                     if self.parallel_factor is not None:
                         self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
@@ -499,7 +502,9 @@ class PredictionGTF:
                     clamsa_inp[start_pos:end_pos]
                 ])           
             else:
-                y = self.lstm_model.predict_on_batch(inp_chunks[start_pos:end_pos])                
+                print(start_pos,end_pos, len(inp_chunks), inp_chunks[start_pos].shape)
+                # y = self.lstm_model.predict_on_batch(inp_chunks[start_pos:end_pos])
+                y = self.lstm_model(inp_chunks[start_pos:end_pos])
             if not self.emb and len(y.shape) == 1:
                 y = np.expand_dims(y,0)
             elif self.emb and len(y[0].shape) == 1:
@@ -926,6 +931,7 @@ class PredictionGTF:
             correct_y_label (np.array): Correct y_label for debugging.
         """
         batch_size = self.batch_size//2
+
         # revert data if - strand
         if strand == '-':
             y_label = y_label[::-1, ::-1]

@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from genome_fasta import GenomeSequences
 from annotation_gtf import GeneStructure
 # import tensorflow records

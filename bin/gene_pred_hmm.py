@@ -212,8 +212,10 @@ class GenePredHMMLayer(HmmLayer):
             self.add_metric(IR_intron_ratio, name="IR_intron_ratio")
             
         if training:
+            self.cell.recurrent_init()
             prior = self.compute_prior()
-            self.add_loss(-prior)
+            prior = tf.reduce_mean(prior)
+            self.add_loss(prior)
             self.add_metric(prior, "prior")
         return log_post
 

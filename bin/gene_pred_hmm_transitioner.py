@@ -3,6 +3,7 @@ import numpy as np
 import sys
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
 from learnMSA.msa_hmm.Utility import deserialize
+from learnMSA.msa_hmm.Transitioner import make_transition_matrix_from_indices
 
 
 
@@ -105,15 +106,8 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
         row_major_order = np.argsort([i*self.num_states+j for _,i,j in self.indices])
         ordered_indices = self.indices[row_major_order]
         ordered_values = tf.gather(values, row_major_order)
-        exp_kernel = tf.math.exp(ordered_values)
-        sparse_kernel =  tf.sparse.SparseTensor(
-                                        indices=ordered_indices,
-                                        values=exp_kernel, 
-                                        dense_shape=[1, self.num_states, self.num_states])
-        dense_kernel = tf.sparse.to_dense(sparse_kernel)
-        #tf.sparse.softmax can currently not used due to problems with TF 2.17
-        #this is a workaround
-        dense_probs = dense_kernel / tf.reduce_sum(dense_kernel, axis=-1, keepdims=True)
+        dense_probs = make_transition_matrix_from_indices(ordered_indices[:,1:], ordered_values, self.num_states)
+        dense_probs = tf.expand_dims(dense_probs, axis=0)
         probs_vec = tf.gather_nd(dense_probs, ordered_indices)
         A_sparse =  tf.sparse.SparseTensor(
                                         indices=ordered_indices,

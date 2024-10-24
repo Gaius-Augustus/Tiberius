@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import sys, json, os, re, sys, csv, argparse
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 # from transformers import AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM

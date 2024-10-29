@@ -11,6 +11,8 @@ class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):
     """ Defines the emission probabilities for a gene prediction HMM 
         with embeddings or class predictions as inputs.
         Args:
+            num_models: The number of semi-independent gene models (see GenePredHMMLayer).
+            num_copies: The number of gene model copies in one HMM that share the IR state.
             init: The initializer for the emission probabilities.
             emit_embeddings: If True, embedding emissions are modeled. Embedding 
                             vectors are assumed to be samples from a multivariate normal distribution.
@@ -24,9 +26,10 @@ class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):
     """
     def __init__(self, 
                 num_models=1,
+                num_copies=1,
                 init=ConstantInitializer(0.), 
                 trainable_emissions=True,
-                emit_embeddings=True, 
+                emit_embeddings=False, 
                 embedding_dim=None, 
                 full_covariance=False,
                 embedding_kernel_init="random_normal",
@@ -36,7 +39,8 @@ class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):
                 **kwargs):
         super(SimpleGenePredHMMEmitter, self).__init__(**kwargs)
         self.num_models = num_models
-        self.num_states = 1+6*num_models
+        self.num_copies = num_copies
+        self.num_states = 1+6*num_copies
         self.init = init
         self.trainable_emissions = trainable_emissions
         self.emit_embeddings = emit_embeddings
@@ -57,16 +61,16 @@ class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):
             return
         s = input_shape[-1] 
         self.emission_kernel = self.add_weight(
-                                        shape=[1, self.num_states-2*self.num_models*int(self.share_intron_parameters), s], #just 1 HMM for now
+                                        shape=[self.num_models, self.num_states-2*self.num_copies*int(self.share_intron_parameters), s], #just 1 HMM for now
                                         initializer=self.init, 
                                         trainable=self.trainable_emissions,
                                         name="emission_kernel")
         if self.emit_embeddings:
-            print("Using embedding emissions.")
+            assert(self.num_models == 1, "Embedding emissions are currently only supported for one model. You most likely accidentally set emit_embeddings=True.")
             d = self.embedding_dim 
             num_mvn_param = d + d * (d+1) // 2 if self.full_covariance else 2*d
             self.embedding_emission_kernel = self.add_weight(
-                                            shape=[1, self.num_states-2*self.num_models*int(self.share_intron_parameters), 1, num_mvn_param], #intron states share parameters
+                                            shape=[1, self.num_states-2*self.num_copies*int(self.share_intron_parameters), 1, num_mvn_param], #intron states share parameters
                                             initializer=self.embedding_kernel_init, 
                                             name="embedding_emission_kernel")
         self.built = True
@@ -98,11 +102,11 @@ class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):
         Returns:
                 A tensor with emission probabilities of shape (num_models, batch_size, length, num_states).
         """
-        #note: currently, k=1 (only one HMM)
+        #note: currently, k=1 (only one HMM), we assume thate inputs.shape[0] == 1 and will eliminate this axis for einsums
         if self.emit_embeddings:
             class_inputs = inputs[..., :-self.embedding_dim] if self.emit_embeddings else inputs
             embedding_inputs = inputs[..., -self.embedding_dim:]
-            class_emit = tf.einsum("k...s,kqs->k...q", class_inputs, self.B)
+            class_emit = tf.einsum("...s,kqs->k...q", class_inputs, self.B)
             embedding_inputs = tf.reshape(embedding_inputs, (1, -1, self.embedding_dim))
             log_pdf = self.mvn_mixture.log_pdf(embedding_inputs)
             log_pdf = tf.reshape(log_pdf, tf.shape(class_emit))
@@ -112,9 +116,9 @@ class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):
                 self.embedding_emit += 1e-10
             emit = class_emit * self.embedding_emit
         else:
-            emit = tf.einsum("k...s,kqs->k...q", inputs, self.B)
+            emit = tf.einsum("...s,kqs->k...q", inputs[0], self.B) #remove unsed model dimension of inputs 
         if self.share_intron_parameters:
-            emit = tf.concat([emit[..., :1+self.num_models]] + [emit[..., 1:1+self.num_models]]*2 + [emit[..., 1+self.num_models:]], axis=-1)
+            emit = tf.concat([emit[..., :1+self.num_copies]] + [emit[..., 1:1+self.num_copies]]*2 + [emit[..., 1+self.num_copies:]], axis=-1)
         if end_hints is not None:
             left_end = end_hints[..., :1, :] * emit[..., :1, :]
             right_end = end_hints[..., 1:, :] * emit[..., -1:, :]
@@ -126,10 +130,15 @@ class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):
         # Can be used for regularization in the future.
         return [[0.]]
 
+    
+    def get_aux_loss(self):
+        return 0.
+
 
     def duplicate(self, model_indices=None, share_kernels=False):
         init = ConstantInitializer(self.emission_kernel.numpy())
         emitter_copy = SimpleGenePredHMMEmitter(num_models=self.num_models,
+                                                num_copies=self.num_copies,
                                                 init = init, 
                                                 trainable_emissions=self.trainable_emissions,
                                                 emit_embeddings=self.emit_embeddings,
@@ -149,6 +158,7 @@ class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):
 
     def get_config(self):
         return {"num_models": self.num_models,
+                "num_copies": self.num_copies,
                 "init": self.init, 
                 "trainable_emissions": self.trainable_emissions,
                 "emit_embeddings": self.emit_embeddings,
@@ -209,7 +219,7 @@ class GenePredHMMEmitter(SimpleGenePredHMMEmitter):
                 trainable_nucleotides_at_exons: If true, nucleotides at exon states are trainable.
         """
         super(GenePredHMMEmitter, self).__init__(**kwargs)
-        self.num_states = 1+14*self.num_models
+        self.num_states = 1+14*self.num_copies
         self.start_codons = start_codons
         self.stop_codons = stop_codons
         self.intron_begin_pattern = intron_begin_pattern
@@ -246,8 +256,9 @@ class GenePredHMMEmitter(SimpleGenePredHMMEmitter):
         super(GenePredHMMEmitter, self).build(input_shape)
         s = input_shape[-1] 
         if self.trainable_nucleotides_at_exons:
+            assert(self.num_models == 1, "Trainable nucleotide emissions are currently only supported for one model.")
             self.nuc_emission_kernel = self.add_weight(
-                                            shape=[1, 3*self.num_models, 4], 
+                                            shape=[self.num_models, 3*self.num_copies, 4], 
                                             initializer=self.nucleotide_kernel_init, 
                                             name="nuc_emission_kernel")
         
@@ -280,10 +291,10 @@ class GenePredHMMEmitter(SimpleGenePredHMMEmitter):
         codon_emission_probs = tf.einsum("k...rs,rqs->k...rq", input_3mers, self.codon_probs)
         codon_emission_probs = tf.reduce_prod(codon_emission_probs, axis=-2)
 
-        if self.num_models > 1:
-            repeats = [self.num_models]*codon_emission_probs.shape[-1]
+        if self.num_copies > 1:
+            repeats = [self.num_copies]*codon_emission_probs.shape[-1]
             codon_emission_probs = tf.repeat(codon_emission_probs, repeats=repeats, axis=-1)
-        codon_emission_probs = tf.concat([tf.ones_like(codon_emission_probs[...,:(1+5*self.num_models)])/4096., codon_emission_probs], axis=-1)
+        codon_emission_probs = tf.concat([tf.ones_like(codon_emission_probs[...,:(1+5*self.num_copies)])/4096., codon_emission_probs], axis=-1)
         
         if training:
             codon_emission_probs += 1e-7
@@ -294,9 +305,9 @@ class GenePredHMMEmitter(SimpleGenePredHMMEmitter):
             nucleotides = inputs[..., -5:]
             nucleotides_no_N = nucleotides[...,:4] + nucleotides[..., 4:]/4
             nuc_emission_probs = tf.einsum("k...s,kqs->k...q", nucleotides_no_N, self.get_nucleotide_probs())
-            nuc_emission_probs = tf.concat([tf.ones_like(full_emission[..., :1+3*self.num_models])/4., 
+            nuc_emission_probs = tf.concat([tf.ones_like(full_emission[..., :1+3*self.num_copies])/4., 
                                             nuc_emission_probs, 
-                                            tf.ones_like(full_emission[..., 1+6*self.num_models:])/4.], axis=-1)
+                                            tf.ones_like(full_emission[..., 1+6*self.num_copies:])/4.], axis=-1)
             full_emission *= nuc_emission_probs
 
         if self.emit_embeddings:
@@ -318,6 +329,7 @@ class GenePredHMMEmitter(SimpleGenePredHMMEmitter):
                                          self.intron_end_pattern,
                                          self.l2_lambda,
                                          num_models=self.num_models,
+                                         num_copies=self.num_copies,
                                          init = init, 
                                          trainable_emissions=self.trainable_emissions,
                                          emit_embeddings=self.emit_embeddings,

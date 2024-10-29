@@ -15,7 +15,9 @@ from gene_pred_hmm_transitioner import SimpleGenePredHMMTransitioner, GenePredHM
 class GenePredHMMLayer(HmmLayer):
     """A layer that implements a gene prediction HMM.
     Args:
-        num_models: The number of sub-HMMs.
+        num_models: The number of semi-independent HMMs. Currently, the HMMs share architecture and transition parameters, 
+                    but allow independent emission parameters for the gene structure classes output by previous layers.
+        num_copies: The number of gene model copies that share an IR state.
         start_codons: The allowed start codons. A list of pairs. The first element of each pair is a string that is a triplet over the alphabet ACGTN. 
                     The second entry is the probability of that triplet. All probabilities must sum to 1.
         stop_codons: The allowed stop codons. Same format as `start_codons`.
@@ -45,6 +47,7 @@ class GenePredHMMLayer(HmmLayer):
     """
     def __init__(self, 
                 num_models=1,
+                num_copies=1,
                 start_codons=[("ATG", 1.)],
                 stop_codons=[("TAG", .34), ("TAA", 0.33), ("TGA", 0.33)],
                 intron_begin_pattern=[("NGT", 0.99), ("NGC", 0.005), ("NAT", 0.005)],
@@ -72,6 +75,7 @@ class GenePredHMMLayer(HmmLayer):
                 use_border_hints=True,
                 **kwargs):
         self.num_models = num_models
+        self.num_copies = num_copies
         self.start_codons = start_codons
         self.stop_codons = stop_codons
         self.intron_begin_pattern = intron_begin_pattern
@@ -129,6 +133,7 @@ class GenePredHMMLayer(HmmLayer):
                                         intron_end_pattern=self.intron_end_pattern,
                                         l2_lambda=self.variance_l2_lambda,
                                         num_models=self.num_models,
+                                        num_copies=self.num_copies,
                                         init=self.emitter_init,
                                         trainable_emissions=self.trainable_emissions,
                                         emit_embeddings=self.emit_embeddings,
@@ -139,15 +144,19 @@ class GenePredHMMLayer(HmmLayer):
                                         temperature=self.temperature,
                                         share_intron_parameters=self.share_intron_parameters,
                                         trainable_nucleotides_at_exons=self.trainable_nucleotides_at_exons)
-            if self.num_models == 1:
-                transitioner = GenePredHMMTransitioner(initial_exon_len=self.initial_exon_len,
+            #note that for num_models>1, the transition parameters are shared between the models,
+            #the argument num_models is currently just to get the correct shapes
+            if self.num_copies == 1:
+                transitioner = GenePredHMMTransitioner(num_models=self.num_models,
+                                                        initial_exon_len=self.initial_exon_len,
                                                         initial_intron_len=self.initial_intron_len,
                                                         initial_ir_len=self.initial_ir_len,
                                                         starting_distribution_init=self.starting_distribution_init,
                                                         starting_distribution_trainable=self.trainable_starting_distribution,
                                                         transitions_trainable=self.trainable_transitions)
             else:
-                transitioner = GenePredMultiHMMTransitioner(k=self.num_models,
+                transitioner = GenePredMultiHMMTransitioner(k=self.num_copies,
+                                                        num_models=self.num_models,
                                                         initial_exon_len=self.initial_exon_len,
                                                         initial_intron_len=self.initial_intron_len,
                                                         initial_ir_len=self.initial_ir_len,
@@ -155,7 +164,7 @@ class GenePredHMMLayer(HmmLayer):
                                                         starting_distribution_trainable=self.trainable_starting_distribution,
                                                         transitions_trainable=self.trainable_transitions)
         # configure the cell
-        self.cell = HmmCell([emitter.num_states],
+        self.cell = HmmCell([emitter.num_states]*self.num_models,
                             dim=input_shape[-1],
                             emitter=emitter, 
                             transitioner=transitioner,
@@ -187,37 +196,21 @@ class GenePredHMMLayer(HmmLayer):
                 end_hints: A tensor of shape (batch, 2, num_states) that contains the correct state for the left and right ends of each chunk.
         Returns:
                 State posterior log-probabilities (without loglik if use_loglik is False). The order of the states is Ir, I0, I1, I2, E0, E1, E2.
-                Shape (batch, len, 7 (number_of_states))
+                Shape (batch, len, number_of_states) if num_models=1 and (batch, len, num_models, number_of_states) if num_models>1.
         """ 
         #batch matmul of k inputs with k matricies
         if end_hints is not None:
             end_hints = tf.expand_dims(end_hints, 0)
         if self.simple:
-            log_post = self.state_posterior_log_probs(tf.expand_dims(inputs, 0), end_hints=end_hints, training=training, no_loglik=not use_loglik)[0]
+            log_post, prior, _ = self.state_posterior_log_probs(tf.expand_dims(inputs, 0), return_prior=True, end_hints=end_hints, training=training, no_loglik=not use_loglik)
         else:
             stacked_inputs = self.concat_inputs(inputs, nucleotides, embeddings)
-            log_post = self.state_posterior_log_probs(stacked_inputs, end_hints=end_hints, training=training, no_loglik=not use_loglik)[0]
-
-        if training and self.emit_embeddings and not self.disable_metrics:
-            #experimental metric to check if the embeddings are used in the prediction (this should increase over training time)
-            self.add_metric(tf.math.reduce_variance(self.cell.emitter[0].embedding_emit), name="emb_emit_var")
-            x = self.cell.emitter[0].embedding_emit / tf.reduce_sum(self.cell.emitter[0].embedding_emit, axis=-1, keepdims=True)
-            if self.cell.emitter[0].share_intron_parameters:
-                x = tf.concat([x[..., :1+self.num_models]] + [x[..., 1:1+self.num_models]]*2 + [x[..., 1+self.num_models:]], axis=-1)
-
-            #metric to check if intergenic and intron predictions do not occilate during training (this should be roughly constant)
-            probs = tf.nn.softmax(log_post)
-            expected_state_occs = tf.reduce_sum(tf.reshape(probs, (-1, tf.shape(log_post)[-1])), axis=0)
-            IR_intron_ratio = expected_state_occs[0] / (tf.reduce_sum(expected_state_occs[1:1+3*self.num_models]))
-            self.add_metric(IR_intron_ratio, name="IR_intron_ratio")
-            
+            log_post, prior, _ = self.state_posterior_log_probs(stacked_inputs, end_hints=end_hints, return_prior=True, training=training, no_loglik=not use_loglik) 
         if training:
-            self.cell.recurrent_init()
-            prior = self.compute_prior()
             prior = tf.reduce_mean(prior)
             self.add_loss(prior)
-            self.add_metric(prior, "prior")
-        return log_post
+            self.add_metric(prior, "prior") #deprecated in tf 2.17
+        return log_post[0] if self.num_models == 1 else tf.transpose(log_post, [1,2,0,3])
 
 
     def viterbi(self, inputs, nucleotides=None, embeddings=None, end_hints=None):
@@ -228,17 +221,20 @@ class GenePredHMMLayer(HmmLayer):
                 nucleotides: Shape (batch, len, 5) one-hot encoded nucleotides with N in the last position.
                 embeddings: Shape (batch, len, dim) embeddings of the inputs as output by a language model.
         Returns:
-                Most likely state sequence of shape (batch, len)
+                Most likely state sequence of shape (batch, len) if num_models=1 and (batch, len, num_models) if num_models>1.
         """
+        self.cell.recurrent_init()
         if self.simple:
-            return viterbi(tf.expand_dims(inputs, 0), self.cell, parallel_factor=self.parallel_factor)[0]
+            viterbi_seq = viterbi(tf.expand_dims(inputs, 0), self.cell, parallel_factor=self.parallel_factor)
         else:
             stacked_inputs = self.concat_inputs(inputs, nucleotides, embeddings)
-            return viterbi(stacked_inputs, self.cell, end_hints=end_hints, parallel_factor=self.parallel_factor)[0]
+            viterbi_seq = viterbi(stacked_inputs, self.cell, end_hints=end_hints, parallel_factor=self.parallel_factor)
+        return viterbi_seq[0] if self.num_models == 1 else tf.transpose(viterbi_seq, [1,2,0])
 
 
     def get_config(self):
         return {"num_models": self.num_models,
+                "num_copies": self.num_copies,
                 "start_codons": self.start_codons,
                 "stop_codons": self.stop_codons,
                 "intron_begin_pattern": self.intron_begin_pattern,
@@ -280,10 +276,10 @@ class GenePredHMMLayer(HmmLayer):
 class3_emission_matrix_simple = np.array([[[1., 0., 0.]] + [[0., 1., 0.]]*3 + [[0., 0., 1.]]*3]) * 100. #shape (1,7,3)
 class3_emission_matrix = np.array([[[1., 0., 0.]] + [[0., 1., 0.]]*3 + [[0., 0., 1.]]*11]) * 100. #shape (1,15,3)
 
-def make_5_class_emission_kernel(smoothing=0.01, introns_shared=False, num_models=1):
+def make_5_class_emission_kernel(smoothing=0.01, introns_shared=False, num_copies=1):
     # input classes: IR, I, E0, E1, E2
     # states: Ir, I0, I1, I2, E0, E1, E2, START, EI0, EI1, EI2, IE0, IE1, IE2, STOP
-    # Returns: shape (1,1 + num_models*(14 - 2*introns_shared),5) 
+    # Returns: shape (1,1 + num_copies*(14 - 2*introns_shared),5) 
     assert smoothing > 0, "Smoothing can not be exactly zero to prevent numerical issues."
     n = 5
     if introns_shared:
@@ -292,21 +288,21 @@ def make_5_class_emission_kernel(smoothing=0.01, introns_shared=False, num_model
         expected_classes_per_state = np.array([0,1,1,1,2,3,4,2,3,4,2,4,2,3,4])
     probs = np.eye(n)[expected_classes_per_state]
     probs += -probs * smoothing + (1-probs)*smoothing/(n-1)
-    if num_models > 1:
-        repeats = [1] + [num_models]*(probs.shape[-2]-1)
+    if num_copies > 1:
+        repeats = [1] + [num_copies]*(probs.shape[-2]-1)
         probs = np.repeat(probs, repeats, axis=-2)
     return np.log(probs[np.newaxis, ...])
 
-def make_15_class_emission_kernel(smoothing=0.1, num_models=1):
+def make_15_class_emission_kernel(smoothing=0.1, num_copies=1):
     # input classes: IR, I, E0, E1, E2
     # states: Ir, I0, I1, I2, E0, E1, E2, START, EI0, EI1, EI2, IE0, IE1, IE2, STOP
-    # Returns: shape (1,1 + num_models*(14 - 2*introns_shared),5) 
+    # Returns: shape (1,1 + num_copies*(14 - 2*introns_shared),15) 
     assert smoothing > 0, "Smoothing can not be exactly zero to prevent numerical issues."
     n = 15
     probs = np.eye(n)
     probs += -probs * smoothing + (1-probs)*smoothing/(n-1)
-    if num_models > 1:
-        repeats = [1] + [num_models]*(probs.shape[-2]-1)
+    if num_copies > 1:
+        repeats = [1] + [num_copies]*(probs.shape[-2]-1)
         probs = np.repeat(probs, repeats, axis=-2)
     return np.log(probs[np.newaxis, ...])
 

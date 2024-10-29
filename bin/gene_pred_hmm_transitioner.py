@@ -12,6 +12,7 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
             Assumed order of states: Ir, I0, I1, I2, E0, E1, E2
     """
     def __init__(self, 
+                num_models=1,
                 initial_exon_len=100,
                 initial_intron_len=10000,
                 initial_ir_len=10000,
@@ -22,6 +23,7 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
                 init_component_sd=0.2,
                 **kwargs):
         super(SimpleGenePredHMMTransitioner, self).__init__(**kwargs)
+        self.num_models = num_models
         self.initial_exon_len = initial_exon_len
         self.initial_intron_len = initial_intron_len
         self.initial_ir_len = initial_ir_len
@@ -73,7 +75,9 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
     def build(self, input_shape=None):
         if self.built:
             return
-        self.transition_kernel = self.add_weight(shape=[1, self.num_transitions],  #just 1 HMM for now
+        #just 1 HMM or multiple HMMs with the same architecture and shared transition parameters
+        #non-shared transition parameters or even distinct architectures are possible but current not implemented
+        self.transition_kernel = self.add_weight(shape=[1, self.num_transitions],  
                                         initializer = self.init,
                                         trainable=self.transitions_trainable,
                                         name="transition_kernel")
@@ -117,17 +121,21 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
 
     
     def make_A(self):
-        return tf.sparse.to_dense(self.make_A_sparse(), default_value=0.)
+        A = tf.sparse.to_dense(self.make_A_sparse(), default_value=0.)
+        A = tf.repeat(A, self.num_models, axis=0)
+        return A
 
 
     def make_log_A(self):
         A_sparse = self.make_A_sparse()
         log_A_sparse = tf.sparse.map_values(tf.math.log, A_sparse)  
-        return tf.sparse.to_dense(log_A_sparse, default_value=-1e3)
+        log_A = tf.sparse.to_dense(log_A_sparse, default_value=-1e3)
+        log_A = tf.repeat(log_A, self.num_models, axis=0)
+        return log_A
 
 
     def make_initial_distribution(self):
-        return tf.nn.softmax(self.starting_distribution_kernel)
+        return tf.repeat(tf.nn.softmax(self.starting_distribution_kernel), self.num_models, axis=1)
         
         
     def call(self, inputs):
@@ -322,10 +330,10 @@ class GenePredMultiHMMTransitioner(GenePredHMMTransitioner):
         The same order of states as GenePredHMMTransitioner except that each state other than Ir is multiplied k times: 
         Ir, I0*k, I1*k, I2*k, E0*k, E1*k, E2*k, START*k, EI0*k, EI1*k, EI2*k, IE0*k, IE1*k, IE2*k, STOP*k
             Args:
-                k: number of sub-HMMs.
+                k: number of gene model copies that share an IR state.
                 init_component_sd: standard deviation of the noise used to initialize the transition IR -> components
     """
-    def __init__(self, k, init_component_sd=0.2, **kwargs):
+    def __init__(self, k=1, init_component_sd=0.2, **kwargs):
         self.k = k
         self.num_states = 1 + 14 * k
         super(GenePredMultiHMMTransitioner, self).__init__(init_component_sd=init_component_sd, **kwargs)

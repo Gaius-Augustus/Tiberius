@@ -389,8 +389,8 @@ def reduce_lstm_output_5(x, new_size=3):
 
 
 def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9, 
-                  output_size=5, num_hmm=1, l2_lambda=0.01, hmm_factor=9,
-                 batch_size=32, seq_len=99999,
+                  output_size=5, num_hmm=1, num_copy=1, l2_lambda=0.01, 
+                  hmm_factor=9, batch_size=32, seq_len=99999,
                  emit_embeddings = False, share_intron_parameters=True, 
                   trainable_nucleotides_at_exons = True, trainable_emissions = True,
                   trainable_transitions = True, trainable_starting_distribution=True,
@@ -406,7 +406,8 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
         dense_size (int): Number of neurons in the newly added Dense layer.
         pool_size (int): Downsampling factor applied before the HMM layer, affecting the Dense layer's output.
         output_size (int): The size of the output layer of the model. Will try to adapt if the model has 7 or 5 outputs but output_size is smaller.
-        num_hmm (int): Number of HMMs to use within the Gene Prediction HMM layer.
+        num_hmm (int): Number of semi-independent HMMs (see GenePredHMMLayer for more details).
+        num_copy (int): The number of gene model copies in an HMM that share the IR state.
         l2_lambda (float): L2 regularization lambda for the variance parameters within the HMM layer.
         hmm_factor (int): Downsampling factor for sequence length processing in the HMM layer.
         batch_size (int): Batch size for the model's training (used for shaping inputs).
@@ -459,13 +460,16 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
     nuc = Cast()(inputs)
     
     if output_size == 5:
-        emitter_init = make_5_class_emission_kernel(smoothing=1e-6, introns_shared=share_intron_parameters, num_models=num_hmm)
+        emitter_init = make_5_class_emission_kernel(smoothing=1e-6, introns_shared=share_intron_parameters, num_copies=num_copy)
     elif output_size == 15:
         assert not share_intron_parameters, "Can not share intron parameters if output size is 15."
-        emitter_init = make_15_class_emission_kernel(smoothing=1e-2, num_models=num_hmm)
+        emitter_init = make_15_class_emission_kernel(smoothing=1e-2, num_copies=num_copy)
+    #currently, the emissions of the semi-independent HMMs are initialized the same
+    emitter_init = np.repeat(emitter_init, num_hmm, axis=0)
     if gene_pred_layer is None:
         gene_pred_layer = GenePredHMMLayer(
             num_models=num_hmm,
+            num_copies=num_copy,
             initial_exon_len=200, 
             initial_intron_len=4500,
             initial_ir_len=10000,
@@ -491,7 +495,7 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
             use_border_hints=use_border_hints
         )
     
-    A = make_aggregation_matrix(k=num_hmm)
+    A = make_aggregation_matrix(k=num_copy)
 
     if use_border_hints:
         input_hints_hmm = tf.reshape(input_hints, (-1, 2,5), name='reshape_border_hints')
@@ -501,7 +505,7 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
         factor_nuc = tf.reshape(nuc, (-1, window_size, 5))
         factor_emb = tf.reshape(emb, (-1, window_size, dense_size))
         y_hmm = gene_pred_layer(factor_x, nucleotides=factor_nuc, embeddings=factor_emb, end_hints=input_hints_hmm)
-        y_hmm = tf.reshape(y_hmm, (-1, seq_len, 14*num_hmm+1))
+        y_hmm = tf.reshape(y_hmm, (-1, seq_len, 14*num_copy+1))
     else:
         y_hmm = gene_pred_layer(x, nucleotides=nuc, embeddings=emb)
 

@@ -154,7 +154,7 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
 
     def get_prior_log_densities(self):
          # Can be used for regularization in the future.
-        return 0.
+        return {"none" : 0.}
     
     def duplicate(self, model_indices=None, share_kernels=False):
         init = ConstantInitializer(self.transition_kernel.numpy())
@@ -236,13 +236,15 @@ class GenePredHMMTransitioner(SimpleGenePredHMMTransitioner):
             Assumed order of states: Ir, I0, I1, I2, E0, E1, E2, 
                                     START, EI0, EI1, EI2, IE0, IE1, IE2, STOP
     """
-    def __init__(self, init_component_sd=0.2, **kwargs):
+    def __init__(self, init_component_sd=0.2, use_experimental_prior=False, **kwargs):
         if not hasattr(self, "num_states"):
             self.num_states = 15
         if not hasattr(self, "k"):
             self.k = 1
         super(GenePredHMMTransitioner, self).__init__(init_component_sd=init_component_sd, **kwargs)
-        self.alpha = self.make_prior_alpha()
+        self.use_experimental_prior = use_experimental_prior
+        if use_experimental_prior:
+            self.alpha = self.make_prior_alpha()
     
 
     def make_transition_indices(self, model_index=0):
@@ -288,7 +290,7 @@ class GenePredHMMTransitioner(SimpleGenePredHMMTransitioner):
         return probs
 
 
-    def make_prior_alpha(self, n=1e6):
+    def make_prior_alpha(self, n=1e3):
         #assume number of prior draws
         #we choose alpha according to the expect times we see each transition
         #higher values make the prior more strict
@@ -301,10 +303,15 @@ class GenePredHMMTransitioner(SimpleGenePredHMMTransitioner):
     def get_prior_log_densities(self):
         # Regularizes the transition probabilities based on the values given as initial distribution.
         # The dirichlet parameters are chosen based on n prior draws from the initial distribution.
-        self.binary_probs = self.gather_binary_probs_for_prior(self.A[0])
-        log_p = tf.math.log(self.binary_probs)
-        priors = tf.reduce_sum((self.alpha-1) * log_p, axis=-1)
-        return {i : priors[i] for i in range(1+6*self.k)}
+        if self.use_experimental_prior:
+            self.binary_probs = self.gather_binary_probs_for_prior(self.A[0])
+            log_p = tf.math.log(self.binary_probs)
+            tf.print(self.binary_probs.shape, self.alpha.shape)
+            priors = tf.reduce_sum((self.alpha-1) * log_p, axis=-1)
+            tf.print("priors", priors)
+            return {i : priors[i] for i in range(1+6*self.k)}
+        else:
+            return {"none" : 0.}
     
 
     def duplicate(self, model_indices=None, share_kernels=False):

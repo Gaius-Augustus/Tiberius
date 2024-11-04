@@ -10,11 +10,21 @@ import sys, json, os, re, sys, csv, argparse, requests, time, logging, warnings
 script_dir = os.path.dirname(os.path.realpath(__file__))
 import subprocess as sp
 import numpy as np
-import tensorflow as tf
 from Bio import SeqIO
 from Bio.Seq import Seq
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+
+MAX_TF_VERSION = '2.12'
+
+# Function to compare TensorFlow version
+def check_tf_version(tf_version):
+    if tf_version > MAX_TF_VERSION:
+        print(f"WARNING: You are using TensorFlow version {tf_version}, "
+                      f"which is newer than the recommended maximum version {MAX_TF_VERSION}. "
+                      "It will produce an error if you use a sequence length > 260.000 during inference!")
+        return False 
+    return True
 
 # Function to assemble transcript taking strand into account
 def assemble_transcript(exons, sequence, strand):
@@ -79,14 +89,27 @@ def extract_tar_gz(file_path, dest_dir):
     sp.run(f'tar -xzf {file_path} -C {dest_dir}', shell=True)
     
 def main():    
-    start_time = time.time()
-    args = parseCmd()    
+    args = parseCmd()        
 
-    url_weights = {
-        'Tiberius_default': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_weights.tgz',
-        'Tiberius_nosm': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_nosm_weights.tgz',
-        'Tiberius_denovo': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models//tiberius_denovo_weights.tgz'
-    }
+    import tensorflow as tf
+
+    start_time = time.time()
+    if check_tf_version(tf.__version__):
+        url_weights = {
+            'Tiberius_default': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_weights.tgz',
+            'Tiberius_nosm': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_nosm_weights.tgz',
+            'Tiberius_denovo': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models//tiberius_denovo_weights.tgz'
+        }
+    else:
+        url_weights = {
+            'Tiberius_default': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_weights_tf2_17.tgz',
+            'Tiberius_nosm': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_nosm_weights_tf2_17.tgz',
+            'Tiberius_denovo': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights_tf2_17.tgz'
+        }
+        if args.seq_len > 260000:
+            logging.error(f"Error: The sequence length {args.seq_len} is too long for TensorFlow version {tf.__version__}. "
+                          "Please use a sequence length <= 260000 (--seq_len).")
+            sys.exit(1)
     
     if args.learnMSA:
         sys.path.insert(0, args.learnMSA)  

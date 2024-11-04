@@ -9,34 +9,37 @@ and long short-term memory layers with a differentiable HMM layer. It can be use
 Currently, we provide only model weights for mammalian species and Tiberius does not predict alternative splicing variants. 
 
 
-
-:warning: **We will be migrating Tiberius from TensorFlow 2.10 to TensorFlow 2.17 during the week of October 7–12., which will make the installation of a compatible TensorFlow version easier.**
-
 ## Installation
-### Git Repositories
 
-Clone the repository, including learnMSA as submodule:
-```
-git clone --recursive https://github.com/Gaius-Augustus/Tiberius
-```
-In case you cloned the repository without the submodule, you can load the submodule with:
-```
-git submodule update --init --recursive
-```
-Alternatively, you can clone the learnMSA repository separately:
-```shell
-git clone https://github.com/Gaius-Augustus/learnMSA
-cd learnMSA
-git checkout parallel
-```
-Ensure that learnMSA was loaded and that is on the branch `parallel`.
+Tiberius can either be installed from source or can be run with a **Singularty** container
 
-### Python Libraries
+### Installation with Singularity container
+Build Singularity container with:
+```
+singularity build tiberius.sif docker://larsgabriel23/tiberius:latest
+```
+
+Run Tiberius with the Singularity container (use `-nv` for GPU support):
+```
+ singularity run --nv tiberius.sif tiberius.py [options]
+```
+
+### Installation from Source
+#### Git Repositories
+
+Clone the repository:
+```
+git clone https://github.com/Gaius-Augustus/Tiberius
+```
+Install [learnMSA](https://github.com/Gaius-Augustus/learnMSA) either from GitHub or with `pip`
+```
+pip install learnMSA
+```
+
+#### Python Libraries
 
 The following Python libraries are required:
 - tensorflow==2.10.*
-- tensorflow_probability==0.18.0
-- transformers (optional)
 - pyBigWig
 - biopython 
 - bcbio-gff
@@ -44,20 +47,20 @@ The following Python libraries are required:
 
 They can be installed with:
 ```
-pip install tensorflow_probability==0.18.0 transformers pyBigWig bio scikit-learn biopython bcbio-gff requests
+pip install pyBigWig bio scikit-learn biopython bcbio-gff requests
 ```
-Tensorflow should be installed with GPU support. If you are using conda, you can install it with these [instructions](docs/install_tensorflow.md).
+Tensorflow should be installed with GPU support. If you are using conda, you can install Tensorflow 2.10 with these [instructions](docs/install_tensorflow.md).
 
-Alternatively, you can install Tesorflow using pip:
+Tiberius does also work with TensorFlow >2.10, however, **it will produce an error if you use a sequence length > 260.000 during inference!**
+You can install the current TensorFlow version with 
 ```shell
-pip install tensorflow-gpu==2.10.*
+python3 -m pip install tensorflow[and-cuda]
 ```
 
 If you want to use GPUs, verify that TensorFlow is installed correctly with GPU support:
 ```shell
 python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
 ```
-
 
 ## Running Tiberius for Gene Prediction
 

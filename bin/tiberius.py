@@ -78,6 +78,7 @@ def group_sequences(seq_names, seq_lens, t=50000400, chunk_size=500004):
     return groups
 
 def download_weigths(url, file_path):
+    print(url, file_path)
     with requests.get(url, stream=True) as r:
         r.raise_for_status()
         with open(file_path, 'wb') as f:
@@ -105,9 +106,9 @@ def main():
         }
     else:
         url_weights = {
-            'Tiberius_default': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_weights_tf2_17.tgz',
-            'Tiberius_nosm': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_nosm_weights_tf2_17.tgz',
-            'Tiberius_denovo': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights_tf2_17.tgz'
+            'Tiberius_default': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_weights_tf2_17.keras',
+            'Tiberius_nosm': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_nosm_weights_tf2_17.keras',
+            'Tiberius_denovo': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights_tf2_17.keras'
         }
         if args.seq_len > 260000:
             logging.error(f"Error: The sequence length {args.seq_len} is too long for TensorFlow version {tf.__version__}. "
@@ -159,7 +160,9 @@ def main():
     clamsa_prefix = args.clamsa
     
     if not model_path and not model_path_lstm:
-        model_weights_dir = f'{script_dir}/../model_weights'
+        model_weights_dir = f'{script_dir}/../model_weights'        
+        if not os.path.exists(model_weights_dir):
+            os.makedirs(model_weights_dir)
         if not is_writable(model_weights_dir):
             model_weights_dir = os.getcwd()
         if not is_writable(model_weights_dir):
@@ -167,29 +170,27 @@ def main():
             sys.exit(1)
 
         logging.info(f'Warning: No model weights provided, they will be downloaded into {model_weights_dir}.')
-        if not os.path.exists(model_weights_dir):
-            os.makedirs(model_weights_dir)
+        
         if clamsa_prefix:
             if not softmasking:
                 logging.error(f'ERROR: Clamsa input requires softmasking.')
                 sys.exit(1)
             logging.info(f'Weights for Tiberius de novo model will be downloaded from {url_weights["Tiberius_denovo"]}')
-            download_weigths(url_weights["Tiberius_denovo"], f'{model_weights_dir}/tiberius_denovo_weights.tgz')
-            logging.info(f'Extracting weights to {model_weights_dir}')
-            extract_tar_gz(f'{model_weights_dir}/tiberius_denovo_weights.tgz', f'{model_weights_dir}')
-            model_path = f'{model_weights_dir}/tiberius_denovo_weights'
+            model_file_name = url_weights["Tiberius_denovo"].split('/')[-1]       
+            download_weigths(url_weights["Tiberius_denovo"], f'{model_weights_dir}/{model_file_name}')  
         elif not softmasking:
             logging.info(f'Weights for Tiberius model without softmasking will be downloaded from {url_weights["Tiberius_nosm"]}')
-            download_weigths(url_weights["Tiberius_nosm"], f'{model_weights_dir}/tiberius_nosm_weights.tgz')
-            logging.info(f'Extracting weights to {model_weights_dir}')
-            extract_tar_gz(f'{model_weights_dir}/tiberius_nosm_weights.tgz', f'{model_weights_dir}')
-            model_path_lstm = f'{model_weights_dir}/tiberius_nosm_weights'
+            model_file_name = url_weights["Tiberius_nosm"].split('/')[-1]          
+            download_weigths(url_weights["Tiberius_nosm"], f'{model_weights_dir}/{model_file_name}')  
         else:
             logging.info(f'Weights for Tiberius model will be downloaded from {url_weights["Tiberius_default"]}')
-            download_weigths(url_weights["Tiberius_default"], f'{model_weights_dir}/tiberius_weights.tgz')
+            model_file_name = url_weights["Tiberius_default"].split('/')[-1]
+            download_weigths(url_weights["Tiberius_default"], f'{model_weights_dir}/{model_file_name}')
+        if model_file_name[-3:] == 'tgz':
             logging.info(f'Extracting weights to {model_weights_dir}')
-            extract_tar_gz(f'{model_weights_dir}/tiberius_weights.tgz', f'{model_weights_dir}')
-            model_path = f'{model_weights_dir}/tiberius_weights'
+            extract_tar_gz(f'{model_weights_dir}/{model_file_name}', f'{model_weights_dir}')
+            model_file_name = model_file_name[:-3]
+        model_path = f'{model_weights_dir}/{model_file_name}'
 
     anno = Anno(gtf_out, f'anno')     
     tx_id=0
@@ -319,8 +320,8 @@ def parseCmd():
     parser.add_argument('--model', type=str,
         help='LSTM model file with HMM Layer.', default='')
     parser.add_argument('--out', type=str,
-        help='Output GTF file with Tiberius gene prediction.', default='./')
-    parser.add_argument('--genome',  type=str, default='',
+        help='Output GTF file with Tiberius gene prediction.', default='tiberius.gtf')
+    parser.add_argument('--genome',  type=str, required=True,
         help='Genome sequence file in FASTA format.')
     parser.add_argument('--parallel_factor',  type=int, default=817,
         help='Parallel factor used in Viterbi. Use the factor of w_size that is closest to sqrt(w_size) (817 works well for 500004)')

@@ -502,7 +502,7 @@ class PredictionGTF:
                     clamsa_inp[start_pos:end_pos]
                 ])           
             else:
-                print(start_pos,end_pos, len(inp_chunks), inp_chunks[start_pos].shape)
+                # print(start_pos,end_pos, len(inp_chunks), inp_chunks[start_pos].shape)
                 # y = self.lstm_model.predict_on_batch(inp_chunks[start_pos:end_pos])
                 y = self.lstm_model(inp_chunks[start_pos:end_pos])
             if not self.emb and len(y.shape) == 1:

@@ -87,6 +87,9 @@ def download_weigths(url, file_path):
 
 def extract_tar_gz(file_path, dest_dir):
     sp.run(f'tar -xzf {file_path} -C {dest_dir}', shell=True)
+
+def is_writable(file_path):
+    return os.access(file_path, os.W_OK)
     
 def main():    
     args = parseCmd()        
@@ -157,6 +160,12 @@ def main():
     
     if not model_path and not model_path_lstm:
         model_weights_dir = f'{script_dir}/../model_weights'
+        if not is_writable(model_weights_dir):
+            model_weights_dir = os.getcwd()
+        if not is_writable(model_weights_dir):
+            logging.error(f'No model weights provided, and candidate directorys for download are not writeable. Please download the model weigths manually (see README.md) and specify them with --model!')
+            sys.exit(1)
+
         logging.info(f'Warning: No model weights provided, they will be downloaded into {model_weights_dir}.')
         if not os.path.exists(model_weights_dir):
             os.makedirs(model_weights_dir)

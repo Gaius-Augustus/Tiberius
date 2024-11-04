@@ -3,7 +3,7 @@
 #
 # Class handling the prediction and evaluation for a single species
 # 
-# Transformers 4.31.0
+# 
 # ==============================================================
 
 import sys, json, os, re, sys, csv, time
@@ -19,7 +19,7 @@ from genome_anno import Anno
 from models import custom_cce_f1_loss, lstm_model
 from gene_pred_hmm import class3_emission_matrix, GenePredHMMLayer, make_5_class_emission_kernel, make_aggregation_matrix, make_15_class_emission_kernel
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
-from transformers import AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM
+# from transformers import AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM
 from tensorflow.keras.layers import (Conv1D, SimpleRNN, Conv1DTranspose, LSTM, GRU, Dense, Bidirectional, Dropout, Activation, Input, BatchNormalization, LSTM, Reshape, Embedding, Add, LayerNormalization,
                                     AveragePooling1D)
 
@@ -38,7 +38,8 @@ class PredictionGTF:
     def __init__(self, model_path='', seq_len=500004, batch_size=200, 
                  hmm=False, model_path_lstm='', model_path_hmm='', 
                  temp_dir='', emb=False, num_hmm=1,
-                 hmm_factor=None, transformer=False, trans_lstm=False, 
+                 hmm_factor=None, 
+                 # transformer=False, trans_lstm=False, 
                  annot_path='', genome_path='', softmask=True,
                 strand='+', parallel_factor=1, oracle=False,
                 lstm_cfg='',):
@@ -54,8 +55,8 @@ class PredictionGTF:
             - emb (bool): A flag to indicate whether HMM embedding should be used. 
             - num_hmm (int): Number of HMMs to be used.
             - hmm_factor: Parallelization factor of HMM (deprecated, remove in a later version)
-            - transformer (bool): A flag to indicate whether a transformer model should be used.
-            - trans_lstm (bool): A flag indicating whether a transform-LSTM hybrid model should be used.
+            - transformer (bool): A flag to indicate whether a transformer model should be used. (depprecated!)
+            - trans_lstm (bool): A flag indicating whether a transform-LSTM hybrid model should be used. (depprecated!)
             - annot_path (str): Path to the reference annotation file (GTF).
             - genome_path (str): Path to the genome file (FASTA). 
             - softmask (bool): Whether to use softmasking. 
@@ -72,14 +73,14 @@ class PredictionGTF:
         self.hmm = hmm   
         self.emb = emb
         self.strand=strand
-        self.transformer = transformer
+        # self.transformer = transformer
         self.model = None
         self.model_path_lstm = model_path_lstm
         self.model_path_hmm = model_path_hmm
         self.fasta_seq_lens = {}
         self.num_hmm = num_hmm
         self.hmm_factor = hmm_factor
-        self.trans_lstm = trans_lstm
+        # self.trans_lstm = trans_lstm
         self.lstm_cfg = lstm_cfg
         if temp_dir and not os.path.exists(temp_dir):
             os.makedirs(temp_dir, exist_ok=True)
@@ -110,13 +111,14 @@ class PredictionGTF:
         """
         if self.hmm and self.model_path_lstm:
             # only the lstm model is provided, use the default HMM Layer
-            if self.transformer or self.trans_lstm:
-                # lstm model includes transformer
-                lstm_model_full = keras.models.load_model(self.model_path_lstm, 
-                                          custom_objects={'TFEsmForMaskedLM': TFEsmForMaskedLM})
-                self.trans_model = self.transformer_model(self.seq_len, lstm_model_full)
-                self.lstm_model = self.trans_lstm_model(lstm_model_full)
-            elif self.lstm_cfg:
+            # if self.transformer or self.trans_lstm:
+            #     # lstm model includes transformer
+            #     lstm_model_full = keras.models.load_model(self.model_path_lstm, 
+            #                               custom_objects={'TFEsmForMaskedLM': TFEsmForMaskedLM})
+            #     self.trans_model = self.transformer_model(self.seq_len, lstm_model_full)
+            #     self.lstm_model = self.trans_lstm_model(lstm_model_full)
+            # elif self.lstm_cfg:
+            if self.lstm_cfg:
                  with open(self.lstm_cfg, 'r') as f:
                     config = json.load(f)
                  relevant_keys = ['units', 'filter_size', 'kernel_size', 
@@ -189,6 +191,7 @@ class PredictionGTF:
                 self.model = keras.models.load_model(self.model_path, 
                                         custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.batch_size),
                                             'loss_': custom_cce_f1_loss(2, self.batch_size)})
+                
                 if self.hmm:
                     try:
                         lstm_output=self.model.get_layer('out').output
@@ -198,7 +201,9 @@ class PredictionGTF:
                                     inputs=self.model.input, 
                                     outputs=lstm_output
                                     )
-                    self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
+                    # self.lstm_model.compile(run_eagerly=True)
+                    # self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
+                    self.gene_pred_hmm_layer = self.model.layers[-1]
 
                     if self.parallel_factor is not None:
                         self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
@@ -210,44 +215,44 @@ class PredictionGTF:
         else: 
             self.make_default_hmm()
     
-    def transformer_model(self, seq_len, lstm_load):
-        input_ids = Input(shape=(None,), dtype='int32', name='input_ids')
-        attention_mask = Input(shape=(None,), dtype='int32', name='attention_mask')
+    # def transformer_model(self, seq_len, lstm_load):
+    #     input_ids = Input(shape=(None,), dtype='int32', name='input_ids')
+    #     attention_mask = Input(shape=(None,), dtype='int32', name='attention_mask')
 
-        transformer_model = TFEsmForMaskedLM.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
-        trans_out = transformer_model(input_ids, 
-                                  attention_mask=attention_mask, 
-                                  output_hidden_states=True)
-        trans_out = trans_out['hidden_states'][-1][:,1:]   
-        trans_out = lstm_load.get_layer('dense_transformer')(trans_out) 
-        # ouput size: batch_size, 918, 600
-        model = Model(inputs=[input_ids, attention_mask], outputs=trans_out)
-        return model
+    #     transformer_model = TFEsmForMaskedLM.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
+    #     trans_out = transformer_model(input_ids, 
+    #                               attention_mask=attention_mask, 
+    #                               output_hidden_states=True)
+    #     trans_out = trans_out['hidden_states'][-1][:,1:]   
+    #     trans_out = lstm_load.get_layer('dense_transformer')(trans_out) 
+    #     # ouput size: batch_size, 918, 600
+    #     model = Model(inputs=[input_ids, attention_mask], outputs=trans_out)
+    #     return model
 
-    def trans_lstm_model(self, lstm_load):
-        nuc_input = Input(shape=(None, 6), name='main_input')
-        trans_input = Input(shape=(None, 134), name='trans_emb')
+    # def trans_lstm_model(self, lstm_load):
+    #     nuc_input = Input(shape=(None, 6), name='main_input')
+    #     trans_input = Input(shape=(None, 134), name='trans_emb')
         
-        x = lstm_load.get_layer('initial_conv')(nuc_input) 
-        x = lstm_load.get_layer('batch_normalization1')(x) 
-        x = lstm_load.get_layer('conv_1')(x) 
-        x = lstm_load.get_layer('batch_normalization2')(x) 
-        x = lstm_load.get_layer('conv_2')(x) 
-        x = tf.concat([nuc_input, x], axis=-1)
-        x = tf.keras.layers.Add()([x, trans_input])
-        x = lstm_load.get_layer('R1')(x) 
-        x = lstm_load.get_layer('biLSTM_1')(x) 
-        x = lstm_load.get_layer('biLSTM_2')(x) 
-        x = lstm_load.get_layer('dense')(x) 
-        x = lstm_load.get_layer('Reshape2')(x) 
-        x = lstm_load.get_layer('out')(x) 
-        x = tf.concat([
-            x[:,:,0:1], 
-            tf.reduce_sum(x[:,:,1:4], axis=-1, keepdims=True, name='reduce_inp_introns'), 
-            x[:,:,4:]
-            ], 
-            axis=-1, name='concat_outp')
-        return Model(inputs=[nuc_input, trans_input], outputs=x)
+    #     x = lstm_load.get_layer('initial_conv')(nuc_input) 
+    #     x = lstm_load.get_layer('batch_normalization1')(x) 
+    #     x = lstm_load.get_layer('conv_1')(x) 
+    #     x = lstm_load.get_layer('batch_normalization2')(x) 
+    #     x = lstm_load.get_layer('conv_2')(x) 
+    #     x = tf.concat([nuc_input, x], axis=-1)
+    #     x = tf.keras.layers.Add()([x, trans_input])
+    #     x = lstm_load.get_layer('R1')(x) 
+    #     x = lstm_load.get_layer('biLSTM_1')(x) 
+    #     x = lstm_load.get_layer('biLSTM_2')(x) 
+    #     x = lstm_load.get_layer('dense')(x) 
+    #     x = lstm_load.get_layer('Reshape2')(x) 
+    #     x = lstm_load.get_layer('out')(x) 
+    #     x = tf.concat([
+    #         x[:,:,0:1], 
+    #         tf.reduce_sum(x[:,:,1:4], axis=-1, keepdims=True, name='reduce_inp_introns'), 
+    #         x[:,:,4:]
+    #         ], 
+    #         axis=-1, name='concat_outp')
+    #     return Model(inputs=[nuc_input, trans_input], outputs=x)
     
     def init_fasta(self,  genome_path=None, chunk_len=None, strand=None):
         if genome_path is None:
@@ -383,78 +388,78 @@ class PredictionGTF:
         
         return outp
     
-    def tokenize_inp(self, inp_chunks):
-        """Tokenizes input sequences for nucleotide transformer.
+    # def tokenize_inp(self, inp_chunks):
+    #     """Tokenizes input sequences for nucleotide transformer.
 
-        Arguments:
-            - inp_chunks (np.array): A numpy array of one-hot encoded nucleotide sequences.
+    #     Arguments:
+    #         - inp_chunks (np.array): A numpy array of one-hot encoded nucleotide sequences.
             
 
-            Returns:
-            - tokens (BatchEncoding): Dictionary with input_ids and attention masks of tokens
-        """
-        token_len = inp_chunks.shape[1]
-        # cutoff = ((inp_chunks.shape[0] * token_len) // seq_len) * seq_len // token_len
-        # inp_chunks = inp_chunks[:cutoff]
-        def decode_one_hot(encoded_seq):
-            # Define the mapping from index to nucleotide
-            index_to_nucleotide = np.array(['A', 'C', 'G', 'T', 'A'])
-            # Use np.argmax to find the index of the maximum value in each row
-            nucleotide_indices = np.argmax(encoded_seq, axis=-1)
-            # Map indices to nucleotides
-            decoded_seq = index_to_nucleotide[nucleotide_indices]
-            # Convert from array of characters to string for each sequence
-            decoded_seq_str = [''.join(seq) for seq in decoded_seq]
-            return decoded_seq_str
+    #         Returns:
+    #         - tokens (BatchEncoding): Dictionary with input_ids and attention masks of tokens
+    #     """
+    #     token_len = inp_chunks.shape[1]
+    #     # cutoff = ((inp_chunks.shape[0] * token_len) // seq_len) * seq_len // token_len
+    #     # inp_chunks = inp_chunks[:cutoff]
+    #     def decode_one_hot(encoded_seq):
+    #         # Define the mapping from index to nucleotide
+    #         index_to_nucleotide = np.array(['A', 'C', 'G', 'T', 'A'])
+    #         # Use np.argmax to find the index of the maximum value in each row
+    #         nucleotide_indices = np.argmax(encoded_seq, axis=-1)
+    #         # Map indices to nucleotides
+    #         decoded_seq = index_to_nucleotide[nucleotide_indices]
+    #         # Convert from array of characters to string for each sequence
+    #         decoded_seq_str = [''.join(seq) for seq in decoded_seq]
+    #         return decoded_seq_str
 
-        tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
-        tokens = decode_one_hot(inp_chunks[:,:,:5])
-        tokens = tokenizer.batch_encode_plus(tokens, return_tensors="tf", 
-                                              padding="max_length",
-                                              max_length=token_len//6+1)
-        return tokens
+    #     tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
+    #     tokens = decode_one_hot(inp_chunks[:,:,:5])
+    #     tokens = tokenizer.batch_encode_plus(tokens, return_tensors="tf", 
+    #                                           padding="max_length",
+    #                                           max_length=token_len//6+1)
+    #     return tokens
     
-    def transformer_prediction(self, inp_ids, attention_mask, save=True):
-        """Generates predictions using the transformer only model based on input IDs and attention masks.
+    # def transformer_prediction(self, inp_ids, attention_mask, save=True):
+    #     """Generates predictions using the transformer only model based on input IDs and attention masks.
 
-        Arguments:
-            inp_ids (np.array): The input IDs for the transformer model, expected to be in a numpy array format.
-            attention_mask (np.array): The attention mask for the transformer model, aligned with `inp_ids`.
-            save (bool): A flag to indicate whether the predictions should be saved/loaded to/from a file.
+    #     Arguments:
+    #         inp_ids (np.array): The input IDs for the transformer model, expected to be in a numpy array format.
+    #         attention_mask (np.array): The attention mask for the transformer model, aligned with `inp_ids`.
+    #         save (bool): A flag to indicate whether the predictions should be saved/loaded to/from a file.
 
-        Returns:
-            trans_predictions (np.array or list of np.array): The predictions generated by the transformer model.
-        """
-        trans_predictions = []
-        batch_size = 30
-        num_batches = inp_ids.shape[0] // batch_size
-        if save and self.temp_dir and os.path.exists(f'{self.temp_dir}/../../../inp/trans_predictions.npz'):
-            trans_predictions = np.load(f'{self.temp_dir}/../../../inp/trans_predictions.npz')            
-            if self.emb:
-                trans_predictions = [trans_predictions['array1'],  trans_predictions['array2']]
-            else:
-                trans_predictions = trans_predictions['array1']
-            return trans_predictions
+    #     Returns:
+    #         trans_predictions (np.array or list of np.array): The predictions generated by the transformer model.
+    #     """
+    #     trans_predictions = []
+    #     batch_size = 30
+    #     num_batches = inp_ids.shape[0] // batch_size
+    #     if save and self.temp_dir and os.path.exists(f'{self.temp_dir}/../../../inp/trans_predictions.npz'):
+    #         trans_predictions = np.load(f'{self.temp_dir}/../../../inp/trans_predictions.npz')            
+    #         if self.emb:
+    #             trans_predictions = [trans_predictions['array1'],  trans_predictions['array2']]
+    #         else:
+    #             trans_predictions = trans_predictions['array1']
+    #         return trans_predictions
 
-        print('### Transformer prediction')
-        if inp_ids.shape[0] % batch_size > 0:
-            num_batches += 1
-        for i in range(num_batches):
-            start_pos = i * batch_size
-            end_pos = (i+1) * batch_size
-            y = self.trans_model.predict_on_batch((inp_ids[start_pos:end_pos],
-    attention_mask[start_pos:end_pos]))                
-            if len(y.shape) == 1:
-                y = np.expand_dims(y,0)            
-            trans_predictions.append(y)
-            print(len(trans_predictions)+1, '/', num_batches, file=sys.stderr)
-        trans_predictions = np.concatenate(trans_predictions, axis=0)  
-        if save and self.temp_dir:
-            if self.emb:
-                np.savez(f'{self.temp_dir}/trans_predictions.npz', array1=trans_predictions[0], array2=trans_predictions[1])
-            else:
-                np.savez(f'{self.temp_dir}/trans_predictions.npz', array1=trans_predictions)  
-        return trans_predictions
+    #     print('### Transformer prediction')
+    #     if inp_ids.shape[0] % batch_size > 0:
+    #         num_batches += 1
+    #     for i in range(num_batches):
+    #         start_pos = i * batch_size
+    #         end_pos = (i+1) * batch_size
+    #         y = self.trans_model.predict_on_batch((inp_ids[start_pos:end_pos],
+    # attention_mask[start_pos:end_pos]))                
+    #         if len(y.shape) == 1:
+    #             y = np.expand_dims(y,0)            
+    #         trans_predictions.append(y)
+    #         print(len(trans_predictions)+1, '/', num_batches, file=sys.stderr)
+    #     trans_predictions = np.concatenate(trans_predictions, axis=0)  
+    #     if save and self.temp_dir:
+    #         if self.emb:
+    #             np.savez(f'{self.temp_dir}/trans_predictions.npz', array1=trans_predictions[0], array2=trans_predictions[1])
+    #         else:
+    #             np.savez(f'{self.temp_dir}/trans_predictions.npz', array1=trans_predictions)  
+    #     return trans_predictions
    
     def lstm_prediction(self, inp_chunks, clamsa_inp=None, trans_emb=None, save=True, batch_size=None):    
         """Generates predictions using a LSTM model.
@@ -487,17 +492,19 @@ class PredictionGTF:
         for i in range(num_batches):
             start_pos = i * batch_size
             end_pos = (i+1) * batch_size
-            if self.trans_lstm:
-                y = self.lstm_model(
-                    (inp_chunks[start_pos:end_pos],
-                    trans_emb[start_pos:end_pos]))
-            elif clamsa_inp is not None:
+            # if self.trans_lstm:
+            #     y = self.lstm_model(
+            #         (inp_chunks[start_pos:end_pos],
+            #         trans_emb[start_pos:end_pos]))
+            if clamsa_inp is not None:
                 y = self.lstm_model.predict_on_batch([
                     inp_chunks[start_pos:end_pos],
                     clamsa_inp[start_pos:end_pos]
                 ])           
             else:
-                y = self.lstm_model.predict_on_batch(inp_chunks[start_pos:end_pos])                
+                print(start_pos,end_pos, len(inp_chunks), inp_chunks[start_pos].shape)
+                # y = self.lstm_model.predict_on_batch(inp_chunks[start_pos:end_pos])
+                y = self.lstm_model(inp_chunks[start_pos:end_pos])
             if not self.emb and len(y.shape) == 1:
                 y = np.expand_dims(y,0)
             elif self.emb and len(y[0].shape) == 1:
@@ -522,7 +529,7 @@ class PredictionGTF:
 
         Arguments:
             nuc_seq (np.array): One hot encoded representation of the input nucleotide sequence.
-            lstm_predictions (np.array): Class label predictions from a LSTM model (or transformer model)
+            lstm_predictions (np.array): Class label predictions from a LSTM model
             save (bool): A flag to indicate whether the predictions should be saved/loaded to/from a file.
 
         Returns:
@@ -570,7 +577,7 @@ class PredictionGTF:
         
         Arguments:
             inp_chunks (np.array): One hot encoded representation of the input nucleotide sequence.
-            lstm_predictions (np.array): Class label predictions from a LSTM model (or transformer model)
+            lstm_predictions (np.array): Class label predictions from a LSTM model 
             save (bool): A flag to indicate whether the predictions should be saved/loaded to/from a file.
 
         Returns:
@@ -648,21 +655,21 @@ class PredictionGTF:
         start_time = time.time()
         if encoding_layer_oracle is not None:
             encoding_layer_pred = encoding_layer_oracle
-        elif self.transformer:
-            # NT prediction
-            tokens = self.tokenize_inp(
-                inp_chunks.reshape(-1, 5994), seq_len=inp_chunks.shape[1])
-            encoding_layer_pred = self.transformer_prediction(tokens['input_ids'], 
-                                                              tokens['attention_mask'],save=save)
-        elif self.trans_lstm:
-            tokens = self.tokenize_inp(
-                inp_chunks.reshape(-1, 5502), seq_len=inp_chunks.shape[1])
-            trans_emb = self.transformer_prediction(tokens['input_ids'], tokens['attention_mask'], 
-                                                    save=save)
-            trans_emb = trans_emb.reshape((-1, trans_emb.shape[1]*6, 134))
-            trans_emb = trans_emb.reshape((-1, inp_chunks.shape[1], 134))
-            encoding_layer_pred = self.lstm_prediction(inp_chunks, trans_emb=trans_emb, save=save,
-                                                      batch_size=batch_size)
+        # elif self.transformer:
+        #     # NT prediction
+        #     tokens = self.tokenize_inp(
+        #         inp_chunks.reshape(-1, 5994), seq_len=inp_chunks.shape[1])
+        #     encoding_layer_pred = self.transformer_prediction(tokens['input_ids'], 
+        #                                                       tokens['attention_mask'],save=save)
+        # elif self.trans_lstm:
+        #     tokens = self.tokenize_inp(
+        #         inp_chunks.reshape(-1, 5502), seq_len=inp_chunks.shape[1])
+        #     trans_emb = self.transformer_prediction(tokens['input_ids'], tokens['attention_mask'], 
+        #                                             save=save)
+        #     trans_emb = trans_emb.reshape((-1, trans_emb.shape[1]*6, 134))
+        #     trans_emb = trans_emb.reshape((-1, inp_chunks.shape[1], 134))
+        #     encoding_layer_pred = self.lstm_prediction(inp_chunks, trans_emb=trans_emb, save=save,
+        #                                               batch_size=batch_size)
         else:
             # LSTM prediction
             encoding_layer_pred = self.lstm_prediction(inp_chunks, clamsa_inp=clamsa_inp, save=save,
@@ -924,6 +931,7 @@ class PredictionGTF:
             correct_y_label (np.array): Correct y_label for debugging.
         """
         batch_size = self.batch_size//2
+
         # revert data if - strand
         if strand == '-':
             y_label = y_label[::-1, ::-1]

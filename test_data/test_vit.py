@@ -25,7 +25,7 @@ def main():
         os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
     import tensorflow as tf
     from eval_model_class import PredictionGTF
-    from transformers import TFEsmForMaskedLM
+    # from transformers import TFEsmForMaskedLM
     from models import make_weighted_cce_loss
     if args.bigwig:
         import pyBigWig
@@ -68,7 +68,7 @@ def main():
         emb=args.emb, 
         num_hmm=num_hmm,
         hmm_factor=hmm_factor,
-        trans_lstm=args.trans_lstm,    
+        # trans_lstm=args.trans_lstm,    
         genome_path=genome_path,
         annot_path=annot_path, 
         softmask=True, strand=strand,
@@ -167,7 +167,7 @@ def main():
             emb=args.emb, 
             num_hmm=num_hmm,
             hmm_factor=hmm_factor,
-            trans_lstm=args.trans_lstm,    
+            # trans_lstm=args.trans_lstm,    
             genome_path=genome_path,
             annot_path=gtf_out, 
             softmask=True, strand=strand,
@@ -300,8 +300,8 @@ def parseCmd():
         help='Number of sub-sequences per batch.', default=0)
     parser.add_argument('--strand', type=str,
         help='Either "+" or "-".', default='+')
-    parser.add_argument('--trans_lstm', action='store_true',
-        help='Indicates if the LSTM model includes nucleotide transformer layers.')
+    # parser.add_argument('--trans_lstm', action='store_true',
+    #     help='Indicates if the LSTM model includes nucleotide transformer layers.')
     parser.add_argument('--emb', action='store_true',
         help='Indicates if the HMM layer uses embedding input.')
     parser.add_argument('--no_softmasking', action='store_true',

@@ -1,6 +1,8 @@
+#!/usr/bin/env python3
+
 import sys, json, os, re, sys, csv, argparse
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-from transformers import AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM
+# from transformers import AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM
 from genome_fasta import GenomeSequences
 from annotation_gtf import GeneStructure
 import subprocess as sp
@@ -50,27 +52,27 @@ import h5py
 
 #     return full_f_chunks, full_r_chunks, full_r_phase_chunks
 
-def get_transformer_emb(chunk, token_len=5994):        
-        tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
-        transformer_model = TFEsmForMaskedLM.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
+# def get_transformer_emb(chunk, token_len=5994):        
+#         tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
+#         transformer_model = TFEsmForMaskedLM.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
         
-        def decode_one_hot(encoded_seq):
-            index_to_nucleotide = np.array(['A', 'C', 'G', 'T', 'A'])
-            nucleotide_indices = np.argmax(encoded_seq, axis=-1)
-            decoded_seq = index_to_nucleotide[nucleotide_indices]
-            decoded_seq_str = [''.join(seq) for seq in decoded_seq]
-            return decoded_seq_str        
+#         def decode_one_hot(encoded_seq):
+#             index_to_nucleotide = np.array(['A', 'C', 'G', 'T', 'A'])
+#             nucleotide_indices = np.argmax(encoded_seq, axis=-1)
+#             decoded_seq = index_to_nucleotide[nucleotide_indices]
+#             decoded_seq_str = [''.join(seq) for seq in decoded_seq]
+#             return decoded_seq_str        
         
-        inp_chunk = decode_one_hot(chunk.reshape(-1, token_len, 6)[:,:,:5])
-        tokens = tokenizer.batch_encode_plus(inp_chunk, return_tensors="tf", 
-                                              padding="max_length",
-                                              max_length=token_len//6+1)
+#         inp_chunk = decode_one_hot(chunk.reshape(-1, token_len, 6)[:,:,:5])
+#         tokens = tokenizer.batch_encode_plus(inp_chunk, return_tensors="tf", 
+#                                               padding="max_length",
+#                                               max_length=token_len//6+1)
 
-        emb = transformer_model(tokens['input_ids'], 
-                                  attention_mask=tokens['attention_mask'], 
-                                  output_hidden_states=True)
-        trans_out = emb['hidden_states'][-1][:,1:].numpy()
-        return np.array(trans_out)
+#         emb = transformer_model(tokens['input_ids'], 
+#                                   attention_mask=tokens['attention_mask'], 
+#                                   output_hidden_states=True)
+#         trans_out = emb['hidden_states'][-1][:,1:].numpy()
+#         return np.array(trans_out)
 
 def get_clamsa_track(file_path, seq_len=500004, prefix=''):
     wig = Wig_util()
@@ -311,10 +313,10 @@ def main():
             overlap_size=0, transition=True)
     
     print('Loaded FASTA and GTF', fasta.shape, ref.shape)
-    if args.transformer:        
-#         trans_emb = get_transformer_emb(ref, token_len = args.wsize//18)
-#         print('AAA')
-        write_tf_record(fasta, ref, args.out, trans=True)
+#     if args.transformer:        
+# #         trans_emb = get_transformer_emb(ref, token_len = args.wsize//18)
+# #         print('AAA')
+#         write_tf_record(fasta, ref, args.out, trans=True)
     if args.clamsa:
         # clamsa = get_clamsa_track('/home/gabriell/deepl_data/clamsa/wig/', seq_len=args.wsize, prefix=args.species)
         clamsa = load_clamsa_data(args.clamsa, seq_names=args.seq_names, seq_len=args.wsize)
@@ -353,8 +355,8 @@ def parseCmd():
         help='', required=True)
     # parser.add_argument('--no_transition', action='store_true',
     #     help='')
-    parser.add_argument('--transformer', action='store_true',
-        help='')
+    # parser.add_argument('--transformer', action='store_true',
+    #     help='')
     parser.add_argument('--clamsa',  type=str, default='',
         help='')
     parser.add_argument('--seq_names',  type=str, default='',

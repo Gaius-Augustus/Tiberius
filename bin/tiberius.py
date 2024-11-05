@@ -16,7 +16,6 @@ from Bio.Seq import Seq
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 MAX_TF_VERSION = '2.12'
-
 # Function to compare TensorFlow version
 def check_tf_version(tf_version):
     if tf_version > MAX_TF_VERSION:
@@ -242,7 +241,7 @@ def main():
             hmm_factor=1,    
             genome_path=genome_path,
             softmask=not args.no_softmasking, strand=s_,
-            parallel_factor=args.parallel_factor,
+            parallel_factor=parallel_factor,
             # lstm_cfg=args.lstm_cfg,
         )
         

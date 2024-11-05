@@ -103,7 +103,7 @@ def group_sequences(seq_names, seq_lens, t=50000400, chunk_size=500004):
     return groups
 
 def download_weigths(url, file_path):
-    print(url, file_path)
+    # print(url, file_path)
     with requests.get(url, stream=True) as r:
         r.raise_for_status()
         with open(file_path, 'wb') as f:
@@ -179,8 +179,6 @@ def main():
     parallel_factor = compute_parallel_factor(seq_len) if args.parallel_factor == 0 else args.parallel_factor
     logging.info(f'HMM parallel factor: {parallel_factor}')    
 
-    
-    
     softmasking = False if args.no_softmasking else True
     logging.info(f'Softmasking: {softmasking}')    
     
@@ -220,8 +218,12 @@ def main():
         if model_file_name[-3:] == 'tgz':
             logging.info(f'Extracting weights to {model_weights_dir}')
             extract_tar_gz(f'{model_weights_dir}/{model_file_name}', f'{model_weights_dir}')
-            model_file_name = model_file_name[:-3]
+            model_file_name = model_file_name[:-4]
         model_path = f'{model_weights_dir}/{model_file_name}'
+        
+        if not os.path.exists(model_path):
+            logging.error(f'Error: The model weights could not be downloaded. Please download the model weights manually (see README.md) and specify them with --model!')
+            sys.exit(1)
 
     anno = Anno(gtf_out, f'anno')     
     tx_id=0

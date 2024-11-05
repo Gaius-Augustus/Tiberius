@@ -6,7 +6,7 @@
 # Running Tiberius for single genome prediction
 # ==============================================================
 
-import sys, json, os, re, sys, csv, argparse, requests, time, logging, warnings
+import sys, json, os, re, sys, csv, argparse, requests, time, logging, warnings, math
 script_dir = os.path.dirname(os.path.realpath(__file__))
 import subprocess as sp
 import numpy as np
@@ -25,6 +25,32 @@ def check_tf_version(tf_version):
                       "It will produce an error if you use a sequence length > 260.000 during inference!")
         return False 
     return True
+
+def check_seq_len(seq_len):
+    if not (seq_len % 9 == 0 and seq_len % 2 == 0):
+        logging.error(f'ERROR: The argument "seq_len" has to be  divisable by 9 and by 2 for the model to work! Please change the value {seq_len} to a different value!')
+        sys.exit(1)
+    return True
+
+def check_parallel_factor(parallel_factor, seq_len):    
+    if parallel_factor < 2 or parallel_factor > seq_len-1:
+        logging.info(f'WARNING: The parallel factor is poorely chosen, please choose a different --seq_len or specify a --parallel_factor, which has to be a divisor of --seq_len. Current value: {parallel_factor}.')
+    if seq_len % parallel_factor != 0:
+        logging.error(f'ERROR: The argument "parallel_factor" has to be a divisor of --seq_len! Please change the value {parallel_factor} to a different value or choose a different seq_len!')
+        sys.exit(1)
+    if parallel_factor < 1:
+        logging.error(f'ERROR: The argument "parallel_factor" has to be >0! Please change the value {parallel_factor} to a different value!')
+        sys.exit(1)
+
+def compute_parallel_factor(seq_len):
+    sqrt_n = int(math.sqrt(seq_len))    
+    # Check for divisors 
+    for i in range(0, seq_len - sqrt_n + 1):        
+        if seq_len % (sqrt_n-i) == 0:
+            return sqrt_n-i
+        if seq_len % (sqrt_n+i) == 0:
+            return sqrt_n+i  
+    return sqrt_n
 
 # Function to assemble transcript taking strand into account
 def assemble_transcript(exons, sequence, strand):
@@ -143,12 +169,18 @@ def main():
     batch_size = args.batch_size
     logging.info(f'Batch size: {batch_size}')
     seq_len = args.seq_len
-    logging.info(f'Seq: {batch_size}')
+    logging.info(f'Tile length: {seq_len}')
+    check_seq_len(seq_len)    
     strand = [s for s in args.strand.split(',') if s in ['+', '-']]
     logging.info(f'Strand: {strand}')    
     if not strand:
         logging.error(f'ERROR: The argument "strand" has to be either "+" or "-" or "+,-". Current value: {args.strand}.')
         sys.exit(1)
+
+    parallel_factor = compute_parallel_factor(seq_len) if args.parallel_factor == 0 else args.parallel_factor
+    logging.info(f'HMM parallel factor: {parallel_factor}')    
+
+    
     
     softmasking = False if args.no_softmasking else True
     logging.info(f'Softmasking: {softmasking}')    
@@ -323,7 +355,7 @@ def parseCmd():
         help='Output GTF file with Tiberius gene prediction.', default='tiberius.gtf')
     parser.add_argument('--genome',  type=str, required=True,
         help='Genome sequence file in FASTA format.')
-    parser.add_argument('--parallel_factor',  type=int, default=817,
+    parser.add_argument('--parallel_factor',  type=int, default=0,
         help='Parallel factor used in Viterbi. Use the factor of w_size that is closest to sqrt(w_size) (817 works well for 500004)')
     parser.add_argument('--no_softmasking', action='store_true',
         help='Disables softmasking.')

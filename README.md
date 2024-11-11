@@ -11,7 +11,7 @@ Currently, we provide only model weights for mammalian species and Tiberius does
 
 ## Installation
 
-Tiberius can either be installed from source or can be run with a **Singularty** container
+Tiberius can either be installed from source or can be run with a **Singularity** container
 
 ### Installation with Singularity container
 Build Singularity container with:

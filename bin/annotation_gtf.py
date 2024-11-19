@@ -126,7 +126,6 @@ class GeneStructure:
                     if transition:
                         idx = end + 1 
                     exon_strand = np.argmax(self.one_hot[strand][chromosome][idx])-4
-#                 print(exon_strand)
                 self.one_hot[strand][chromosome][start-1:end, 1 + exon_strand] = 1
                 self.one_hot[strand][chromosome][start-1:end, 0] = 0  
         
@@ -203,37 +202,4 @@ class GeneStructure:
         if coords:
             return self.chunks, chunk_coords
         return self.chunks
-
-    def get_chunks_seq(self, seq_names, strand='+'):
-        """Get all one-hot encoded chunks.
-
-        Arguments:
-            seq_names (list): Names of sequences to chunk.
-            strand (str): Strand to process ('+' or '-').
-
-        Returns:
-            tuple: Tuple of chunks and phase chunks arrays.
-        """
-        chunks = []
-        chunks_phase = []
-
-        for seq_name in seq_names:
-            num_chunks = len(self.one_hot[strand][seq_name])// self.chunksize + 1
-
-            chunks.extend([self.one_hot[strand][seq_name][i * self.chunksize:\
-                (i+1) * self.chunksize, :] \
-                for i in range(num_chunks)])
-            
-            chunks_phase.extend([self.one_hot_phase[strand][seq_name][i * self.chunksize:\
-                (i+1) * self.chunksize, :] \
-                for i in range(num_chunks)])
-        
-       
-        if strand == '-':
-            chunks = [c[::-1] for c in chunks]
-            chunks.reverse()
-            chunks_phase = [c[::-1] for c in chunks_phase]
-            chunks_phase.reverse()
-
-        return chunks, chunks_phase
     

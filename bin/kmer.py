@@ -1,7 +1,5 @@
 import tensorflow as tf
 
-
-
 def make_k_mers(sequences, k, pivot_left=True):
     """ Maps one hot encoded nucleotide sequences to a k-mer representation. 
         Args:

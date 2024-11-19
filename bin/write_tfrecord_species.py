@@ -14,65 +14,7 @@ import sys
 import zlib
 from copy import deepcopy
 from wig_class import Wig_util
-
-from concurrent.futures import ThreadPoolExecutor
-
 import h5py
-# def get_species_data_lstm(s, seq_len=500004, overlap_size=0):
-#     genome_path = f'/home/gabriell/deepl_data/genomes/{s}.fa.combined.masked'
-#     annot_path=f'/home/gabriell//deepl_data/annot_longest_fixed/{s}.gtf'
-
-#     fasta = GenomeSequences(fasta_file=genome_path,
-#             chunksize=seq_len, 
-#             overlap=overlap_size)
-#     fasta.encode_sequences() 
-#     f_chunk = fasta.get_flat_chunks(strand='+')
-
-#     full_f_chunks = np.concatenate((f_chunk[::-1,::-1, [3,2,1,0,4,5]], 
-#                                     f_chunk), axis=0)
-
-#     seq_len = [len(s) for s in fasta.sequences]
-#     del f_chunk
-#     del fasta.sequences
-#     del fasta.one_hot_encoded
-
-#     ref_anno = GeneStructure(annot_path, 
-#                         chunksize=seq_len, 
-#                         overlap=overlap_size)
-        
-#     ref_anno.translate_to_one_hot(fasta.sequence_names, 
-#                             seq_len)
-#     #ref_anno.get_flat_chunks(fasta.sequence_names)
-
-#     r_chunk, r_phase = ref_anno.get_flat_chunks(fasta.sequence_names, strand='-')
-#     r_chunk2, r_phase2 = ref_anno.get_flat_chunks(fasta.sequence_names, strand='+')
-
-#     full_r_chunks = np.concatenate((r_chunk, r_chunk2), axis=0)
-#     full_r_phase_chunks = np.concatenate((r_phase, r_phase2), axis=0)
-
-#     return full_f_chunks, full_r_chunks, full_r_phase_chunks
-
-# def get_transformer_emb(chunk, token_len=5994):        
-#         tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
-#         transformer_model = TFEsmForMaskedLM.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
-        
-#         def decode_one_hot(encoded_seq):
-#             index_to_nucleotide = np.array(['A', 'C', 'G', 'T', 'A'])
-#             nucleotide_indices = np.argmax(encoded_seq, axis=-1)
-#             decoded_seq = index_to_nucleotide[nucleotide_indices]
-#             decoded_seq_str = [''.join(seq) for seq in decoded_seq]
-#             return decoded_seq_str        
-        
-#         inp_chunk = decode_one_hot(chunk.reshape(-1, token_len, 6)[:,:,:5])
-#         tokens = tokenizer.batch_encode_plus(inp_chunk, return_tensors="tf", 
-#                                               padding="max_length",
-#                                               max_length=token_len//6+1)
-
-#         emb = transformer_model(tokens['input_ids'], 
-#                                   attention_mask=tokens['attention_mask'], 
-#                                   output_hidden_states=True)
-#         trans_out = emb['hidden_states'][-1][:,1:].numpy()
-#         return np.array(trans_out)
 
 def get_clamsa_track(file_path, seq_len=500004, prefix=''):
     wig = Wig_util()
@@ -88,7 +30,6 @@ def get_clamsa_track(file_path, seq_len=500004, prefix=''):
     return np.concatenate([chunks_plus[::-1,::-1, [1,0,3,2]], chunks_plus], axis=0)
 
 def load_clamsa_data(clamsa_prefix, seq_names, seq_len=None):
-           
         clamsa_chunks = []
         seq = []
         with open(seq_names, 'r') as f:
@@ -125,8 +66,6 @@ def get_species_data_hmm(genome_path='', annot_path='', species='', seq_len=5000
                                     f_chunk), axis=0)
     
     del f_chunk
-    # del fasta
-    print(full_f_chunks.shape)
     ref_anno = GeneStructure(annot_path, 
                         chunksize=seq_len, 
                         overlap=overlap_size)    
@@ -243,67 +182,6 @@ def write_tf_record(fasta, ref, out, ref_phase=None, split=100, trans=False, cla
                 writer.write(serialized_example)
 
     print('Writing complete.')
-
-"""
-def write_tf_record(fasta, ref, out, ref_phase=None, split=100, 
-                    trans=False, clamsa=np.array([])):
-    fasta = fasta.astype(np.int32)          
-    ref = ref.astype(np.int32)
-
-    file_size = fasta.shape[0] // split
-    indices = np.arange(fasta.shape[0])
-    np.random.shuffle(indices)
-    print(clamsa.shape, fasta.shape, trans)
-    if ref_phase:
-        ref_phase = ref_phase.astype(np.int32)
-    for k in range(split):
-        print('k')
-        with tf.io.TFRecordWriter(f'{out}_{k}.tfrecords' , \
-            options=tf.io.TFRecordOptions(compression_type='GZIP')) as writer: 
-            for i in indices[k::split]:
-                feature_bytes_x = tf.io.serialize_tensor(fasta[i,:,:]).numpy()
-                feature_bytes_y = tf.io.serialize_tensor(ref[i,:,:]).numpy()
-                if ref_phase:
-                    feature_bytes_y_phase = tf.io.serialize_tensor(ref_phase[i,:,:]).numpy()                
-                    example = tf.train.Example(features=tf.train.Features(feature={
-                        'input': tf.train.Feature(
-                            bytes_list=tf.train.BytesList(value=[feature_bytes_x])),
-                        'output': tf.train.Feature(
-                            bytes_list=tf.train.BytesList(value=[feature_bytes_y])),
-                        'output_phase': tf.train.Feature(
-                            bytes_list=tf.train.BytesList(value=[feature_bytes_y_phase]))
-                    }))
-                elif trans:
-                    trans_emb = get_transformer_emb(ref[i,:,:], token_len = fasta.shape[1]//18)
-                    print('VV', file=sys.stderr)
-                    feature_bytes_trans = tf.io.serialize_tensor(trans_emb).numpy()
-                    example = tf.train.Example(features=tf.train.Features(feature={
-                        'input': tf.train.Feature(
-                            bytes_list=tf.train.BytesList(value=[feature_bytes_x])),
-                        'output': tf.train.Feature(
-                            bytes_list=tf.train.BytesList(value=[feature_bytes_y])),
-                        'trans_emb': tf.train.Feature(
-                            bytes_list=tf.train.BytesList(value=[feature_bytes_trans]))
-                    }))
-                elif clamsa.any():
-                    feature_bytes_clamsa = tf.io.serialize_tensor(clamsa[i,:,:]).numpy()
-                    example = tf.train.Example(features=tf.train.Features(feature={
-                        'input': tf.train.Feature(
-                            bytes_list=tf.train.BytesList(value=[feature_bytes_x])),
-                        'output': tf.train.Feature(
-                            bytes_list=tf.train.BytesList(value=[feature_bytes_y])),
-                        'clamsa': tf.train.Feature(
-                            bytes_list=tf.train.BytesList(value=[feature_bytes_clamsa]))
-                    }))
-                else:
-                    example = tf.train.Example(features=tf.train.Features(feature={
-                        'input': tf.train.Feature(
-                            bytes_list=tf.train.BytesList(value=[feature_bytes_x])),
-                        'output': tf.train.Feature(
-                            bytes_list=tf.train.BytesList(value=[feature_bytes_y]))
-                    }))
-                serialized_example = example.SerializeToString()
-                writer.write(serialized_example)"""
 
 def main():
     args = parseCmd()

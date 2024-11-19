@@ -5,7 +5,7 @@
 # Train variety of LSTM or HMM models for gene prediction 
 # using tfrecords.
 # 
-# Tensorflow 2.10.1, Transformers 4.31.0, 
+# Tensorflow 2.10.1
 # tensorflow_probability 0.18.0
 # ==============================================================
 
@@ -26,18 +26,13 @@ import tensorflow.keras as keras
 from tensorflow.keras.callbacks import CSVLogger
 import models
 from models import (weighted_categorical_crossentropy, custom_cce_f1_loss, BatchLearningRateScheduler, 
-                    add_hmm_only, add_hmm_layer, lm_model_phase, ValidationCallback, 
-                    BatchSave,EpochSave, lstm_model, add_constant_hmm, 
+                    add_hmm_only, add_hmm_layer, ValidationCallback, 
+                    BatchSave, EpochSave, lstm_model, add_constant_hmm, 
                     # add_transformer2lstm, transformer_model, 
                     make_weighted_cce_loss,)
 from tensorflow.keras.callbacks import LearningRateScheduler
 
 gpus = tf.config.list_physical_devices('GPU')
-
-#for gpu in gpus:
-    #tf.config.experimental.set_memory_growth(gpu, True)
-"""cluster_res = tf.distribute.cluster_resolver.SlurmClusterResolver(gpus_per_node=4,
-    gpus_per_task=1)"""
 
 strategy = tf.distribute.MirroredStrategy()
 
@@ -141,14 +136,11 @@ def train_hmm_model(generator, model_save_dir, config, val_data=None,
         else:
             loss = tf.keras.losses.CategoricalCrossentropy()
         if config['multi_loss']: 
-            #hmm_loss = loss
-            #hmm_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
             hmm_loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"], from_logits=True)
             loss = [loss, hmm_loss] 
             loss_weights = [1, config['hmm_loss_weight_mul']]
         else:
             loss_weights = None
-            #loss = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
             loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"], from_logits=True)
         model.compile(loss=loss, optimizer=adam, metrics=['accuracy'], loss_weights=loss_weights)     
         model.summary()
@@ -251,64 +243,6 @@ def train_clamsa(generator, model_save_dir, config, val_data=None, model_load=No
         model.fit(generator, epochs=500, 
                 steps_per_epoch=1000,
                 callbacks=[epoch_callback, csv_logger])
-
-
-# def train_add_transformer2lstm(generator, model_save_dir, config, val_data=None, model_load=None):
-#     """Add transformer tokens as input and nuc transformer to the default LSTM model and train it.
-#     If model_load_lstm is included in config, it will be loaded and extend with the clamsa layers.
-
-#     Parameters:
-#         - generator (DataGenerator): A data generator for training data.
-#         - model_save_dir (str): Directory path to save model weights and logs.
-#         - config (dict): Configuration dictionary specifying model 
-#                          parameters and training settings.
-#         - val_data (optional): Validation data to evaluate the model. Default is None.
-#         - model_load (optional): Path to a directory from which 
-#                                  to load a preexisting model that will be trained
-#     """
-#     model_save = model_save_dir + "/weights.{epoch:02d}.h5"
-#     checkpoint = ModelCheckpoint(model_save, monitor='loss', verbose=1, 
-#                         save_best_only=False, save_weights_only=False, mode='auto')
-
-#     batch_callback = BatchSave(model_save_dir + "/weights_batch.{}.h5", batch_save_numb)
-#     epoch_callback = EpochSave(model_save_dir)
-
-#     adam = Adam(learning_rate=config['lr'])
-
-#     cce_loss = tf.keras.losses.CategoricalCrossentropy()
-#     custom_objects = {}
-#     if config["loss_f1_factor"]:
-#         cce_loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
-#         custom_objects['custom_cce_f1_loss'] = custom_cce_f1_loss(config["loss_f1_factor"])
-#     else:
-#         cce_loss = tf.keras.losses.CategoricalCrossentropy()
-    
-#     if config["output_size"] == 1:
-#         cce_loss = tf.keras.losses.BinaryCrossentropy()
-    
-#     csv_logger = CSVLogger(f'{model_save_dir}/training.log', 
-#                 append=True, separator=';')
-#     with strategy.scope():
-#         if model_load:
-#             model = keras.models.load_model(model_load, custom_objects=custom_objects)
-#         else:
-#             model = add_transformer2lstm(config["model_load_lstm"], 
-#                                    cnn_size=config["filter_size"],)    
-
-#         if config["loss_weights"]:
-#             model.compile(loss=cce_loss, optimizer=adam, 
-#                 metrics=['accuracy'], #sample_weight_mode='temporal', 
-#                 loss_weights=config["loss_weights"]
-#                 )
-#         else:
-#             model.compile(loss=cce_loss, optimizer=adam, 
-#                 metrics=['accuracy'])        
-#         model.summary()
-
-#         model.fit(generator, epochs=500, 
-#                 steps_per_epoch=1000,
-#                 callbacks=[epoch_callback, csv_logger])
-    
     
 def train_lstm_model(generator, model_save_dir, config, val_data=None, model_load=None):  
     """Trains the LSTM model using data provided by a generator, while saving the 
@@ -402,8 +336,7 @@ def load_val_data(file, hmm_factor=1, output_size=7, clamsa=False, softmasking=T
     if output_size==5:
         y_new = np.zeros((y_val.shape[0], y_val.shape[1], 5), np.float32)
         y_new[:,:,0] = y_val[:,:,0]
-        y_new[:,:,1] = np.sum(y_val[:,:,1:4], axis=-1)            
-        # y_new[:,:,2:] = y_val[:,:,4:]
+        y_new[:,:,1] = np.sum(y_val[:,:,1:4], axis=-1)    
         y_new[:,:,2] = np.sum(y_val[:,:,[4, 7, 10, 12]], axis=-1)   
         y_new[:,:,3] = np.sum(y_val[:,:,[5, 8, 13]], axis=-1)
         y_new[:,:,4] = np.sum(y_val[:,:,[6, 9, 11, 14]], axis=-1)
@@ -520,7 +453,6 @@ def main():
     config_dict['model_save_dir'] = os.path.abspath(args.out)
     config_dict['model_load_lstm'] = os.path.abspath(args.load_lstm) if args.load_lstm else None
     config_dict['model_load_hmm'] = os.path.abspath(args.load_hmm) if args.load_hmm else None
-    # config_dict['nuc_trans'] = args.nuc_trans
     
     data_path = args.data
                                                  
@@ -577,10 +509,6 @@ def main():
                     config=config_dict, 
                     model_load=config_dict["model_load"], 
                     model_load_lstm=config_dict["model_load_lstm"])
-    # elif args.nuc_trans:
-    #     train_add_transformer2lstm(generator=generator,
-    #                   model_save_dir=config_dict["model_save_dir"], 
-    #                   config=config_dict, model_load=config_dict["model_load"])
     else:
         train_lstm_model(generator=generator, val_data=val_data,
             model_save_dir=config_dict["model_save_dir"], config=config_dict,

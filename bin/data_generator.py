@@ -96,8 +96,6 @@ class DataGenerator:
         y = tf.io.parse_tensor(parsed_features['output'], out_type=tf.int32)
         clamsa_track = tf.io.parse_tensor(parsed_features['clamsa'], out_type=tf.double)
         return x, y, clamsa_track
-
-        
     
     def _read_tfrecord_file(self, repeat=True):
         """Read and preprocess the TFRecord file.
@@ -273,29 +271,7 @@ class DataGenerator:
                     y_new[:,:,2] = np.sum(y_batch[:,:,[5, 8, 13]], axis=-1)
                     y_new[:,:,3] = np.sum(y_batch[:,:,[6, 9, 11, 14]], axis=-1)
                 y_batch = y_new
-        # if self.trans_lstm:
-        #     # prepare tokens for transformer lstm as additional input for the model
-        #     y_batch = y_batch[:,:99036]
-        #     x_batch = x_batch[:,:99036]
-        #     tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
-        #     max_token_len = 5502
-        #     x_token = np.reshape(x_batch[:,:,:5], (-1, max_token_len, 5))
-        #     x_token = self.decode_one_hot(x_token)
-        #     x_token = tokenizer.batch_encode_plus(x_token, return_tensors="tf", 
-        #               padding="max_length", max_length=max_token_len//6+1)  
-            
-        #     X = [x_batch, x_token['input_ids'], x_token['attention_mask']]
-        #     Y = y_batch                
-        # elif self.trans:            
-        #     # prepare tokens for transformer lstm as input for the model
-        #     tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-500m-human-ref")
-        #     max_len = 5994
-        #     x_batch = self.decode_one_hot(x_batch[:,:,:5])
-        #     x_batch = tokenizer.batch_encode_plus(x_batch, return_tensors="tf", 
-        #               padding="max_length", max_length=tokenizer.model_max_length)
-        #     X = [x_batch['input_ids'], x_batch['attention_mask']]
-        #     Y = y_batch            
-        # elif self.hmm_factor:
+        
         if self.hmm_factor:
             # deprecated by the parallelization of the HMM
             step_width = y_batch.shape[1] // self.hmm_factor

@@ -326,7 +326,7 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
                   trainable_transitions = True, trainable_starting_distribution=True,
                   use_border_hints=False, temperature=100., initial_variance=0.05,
                   include_lstm_in_output=False,
-                  neutral_hmm=False):
+                  neutral_hmm=False, emission_noise_strength=0.001):
     """Add trainable HMM layer to existing hel_model.
 
     Parameters:
@@ -349,6 +349,7 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
         temperature (float): Temperature parameter for the softmax calculation in the HMM layer.
         initial_variance (float): Initial variance for the Gaussian distributions used in the HMM layer.
         include_lstm_in_output (bool): If True, the LSTM output will be included in the model's output (for multi-loss training).
+        emission_noise_strength: Strength of the noise added to the emissions of the HMM layer.
 
     Returns:
         tf.keras.Model: The enhanced model with an added Dense layer and a custom Gene Prediction HMM layer.
@@ -381,10 +382,12 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
     nuc = Cast()(inputs)
     
     if output_size == 5:
-        emitter_init = make_5_class_emission_kernel(smoothing=1e-6, introns_shared=share_intron_parameters, num_copies=num_copy)
+        emitter_init = make_5_class_emission_kernel(smoothing=1e-6, introns_shared=share_intron_parameters, 
+                                                    num_copies=num_copy, noise_strength=emission_noise_strength)
     elif output_size == 15:
         assert not share_intron_parameters, "Can not share intron parameters if output size is 15."
-        emitter_init = make_15_class_emission_kernel(smoothing=1e-2, num_copies=num_copy)
+        emitter_init = make_15_class_emission_kernel(smoothing=1e-2, num_copies=num_copy, 
+                                                     noise_strength=emission_noise_strength)
     #currently, the emissions of the semi-independent HMMs are initialized the same
     emitter_init = np.repeat(emitter_init, num_hmm, axis=0)
     if gene_pred_layer is None:
@@ -431,12 +434,9 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
         y_hmm = gene_pred_layer(x, nucleotides=nuc, embeddings=emb)
 
     if output_size < 15:
-        y = Activation('softmax')(y_hmm)
-        # y = tf.keras.layers.Lambda(lambda y: tf.matmul(y, A), name='hmm_out')(y)
         y = Identity(name='hmm_out')(lambda y: tf.matmul(y, A))
     else:
-        #y = Activation('softmax', name='hmm_out')(y_hmm)
-        y = y_hmm
+        y = Reshape((-1, output_size), name='hmm_out')(y_hmm) #make sure the last dimension is not None
         
     model_hmm = Model(inputs=[inputs, input_hints] if use_border_hints else inputs, 
                     outputs=[x, y] if include_lstm_in_output else y)

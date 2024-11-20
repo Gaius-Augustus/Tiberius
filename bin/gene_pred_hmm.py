@@ -276,7 +276,7 @@ class GenePredHMMLayer(HmmLayer):
 class3_emission_matrix_simple = np.array([[[1., 0., 0.]] + [[0., 1., 0.]]*3 + [[0., 0., 1.]]*3]) * 100. #shape (1,7,3)
 class3_emission_matrix = np.array([[[1., 0., 0.]] + [[0., 1., 0.]]*3 + [[0., 0., 1.]]*11]) * 100. #shape (1,15,3)
 
-def make_5_class_emission_kernel(smoothing=0.01, introns_shared=False, num_copies=1):
+def make_5_class_emission_kernel(smoothing=0.01, introns_shared=False, num_copies=1, num_models=1, noise_strength=0.001):
     # input classes: IR, I, E0, E1, E2
     # states: Ir, I0, I1, I2, E0, E1, E2, START, EI0, EI1, EI2, IE0, IE1, IE2, STOP
     # Returns: shape (1,1 + num_copies*(14 - 2*introns_shared),5) 
@@ -291,12 +291,17 @@ def make_5_class_emission_kernel(smoothing=0.01, introns_shared=False, num_copie
     if num_copies > 1:
         repeats = [1] + [num_copies]*(probs.shape[-2]-1)
         probs = np.repeat(probs, repeats, axis=-2)
-    return np.log(probs[np.newaxis, ...])
+    # make multiple copies of the emission matrix, one for each model
+    probs = np.repeat(probs[np.newaxis, ...], num_models, axis=0)
+    # add random noise to each model
+    if num_models > 1:
+        probs = add_noise(probs, noise_strength)
+    return np.log(probs)
 
-def make_15_class_emission_kernel(smoothing=0.1, num_copies=1):
+def make_15_class_emission_kernel(smoothing=0.1, num_copies=1, num_models=1, noise_strength=0.001):
     # input classes: IR, I, E0, E1, E2
     # states: Ir, I0, I1, I2, E0, E1, E2, START, EI0, EI1, EI2, IE0, IE1, IE2, STOP
-    # Returns: shape (1,1 + num_copies*(14 - 2*introns_shared),15) 
+    # Returns: shape (num_models, 1 + num_copies*(14 - 2*introns_shared), 15) 
     assert smoothing > 0, "Smoothing can not be exactly zero to prevent numerical issues."
     n = 15
     probs = np.eye(n)
@@ -304,7 +309,18 @@ def make_15_class_emission_kernel(smoothing=0.1, num_copies=1):
     if num_copies > 1:
         repeats = [1] + [num_copies]*(probs.shape[-2]-1)
         probs = np.repeat(probs, repeats, axis=-2)
-    return np.log(probs[np.newaxis, ...])
+    # make multiple copies of the emission matrix, one for each model
+    probs = np.repeat(probs[np.newaxis, ...], num_models, axis=0)
+    # add random noise to each model
+    if num_models > 1:
+        probs = add_noise(probs, noise_strength)
+    return np.log(probs)
+
+def add_noise(probs, noise_strength=0.001):
+    probs += np.random.uniform(-noise_strength, noise_strength, probs.shape)
+    probs = np.abs(probs) #avoid negative values
+    probs /= np.sum(probs, axis=-1, keepdims=True) #rescale
+    return probs
 
 
 #a matrix that can be multiplied to the state posterior probabilities of the full model 

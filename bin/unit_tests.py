@@ -10,6 +10,8 @@ import tensorflow as tf
 import kmer
 import gene_pred_hmm
 import gene_pred_hmm_transitioner
+from learnMSA.msa_hmm.Initializers import ConstantInitializer
+
 
 class TestKmer(unittest.TestCase):
 
@@ -289,6 +291,22 @@ class TestMultiHMM(unittest.TestCase):
             self.assertEqual(hmm_layer.cell.transitioner.transition_kernel.shape, (1, 23))
             self.assertEqual(hmm_layer.cell.transitioner.starting_distribution_kernel.shape, (1, 1, 15))
             self.assertEqual(hmm_layer.cell.emitter[0].emission_kernel.shape, (num_models, 15, 15))
+
+
+    def test_multi_model_parameter_noise(self):
+        n = 2
+        kernel_init = gene_pred_hmm.make_15_class_emission_kernel(smoothing=0.01, num_models=n, noise_strength=0.001)
+        hmm_layer = gene_pred_hmm.GenePredHMMLayer(num_models=n, emitter_init=ConstantInitializer(kernel_init))
+        np.random.seed(77) #make the test deterministic
+        hmm_layer.build([None, None, 15])
+        #check if emission matrices are different...
+        emission_probs = tf.nn.softmax(hmm_layer.cell.emitter[0].emission_kernel).numpy()
+        print(emission_probs)
+        #kernels are different...
+        self.assertFalse(np.all(emission_probs[0] == emission_probs[1]))
+        #...but not too different
+        # note that difference could be larger than noise_strength due to rescaling
+        self.assertLess(np.max(np.abs(emission_probs[0] - emission_probs[1])), 0.01)
 
 
     def test_multi_model_algorithms(self):

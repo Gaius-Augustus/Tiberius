@@ -301,7 +301,6 @@ class TestMultiHMM(unittest.TestCase):
         hmm_layer.build([None, None, 15])
         #check if emission matrices are different...
         emission_probs = tf.nn.softmax(hmm_layer.cell.emitter[0].emission_kernel).numpy()
-        print(emission_probs)
         #kernels are different...
         self.assertFalse(np.all(emission_probs[0] == emission_probs[1]))
         #...but not too different

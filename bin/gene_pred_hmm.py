@@ -209,7 +209,7 @@ class GenePredHMMLayer(HmmLayer):
         if training:
             prior = tf.reduce_mean(prior)
             self.add_loss(prior)
-            self.add_metric(prior, "prior") #deprecated in tf 2.17
+            #self.add_metric(prior, "prior") #deprecated in tf 2.17
         return log_post[0] if self.num_models == 1 else tf.transpose(log_post, [1,2,0,3])
 
 
@@ -348,6 +348,22 @@ def make_aggregation_matrix(k=1):
     A[1+10*k:1+11*k, 4] = 1  #IE0
 
     return A
+
+
+class ReduceOutputSize(tf.keras.layers.Layer):
+    def __init__(self, output_size, num_copies=1, **kwargs):
+        super(ReduceOutputSize, self).__init__(**kwargs)
+        self.output_size = output_size
+        self.num_copies = num_copies
+        self.A = make_aggregation_matrix(num_copies)
+
+    def call(self, inputs):
+        return tf.matmul(inputs, self.A)
+
+    def get_config(self):
+        config = super(ReduceOutputSize, self).get_config()
+        config.update({"output_size" : self.output_size, "num_copies" : self.num_copies})
+        return config
 
 
 tf.keras.utils.get_custom_objects()["GenePredHMMLayer"] = GenePredHMMLayer

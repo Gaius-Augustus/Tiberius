@@ -8,7 +8,7 @@ import numpy as np
 from tensorflow import keras
 from tensorflow.keras import backend as K
 from gene_pred_hmm import (GenePredHMMLayer, make_5_class_emission_kernel, 
-                            make_15_class_emission_kernel, make_aggregation_matrix)
+                            make_15_class_emission_kernel, ReduceOutputSize)
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
 from learnMSA.msa_hmm.Training import Identity
 from tensorflow.keras.callbacks import Callback
@@ -418,8 +418,6 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
             parallel_factor=1 if use_border_hints else hmm_factor,
             use_border_hints=use_border_hints
         )
-    
-    A = make_aggregation_matrix(k=num_copy)
 
     if use_border_hints:
         input_hints_hmm = tf.reshape(input_hints, (-1, 2,5), name='reshape_border_hints')
@@ -434,7 +432,7 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
         y_hmm = gene_pred_layer(x, nucleotides=nuc, embeddings=emb)
 
     if output_size < 15:
-        y = Identity(name='hmm_out')(lambda y: tf.matmul(y, A))
+        y = ReduceOutputSize(output_size, num_copies=num_copy, name='hmm_out')(y_hmm)
     else:
         y = Reshape((-1, output_size), name='hmm_out')(y_hmm) #make sure the last dimension is not None
         

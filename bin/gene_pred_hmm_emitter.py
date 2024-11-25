@@ -66,7 +66,7 @@ class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):
                                         trainable=self.trainable_emissions,
                                         name="emission_kernel")
         if self.emit_embeddings:
-            assert(self.num_models == 1, "Embedding emissions are currently only supported for one model. You most likely accidentally set emit_embeddings=True.")
+            assert self.num_models == 1, "Embedding emissions are currently only supported for one model. You most likely accidentally set emit_embeddings=True."
             d = self.embedding_dim 
             num_mvn_param = d + d * (d+1) // 2 if self.full_covariance else 2*d
             self.embedding_emission_kernel = self.add_weight(
@@ -256,7 +256,7 @@ class GenePredHMMEmitter(SimpleGenePredHMMEmitter):
         super(GenePredHMMEmitter, self).build(input_shape)
         s = input_shape[-1] 
         if self.trainable_nucleotides_at_exons:
-            assert(self.num_models == 1, "Trainable nucleotide emissions are currently only supported for one model.")
+            assert self.num_models == 1, "Trainable nucleotide emissions are currently only supported for one model."
             self.nuc_emission_kernel = self.add_weight(
                                             shape=[self.num_models, 3*self.num_copies, 4], 
                                             initializer=self.nucleotide_kernel_init, 

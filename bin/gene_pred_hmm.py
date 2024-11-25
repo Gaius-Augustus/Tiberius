@@ -319,6 +319,7 @@ def make_15_class_emission_kernel(smoothing=0.1, num_copies=1, num_models=1, noi
 def add_noise(probs, noise_strength=0.001):
     probs += np.random.uniform(-noise_strength, noise_strength, probs.shape)
     probs = np.abs(probs) #avoid negative values
+    probs += 1e-10 #avoid numerical issues from zeros
     probs /= np.sum(probs, axis=-1, keepdims=True) #rescale
     return probs
 

@@ -434,7 +434,8 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
     if output_size < 15:
         y = ReduceOutputSize(output_size, num_copies=num_copy, name='hmm_out')(y_hmm)
     else:
-        y = Reshape((-1, output_size), name='hmm_out')(y_hmm) #make sure the last dimension is not None
+        y = Reshape((-1, output_size) if num_hmm == 1 else (-1, num_hmm, output_size), 
+                    name='hmm_out')(y_hmm) #make sure the last dimension is not None
         
     model_hmm = Model(inputs=[inputs, input_hints] if use_border_hints else inputs, 
                     outputs=[x, y] if include_lstm_in_output else y)

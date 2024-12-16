@@ -44,10 +44,12 @@ The following Python libraries are required:
 - biopython 
 - bcbio-gff
 - requests
+- gzip
+- bz2
 
 They can be installed with:
 ```
-pip install pyBigWig bio scikit-learn biopython bcbio-gff requests
+pip install pyBigWig bio scikit-learn biopython bcbio-gff requests gzip bz2
 ```
 Tensorflow should be installed with GPU support. If you are using conda, you can install Tensorflow 2.10 with these [instructions](docs/install_tensorflow.md).
 

@@ -6,7 +6,7 @@
 # Running Tiberius for single genome prediction
 # ==============================================================
 
-import sys, json, os, re, sys, csv, argparse, requests, time, logging, warnings, math
+import sys, json, os, re, sys, csv, argparse, requests, time, logging, warnings, math, gzip, bz2
 script_dir = os.path.dirname(os.path.realpath(__file__))
 import subprocess as sp
 import numpy as np
@@ -59,10 +59,9 @@ def assemble_transcript(exons, sequence, strand):
         exon_seq = sequence.seq[exon[0]-1:exon[1]]
         if strand == '-':
             exon_seq = exon_seq.reverse_complement()
-        parts.append(str(exon_seq))  # Convert Seq object to string here
+        parts.append(str(exon_seq))  
 
     coding_seq = Seq("".join(parts))
-    # print(len(coding_seq))
     if len(coding_seq) > 0  and len(coding_seq)%3==0:
         prot_seq = coding_seq.translate()
         if prot_seq[-1] == '*':
@@ -117,6 +116,18 @@ def extract_tar_gz(file_path, dest_dir):
 def is_writable(file_path):
     return os.access(file_path, os.W_OK)
     
+def load_genome(genome_path):
+    if genome_path.endswith(".gz"):
+        with gzip.open(genome_path, "rt") as file:
+            genome = SeqIO.to_dict(SeqIO.parse(file, "fasta"))
+    elif genome_path.endswith(".bz2"):
+        with bz2.open(genome_path, "rt") as file:
+            genome = SeqIO.to_dict(SeqIO.parse(file, "fasta"))
+    else:
+        with open(genome_path, "r") as file:
+            genome = SeqIO.to_dict(SeqIO.parse(file, "fasta"))
+    return genome
+
 def main():    
     args = parseCmd()        
 
@@ -272,7 +283,7 @@ def main():
                                 filt=False)
         
     # Load the genome sequence from the FASTA file
-    genome = SeqIO.to_dict(SeqIO.parse(genome_path, "fasta"))
+    genome = load_genome(genome_path)
     anno_outp = Anno('', f'anno')        
     out_tx = {}
     for tx_id, tx in anno.transcripts.items():
@@ -293,7 +304,7 @@ def main():
     anno_outp.add_transcripts(out_tx, f'anno')
     anno_outp.norm_tx_format()
     anno_outp.find_genes()
-    anno_outp.rename_tx_ids() 
+    anno_outp.rename_tx_ids(args.id_prefix) 
     anno_outp.write_anno(gtf_out)
 
     prot_seq_out = ""
@@ -379,6 +390,8 @@ def parseCmd():
         help='Length of sub-sequences used for parallelizing the prediction.', default=500004)
     parser.add_argument('--batch_size', type=int,
         help='Number of sub-sequences per batch.', default=16)
+    parser.add_argument('--id_prefix', type=str,
+        help='Prefix for gene and transcript IDs in output GTF file.', default='')
         
     return parser.parse_args()
 

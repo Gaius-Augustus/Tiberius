@@ -1,4 +1,5 @@
 import numpy as np
+import gzip, bz2
 
 class GenomeSequences:
     def __init__(self, fasta_file='', np_file='', chunksize=20000, overlap=1000):
@@ -27,21 +28,27 @@ class GenomeSequences:
         #self.encode_sequences()
 
     def read_fasta(self):
-        """Read genome sequences from the specified FASTA file.
+        """Read genome sequences from a FASTA file, it can be compressed with gz or bz2.
         """
-        
-        with open(self.fasta_file, "r") as file:
-            lines = file.readlines()
-            current_sequence = ""
-            for line in lines:
-                if line.startswith(">"):
-                    if current_sequence:                    
-                        self.sequences.append(current_sequence)
-                        current_sequence = ""
-                    self.sequence_names.append(line[1:].strip())
-                else:
-                    current_sequence += line.strip()
-            self.sequences.append(current_sequence)
+        if self.fasta_file.endswith('.gz'):
+            with gzip.open(self.fasta_file, 'rt') as file:
+                lines = file.readlines()
+        elif self.fasta_file.endswith('.bz2'):
+            with bz2.open(self.fasta_file, 'rt') as file:
+                lines = file.readlines()
+        else:
+            with open(self.fasta_file, "r") as file:
+                lines = file.readlines()
+        current_sequence = ""
+        for line in lines:
+            if line.startswith(">"):
+                if current_sequence:                    
+                    self.sequences.append(current_sequence)
+                    current_sequence = ""
+                self.sequence_names.append(line[1:].strip())
+            else:
+                current_sequence += line.strip()
+        self.sequences.append(current_sequence)
 
     def encode_sequences(self, seq=None):
         """One-hot encode the sequences and store in self.one_hot_encoded.

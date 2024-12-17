@@ -152,7 +152,7 @@ wget https://bioinf.uni-greifswald.de/bioinf/tiberius/anno/Delphinapterus_leucas
 
 
 ## References
-  - Gabriel, Lars, et al. "Tiberius: End-to-End Deep Learning with an HMM for Gene Prediction." bioRxiv, 21 July 2024, doi:10.1101/2024.07.21.604459. https://www.biorxiv.org/content/early/2024/07/23/2024.07.21.604459.  
-[Popular science podcast on this paper generated with NotebookLM](https://bioinf.uni-greifswald.de/bioinf/tiberius/pod/Tiberius.wav)
+  - Gabriel, Lars, et al. "Tiberius: End-to-End Deep Learning with an HMM for Gene Prediction." 2024, [*Bioinformatics*](https://academic.oup.com/bioinformatics/article/40/12/btae685/7903281), [bioRxiv](https://www.biorxiv.org/content/early/2024/07/23/2024.07.21.604459)
+  - [Popular science podcast on this paper generated with NotebookLM](https://bioinf.uni-greifswald.de/bioinf/tiberius/pod/Tiberius.wav)
   - Processed RefSeq annotations used for training, validation and evaluation as described in the paper.  
 `wget https://bioinf.uni-greifswald.de/bioinf/tiberius/anno/ref_annot.tar.gz`

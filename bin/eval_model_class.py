@@ -40,9 +40,9 @@ class PredictionGTF:
                  temp_dir='', emb=False, num_hmm=1,
                  hmm_factor=None, 
                  # transformer=False, trans_lstm=False, 
-                 annot_path='', genome_path='', softmask=True,
-                strand='+', parallel_factor=1, oracle=False,
-                lstm_cfg='',):
+                 annot_path='', genome_path='', genome=None, softmask=True,
+                 strand='+', parallel_factor=1, oracle=False,
+                 lstm_cfg='',):
         """
         Arguments:
             - model_path (str): Path to the main model file that includes a HMM layer.
@@ -58,7 +58,8 @@ class PredictionGTF:
             - transformer (bool): A flag to indicate whether a transformer model should be used. (depprecated!)
             - trans_lstm (bool): A flag indicating whether a transform-LSTM hybrid model should be used. (depprecated!)
             - annot_path (str): Path to the reference annotation file (GTF).
-            - genome_path (str): Path to the genome file (FASTA). 
+            - genome_path (str): Path to the genome file (FASTA).
+            - genome: dictionary of SeqRecords, (overriding) alternative to genome_path
             - softmask (bool): Whether to use softmasking. 
             - strand (str): Indicates the strand ('+' for positive, '-' for negative).
             - parallel_factor (int): The parallel factor used for Viterbi.
@@ -69,6 +70,7 @@ class PredictionGTF:
         self.batch_size = batch_size
         self.annot_path = annot_path
         self.genome_path = genome_path
+        self.genome = genome
         self.softmask = softmask
         self.hmm = hmm   
         self.emb = emb
@@ -209,16 +211,15 @@ class PredictionGTF:
         else: 
             self.make_default_hmm()
     
-    def init_fasta(self,  genome_path=None, chunk_len=None, strand=None):
+    def init_fasta(self,  genome_path=None, chunk_len=None):
         if genome_path is None:
             genome_path = self.genome_path
         if chunk_len is None:
             chunk_len = self.seq_len
-        
-            
-        fasta = GenomeSequences(fasta_file=genome_path,
-            chunksize=chunk_len, 
-            overlap=0)
+        if (self.genome):
+            fasta = GenomeSequences(genome=self.genome, chunksize=chunk_len, overlap=0)
+        else:
+            fasta = GenomeSequences(fasta_file=genome_path, chunksize=chunk_len, overlap=0)
         return fasta
     
     def load_genome_data(self, fasta_object, seq_names, strand='', softmask=True):
@@ -255,7 +256,7 @@ class PredictionGTF:
             clamsa_chunks = clamsa_chunks[::-1,::-1, [1,0,3,2]]
         return clamsa_chunks
     
-    def load_inp_data(self, annot_path=None, genome_path=None, 
+    def load_inp_data(self, annot_path=None, genome_path=None,
                       chunk_coords=True, softmask=True, 
                       chunk_len=None, use_file=True, strand=None, clamsa_path=None,
                      pad=True):
@@ -293,9 +294,10 @@ class PredictionGTF:
                 return f_chunk, r_chunk, coords
             return f_chunk, r_chunk
         
-        fasta = GenomeSequences(fasta_file=genome_path,
-            chunksize=chunk_len, 
-            overlap=0)
+        if (self.genome):
+            fasta = GenomeSequences(genome=self.genome, chunksize=chunk_len, overlap=0)
+        else:
+            fasta = GenomeSequences(fasta_file=genome_path, chunksize=chunk_len, overlap=0)
         
         fasta.encode_sequences() 
         f_chunk, coords = fasta.get_flat_chunks(strand=strand, coords=chunk_coords, pad=pad)
@@ -545,7 +547,7 @@ class PredictionGTF:
         self.lstm_pred = encoding_layer_pred
         lstm_end = time.time()
         duration = lstm_end - start_time
-        print(f"LSTM took {duration/60} minutes to execute.")
+        print(f"LSTM took {duration/60:.4f} minutes to execute.")
         if not self.hmm:   
             encoding_layer_pred = np.argmax(encoding_layer_pred, axis=-1)
             return encoding_layer_pred
@@ -558,7 +560,7 @@ class PredictionGTF:
                                                       batch_size=batch_size)
         hmm_end = time.time()
         duration = hmm_end - lstm_end
-        print(f"HMM took {duration/60} minutes to execute.")
+        print(f"HMM took {duration/60:.4f} minutes to execute.")
         return hmm_predictions
             
     def get_tp_fn_fp (self, predictions, true_labels):

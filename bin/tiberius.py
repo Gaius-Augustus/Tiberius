@@ -6,10 +6,9 @@
 # Running Tiberius for single genome prediction
 # ==============================================================
 
-import sys, json, os, re, sys, csv, argparse, requests, time, logging, warnings, math, gzip, bz2
+import sys, os, sys, argparse, requests, time, logging, math, gzip, bz2
 script_dir = os.path.dirname(os.path.realpath(__file__))
 import subprocess as sp
-import numpy as np
 from Bio import SeqIO
 from Bio.Seq import Seq
 
@@ -146,9 +145,9 @@ def main():
             'Tiberius_nosm': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_nosm_weights_tf2_17.keras',
             'Tiberius_denovo': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights_tf2_17.keras'
         }
-        if args.seq_len > 260000:
+        if args.seq_len > 259992:
             logging.error(f"Error: The sequence length {args.seq_len} is too long for TensorFlow version {tf.__version__}. "
-                          "Please use a sequence length <= 260000 (--seq_len).")
+                          "Please use a sequence length <= 259992 (--seq_len).")
             sys.exit(1)
     
     if args.learnMSA:
@@ -239,7 +238,11 @@ def main():
     anno = Anno(gtf_out, f'anno')     
     tx_id=0
     
+    # load genome once completely into memory
+    # TODO: this should eventually be done in streaming mode to save RAM
+    genome = load_genome(genome_path)
     tf.keras.utils.get_custom_objects()["weighted_cce_loss"] = make_weighted_cce_loss()
+
     for j, s_ in enumerate(strand):
         pred_gtf = PredictionGTF( 
             model_path=model_path,
@@ -252,7 +255,7 @@ def main():
             emb=args.emb, 
             num_hmm=1,
             hmm_factor=1,    
-            genome_path=genome_path,
+            genome=genome,
             softmask=not args.no_softmasking, strand=s_,
             parallel_factor=parallel_factor,
             # lstm_cfg=args.lstm_cfg,
@@ -260,18 +263,17 @@ def main():
         
         pred_gtf.load_model(summary=j==0)
         
-        genome_fasta = pred_gtf.init_fasta(genome_path=genome_path, 
-                   chunk_len=seq_len)
+        genome_fasta = pred_gtf.init_fasta(chunk_len=seq_len)
         
         seq_groups = group_sequences(genome_fasta.sequence_names,
                                    [len(s) for s in genome_fasta.sequences],
                                     t=50000400, chunk_size=seq_len)
         
         for k, seq in enumerate(seq_groups):
-            logging.info(f'Tiberius gene prediciton {k+1+len(seq_groups)*j}/{len(strand)*len(seq_groups)} ')    
+            logging.info(f'Tiberius gene predicton {k+1+len(seq_groups)*j}/{len(strand)*len(seq_groups)} ')
             x_data, coords = pred_gtf.load_genome_data(genome_fasta, seq,
                                                        softmask=softmasking, strand=s_)
-            print(x_data.shape)
+            # print(x_data.shape)
             clamsa=None
             if clamsa_prefix:
                 clamsa = pred_gtf.load_clamsa_data(clamsa_prefix=clamsa_prefix, seq_names=seq, 
@@ -282,8 +284,7 @@ def main():
                                 clamsa_inp=clamsa, strand=s_, anno=anno, tx_id=tx_id,
                                 filt=False)
         
-    # Load the genome sequence from the FASTA file
-    genome = load_genome(genome_path)
+    # filter transcripts
     anno_outp = Anno('', f'anno')        
     out_tx = {}
     for tx_id, tx in anno.transcripts.items():
@@ -328,7 +329,7 @@ def main():
 
     end_time = time.time()    
     duration = end_time - start_time
-    print(f"Tiberius took {duration/60} minutes to execute.")
+    print(f"Tiberius took {duration/60:.4f} minutes to execute.")
     
 def parseCmd():
     """Parse command line arguments

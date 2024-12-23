@@ -2,7 +2,7 @@ import numpy as np
 import gzip, bz2
 
 class GenomeSequences:
-    def __init__(self, fasta_file='', np_file='', chunksize=20000, overlap=1000):
+    def __init__(self, fasta_file='', genome=None, np_file='', chunksize=20000, overlap=1000):
         """Initialize the GenomeSequences object.
 
         Arguments:
@@ -12,6 +12,7 @@ class GenomeSequences:
             overlap (int): Overlap size between consecutive chunks.
         """
         self.fasta_file = fasta_file
+        self.genome = genome
         self.np_file = np_file
         self.chunksize = chunksize
         self.overlap = overlap
@@ -21,11 +22,19 @@ class GenomeSequences:
         self.one_hot_encoded = None
         self.chunks_one_hot = None 
         self.chunks_seq = None
-        if self.fasta_file:
-            self.read_fasta()        
+        if self.genome:
+            self.extract_seqarray()
+        elif self.fasta_file:
+            self.read_fasta()
         else:
             self.load_np_array(self.np_file)
-        #self.encode_sequences()
+
+    def extract_seqarray(self):
+        """Extract the sequence array from the genome object.
+        """
+        for name, seqrec in self.genome.items():
+            self.sequences.append(str(seqrec.seq))
+            self.sequence_names.append(name)
 
     def read_fasta(self):
         """Read genome sequences from a FASTA file, it can be compressed with gz or bz2.

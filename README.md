@@ -53,7 +53,7 @@ pip install pyBigWig bio scikit-learn biopython bcbio-gff requests gzip bz2
 ```
 Tensorflow should be installed with GPU support. If you are using conda, you can install Tensorflow 2.10 with these [instructions](docs/install_tensorflow.md).
 
-Tiberius does also work with TensorFlow >2.10, however, **it will produce an error if you use a sequence length > 260.000 during inference!**
+Tiberius does also work with TensorFlow >2.10, however, **it will produce an error if you use a `--seq_len` parameter > 259.992 during inference!**  
 You can install the current TensorFlow version with 
 ```shell
 python3 -m pip install tensorflow[and-cuda]

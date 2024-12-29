@@ -291,8 +291,9 @@ class Transcript:
                         cds_type = 'initial'
                     elif (i == len(self.transcript_lines[k]) - 1 and self.strand == '+') or (i == 0 and self.strand == '-'):
                         cds_type = 'terminal'
-                if not k in ['transcript', 'gene']:
                     g[8] = f'transcript_id \"{prefix + self.id}\"; gene_id \"{self.gene_id}"; cds_type={cds_type};'
+                elif not k in ['transcript', 'gene']:
+                    g[8] = f'transcript_id \"{prefix + self.id}\"; gene_id \"{self.gene_id}";'
                 gtf.append(g) 
 
         if not 'exon' in self.transcript_lines.keys():

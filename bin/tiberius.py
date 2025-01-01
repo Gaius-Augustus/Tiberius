@@ -15,6 +15,8 @@ from Bio.Seq import Seq
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 MAX_TF_VERSION = '2.12'
+seqgroup_size = 50000400
+
 # Function to compare TensorFlow version
 def check_tf_version(tf_version):
     if tf_version > MAX_TF_VERSION:
@@ -83,11 +85,17 @@ def check_file_exists(file_path):
         sys.exit(1)
     
 def group_sequences(seq_names, seq_lens, t=50000400, chunk_size=500004):
+    """ Group seguences into chunks of size t, groups are shown in the progress output.
+    """
+    # Sort sequences by decreasing length, so that similar long sequences are grouped together
+    # and adaptive chunk sizes are effective.
+    sorted_seqs = sorted(zip(seq_names, seq_lens), key=lambda x: x[1], reverse=True)
+
     groups = []
     current_group = []
     current_sum = 0
 
-    for s_n, s_l in zip(seq_names, seq_lens):
+    for s_n, s_l in sorted_seqs:
         current_sum += chunk_size if s_l < chunk_size else s_l        
         current_group.append(s_n)
         if current_sum > t:
@@ -267,8 +275,8 @@ def main():
         
         seq_groups = group_sequences(genome_fasta.sequence_names,
                                    [len(s) for s in genome_fasta.sequences],
-                                    t=50000400, chunk_size=seq_len)
-        
+                                    t=seqgroup_size, chunk_size=seq_len)
+        print ("grouping into", len(seq_groups), "groups of size", seqgroup_size)
         for k, seq in enumerate(seq_groups):
             logging.info(f'Tiberius gene predicton {k+1+len(seq_groups)*j}/{len(strand)*len(seq_groups)} ')
             x_data, coords = pred_gtf.load_genome_data(genome_fasta, seq,

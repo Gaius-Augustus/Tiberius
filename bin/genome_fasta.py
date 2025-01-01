@@ -32,6 +32,7 @@ class GenomeSequences:
     def extract_seqarray(self):
         """Extract the sequence array from the genome object.
         """
+        print ("Extracting string sequences from genome. ", len(self.genome), " sequences.")
         for name, seqrec in self.genome.items():
             self.sequences.append(str(seqrec.seq))
             self.sequence_names.append(name)
@@ -90,7 +91,8 @@ class GenomeSequences:
             # Perform one-hot encoding
             self.one_hot_encoded[s] = table[int_seq]
 
-    def get_flat_chunks(self, sequence_name=None, strand='+', coords=False, pad=True):
+    def get_flat_chunks(self, sequence_names=None, strand='+', coords=False, pad=True,
+                        adapt_chunksize=False, parallel_factor=None):
         """Get flattened chunks of a specific sequence by name.
 
         Arguments:
@@ -101,29 +103,43 @@ class GenomeSequences:
             chunks_one_hot (np.array): Flattened chunks of the specified sequence.
         """
 
-        if not sequence_name: 
-            sequence_name = self.sequence_names
-        sequences_i = [self.one_hot_encoded[i] for i in sequence_name]            
-        
+        if not sequence_names: 
+            sequence_names = self.sequence_names
+        sequences_i = [self.one_hot_encoded[i] for i in sequence_names]
+
+        # if all sequences are shorter than chunksize, reduce the chunksize
+        chunksize = self.chunksize
+        if adapt_chunksize:
+            max_len = max([len(seq) for seq in sequences_i])
+            if max_len < self.chunksize:
+                chunksize = max_len
+                if chunksize <= 2*self.overlap:
+                    chunksize = min(2*self.overlap + 1, self.chunksize)
+                if parallel_factor is not None and chunksize <= parallel_factor:
+                    chunksize = parallel_factor + 1
+                chunksize = 18*(1+chunksize//18) # make chunksize divisible by 2 and 9
+                print (f"Reduced chunksize to {chunksize} from {self.chunksize}")
+
         chunks_one_hot = []        
         chunk_coords = []
-        for seq_name, sequence in zip(sequence_name, sequences_i):
+        for seq_name, sequence in zip(sequence_names, sequences_i):
             num_chunks = (len(sequence) - self.overlap) \
-                // (self.chunksize - self.overlap) + 1
+                // (chunksize - self.overlap) + 1
             if num_chunks > 1:
-                chunks_one_hot += [sequence[i * (self.chunksize - self.overlap):\
-                    i * (self.chunksize - self.overlap) + self.chunksize,:] \
+                chunks_one_hot += [sequence[i * (chunksize - self.overlap):\
+                    i * (chunksize - self.overlap) + chunksize,:] \
                     for i in range(num_chunks-1)]
             if coords:
                 num = num_chunks if pad else num_chunks-1
                 chunk_coords += [[
                         seq_name, strand,
-                        i * (self.chunksize - self.overlap)+1, 
-                        i * (self.chunksize - self.overlap) + self.chunksize] \
+                        i * (chunksize - self.overlap)+1, 
+                        i * (chunksize - self.overlap) + chunksize] \
                         for i in range(num)]                
             
-            last_chunksize = (len(sequence) - self.overlap)%(self.chunksize - self.overlap)
+            last_chunksize = (len(sequence) - self.overlap)%(chunksize - self.overlap)
             if pad and last_chunksize > 0:
+                print ("padding length=", chunksize - last_chunksize)
                 padding = np.zeros((self.chunksize, 6),dtype=np.uint8)
                 padding[:,4] = 1
                 padding[0:last_chunksize] = sequence[-last_chunksize:]
@@ -133,6 +149,8 @@ class GenomeSequences:
         if strand == '-':
             chunks_one_hot = chunks_one_hot[::-1, ::-1, [3, 2, 1, 0, 4, 5]]
             chunk_coords.reverse()
+        print ("Made one-hot stranded chunks for ", sequence_names, 
+               " with shape ", chunks_one_hot.shape)
         if coords:
             return chunks_one_hot, chunk_coords
         return chunks_one_hot

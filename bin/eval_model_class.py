@@ -67,6 +67,7 @@ class PredictionGTF:
         """
         self.model_path = model_path 
         self.seq_len = seq_len
+        print("PredictionGTF initialized with seq_len", self.seq_len)
         self.batch_size = batch_size
         self.annot_path = annot_path
         self.genome_path = genome_path
@@ -111,6 +112,8 @@ class PredictionGTF:
         Args:
             summary (bool, optional): If True, prints the model summary. Defaults to True.
         """
+        # measure time
+        start_time = time.time()
         if self.hmm and self.model_path_lstm:
             # only the lstm model is provided, use the default HMM Layer
             # if self.transformer or self.trans_lstm:
@@ -210,6 +213,9 @@ class PredictionGTF:
                 self.model.summary()
         else: 
             self.make_default_hmm()
+        end_time = time.time()
+        duration = end_time - start_time
+        print(f"Model loaded in {duration:.4f} seconds.")
     
     def init_fasta(self,  genome_path=None, chunk_len=None):
         if genome_path is None:
@@ -226,9 +232,12 @@ class PredictionGTF:
         if strand is None:
             strand = self.strand
             
-        fasta_object.encode_sequences(seq=seq_names) 
+        fasta_object.encode_sequences(seq=seq_names)
+        print ("Encoded seqs", len(fasta_object.one_hot_encoded))
+
         f_chunk, coords = fasta_object.get_flat_chunks(strand=strand, coords=True, 
-                                                       sequence_name=seq_names)
+                                                       sequence_names=seq_names, adapt_chunksize=False, 
+                                                       parallel_factor = self.parallel_factor)
         if not softmask:
             f_chunk = f_chunk[:,:,:5]
         return f_chunk, coords

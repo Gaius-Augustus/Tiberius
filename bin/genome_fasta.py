@@ -1,5 +1,6 @@
 import numpy as np
 import gzip, bz2
+import math
 import sys
 
 class GenomeSequences:
@@ -116,10 +117,12 @@ class GenomeSequences:
                 chunksize = max_len
                 if chunksize <= 2*self.overlap:
                     chunksize = min(2*self.overlap + 1, self.chunksize)
-                if parallel_factor is not None and chunksize <= parallel_factor:
-                    chunksize = parallel_factor + 1
-                chunksize = 684*(1+chunksize//684) # make chunksize divisible by 2 and 9
-                print (f"Reduced chunksize to {chunksize} from {self.chunksize}", file=sys.stderr)
+                if parallel_factor is None:
+                    parallel_factor = 1
+                # new chunksize must divide 2, 9 and parallel_factor
+                # round chunksize up to smallest multiple
+                divisor = 2 * 9 * parallel_factor // math.gcd(18, parallel_factor)
+                chunksize = divisor * (1 + (chunksize - 1) // divisor)
 
         chunks_one_hot = []
         chunk_coords = []
@@ -136,7 +139,7 @@ class GenomeSequences:
                         seq_name, strand,
                         i * (chunksize - self.overlap)+1, 
                         i * (chunksize - self.overlap) + chunksize] \
-                        for i in range(num)]                
+                        for i in range(num)]
             
             last_chunksize = (len(sequence) - self.overlap)%(chunksize - self.overlap)
             if pad and last_chunksize > 0:

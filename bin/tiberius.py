@@ -89,7 +89,7 @@ def group_sequences(seq_names, seq_lens, t=50000400, chunk_size=500004):
     """
     # Sort sequences by decreasing length, so that similar long sequences are grouped together
     # and adaptive chunk sizes are effective.
-    sorted_seqs = sorted(zip(seq_names, seq_lens), key=lambda x: x[1], reverse=True)
+    sorted_seqs = sorted(zip(seq_names, seq_lens), key=lambda x: x[1], reverse=False)
 
     groups = []
     current_group = []

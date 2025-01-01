@@ -236,7 +236,7 @@ class PredictionGTF:
         print ("Encoded seqs", len(fasta_object.one_hot_encoded))
 
         f_chunk, coords = fasta_object.get_flat_chunks(strand=strand, coords=True, 
-                                                       sequence_names=seq_names, adapt_chunksize=False, 
+                                                       sequence_names=seq_names, adapt_chunksize=True, 
                                                        parallel_factor = self.parallel_factor)
         if not softmask:
             f_chunk = f_chunk[:,:,:5]
@@ -551,7 +551,7 @@ class PredictionGTF:
         else:
             # LSTM prediction
             encoding_layer_pred = self.lstm_prediction(inp_chunks, clamsa_inp=clamsa_inp, save=save,
-                                                      batch_size=batch_size)   
+                                                      batch_size=batch_size)
         
         self.lstm_pred = encoding_layer_pred
         lstm_end = time.time()

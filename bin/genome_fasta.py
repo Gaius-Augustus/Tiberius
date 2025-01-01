@@ -1,5 +1,6 @@
 import numpy as np
 import gzip, bz2
+import sys
 
 class GenomeSequences:
     def __init__(self, fasta_file='', genome=None, np_file='', chunksize=20000, overlap=1000):
@@ -117,10 +118,10 @@ class GenomeSequences:
                     chunksize = min(2*self.overlap + 1, self.chunksize)
                 if parallel_factor is not None and chunksize <= parallel_factor:
                     chunksize = parallel_factor + 1
-                chunksize = 18*(1+chunksize//18) # make chunksize divisible by 2 and 9
-                print (f"Reduced chunksize to {chunksize} from {self.chunksize}")
+                chunksize = 684*(1+chunksize//684) # make chunksize divisible by 2 and 9
+                print (f"Reduced chunksize to {chunksize} from {self.chunksize}", file=sys.stderr)
 
-        chunks_one_hot = []        
+        chunks_one_hot = []
         chunk_coords = []
         for seq_name, sequence in zip(sequence_names, sequences_i):
             num_chunks = (len(sequence) - self.overlap) \
@@ -139,8 +140,7 @@ class GenomeSequences:
             
             last_chunksize = (len(sequence) - self.overlap)%(chunksize - self.overlap)
             if pad and last_chunksize > 0:
-                print ("padding length=", chunksize - last_chunksize)
-                padding = np.zeros((self.chunksize, 6),dtype=np.uint8)
+                padding = np.zeros((chunksize, 6),dtype=np.uint8)
                 padding[:,4] = 1
                 padding[0:last_chunksize] = sequence[-last_chunksize:]
                 chunks_one_hot.append(padding)
@@ -149,8 +149,7 @@ class GenomeSequences:
         if strand == '-':
             chunks_one_hot = chunks_one_hot[::-1, ::-1, [3, 2, 1, 0, 4, 5]]
             chunk_coords.reverse()
-        print ("Made one-hot stranded chunks for ", sequence_names, 
-               " with shape ", chunks_one_hot.shape)
+
         if coords:
             return chunks_one_hot, chunk_coords
         return chunks_one_hot

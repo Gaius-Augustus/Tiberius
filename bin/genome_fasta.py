@@ -1,7 +1,6 @@
 import numpy as np
 import gzip, bz2
 import math
-import sys
 
 class GenomeSequences:
     def __init__(self, fasta_file='', genome=None, np_file='', chunksize=20000, overlap=1000):

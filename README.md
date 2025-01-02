@@ -1,3 +1,5 @@
+![Docker Pulls](https://img.shields.io/docker/pulls/larsgabriel23/tiberius) 
+
 # Tiberius: End-to-End Deep Learning with an HMM for Gene Prediction
 
 For more information, see the [Tiberius preprint](https://doi.org/10.1101/2024.07.21.604459).

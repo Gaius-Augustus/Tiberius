@@ -59,7 +59,7 @@ def get_species_data_hmm(genome_path='', annot_path='', species='', seq_len=5000
     fasta.encode_sequences() 
     seqs = [len(s) for s in fasta.sequences]
     seq_names = fasta.sequence_names
-    f_chunk = fasta.get_flat_chunks(strand='+', pad=False)
+    f_chunk, _, _ = fasta.get_flat_chunks(strand='+', pad=False)
     del fasta
     print(f_chunk.shape)
     full_f_chunks = np.concatenate((f_chunk[::-1,::-1, [3,2,1,0,4,5]], 

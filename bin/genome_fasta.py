@@ -1,5 +1,6 @@
 import numpy as np
 import gzip, bz2
+import math
 
 class GenomeSequences:
     def __init__(self, fasta_file='', genome=None, np_file='', chunksize=20000, overlap=1000):
@@ -90,7 +91,8 @@ class GenomeSequences:
             # Perform one-hot encoding
             self.one_hot_encoded[s] = table[int_seq]
 
-    def get_flat_chunks(self, sequence_name=None, strand='+', coords=False, pad=True):
+    def get_flat_chunks(self, sequence_names=None, strand='+', coords=False, pad=True,
+                        adapt_chunksize=False, parallel_factor=None):
         """Get flattened chunks of a specific sequence by name.
 
         Arguments:
@@ -99,32 +101,51 @@ class GenomeSequences:
         
         Returns: 
             chunks_one_hot (np.array): Flattened chunks of the specified sequence.
+            chunk_coords (list): List of coordinates of the chunks if coors is True.
+            chunksize (int): Possibly reduced size of each chunk.
         """
+        chunk_coords = None
+        chunksize = self.chunksize
 
-        if not sequence_name: 
-            sequence_name = self.sequence_names
-        sequences_i = [self.one_hot_encoded[i] for i in sequence_name]            
-        
-        chunks_one_hot = []        
-        chunk_coords = []
-        for seq_name, sequence in zip(sequence_name, sequences_i):
+        if not sequence_names: 
+            sequence_names = self.sequence_names
+        sequences_i = [self.one_hot_encoded[i] for i in sequence_names]
+
+        # if all sequences are shorter than chunksize, reduce the chunksize
+        if adapt_chunksize:
+            max_len = max([len(seq) for seq in sequences_i])
+            if max_len < self.chunksize:
+                chunksize = max_len
+                if chunksize <= 2*self.overlap:
+                    chunksize = min(2*self.overlap + 1, self.chunksize)
+                if parallel_factor is None:
+                    parallel_factor = 1
+                # new chunksize must divide 2, 9 and parallel_factor
+                # round chunksize up to smallest multiple
+                divisor = 2 * 9 * parallel_factor // math.gcd(18, parallel_factor)
+                chunksize = divisor * (1 + (chunksize - 1) // divisor)
+
+        chunks_one_hot = []
+        if coords:
+            chunk_coords = []
+        for seq_name, sequence in zip(sequence_names, sequences_i):
             num_chunks = (len(sequence) - self.overlap) \
-                // (self.chunksize - self.overlap) + 1
+                // (chunksize - self.overlap) + 1
             if num_chunks > 1:
-                chunks_one_hot += [sequence[i * (self.chunksize - self.overlap):\
-                    i * (self.chunksize - self.overlap) + self.chunksize,:] \
+                chunks_one_hot += [sequence[i * (chunksize - self.overlap):\
+                    i * (chunksize - self.overlap) + chunksize,:] \
                     for i in range(num_chunks-1)]
             if coords:
                 num = num_chunks if pad else num_chunks-1
                 chunk_coords += [[
                         seq_name, strand,
-                        i * (self.chunksize - self.overlap)+1, 
-                        i * (self.chunksize - self.overlap) + self.chunksize] \
-                        for i in range(num)]                
+                        i * (chunksize - self.overlap)+1, 
+                        i * (chunksize - self.overlap) + chunksize] \
+                        for i in range(num)]
             
-            last_chunksize = (len(sequence) - self.overlap)%(self.chunksize - self.overlap)
+            last_chunksize = (len(sequence) - self.overlap)%(chunksize - self.overlap)
             if pad and last_chunksize > 0:
-                padding = np.zeros((self.chunksize, 6),dtype=np.uint8)
+                padding = np.zeros((chunksize, 6),dtype=np.uint8)
                 padding[:,4] = 1
                 padding[0:last_chunksize] = sequence[-last_chunksize:]
                 chunks_one_hot.append(padding)
@@ -133,6 +154,5 @@ class GenomeSequences:
         if strand == '-':
             chunks_one_hot = chunks_one_hot[::-1, ::-1, [3, 2, 1, 0, 4, 5]]
             chunk_coords.reverse()
-        if coords:
-            return chunks_one_hot, chunk_coords
-        return chunks_one_hot
+
+        return chunks_one_hot, chunk_coords, chunksize

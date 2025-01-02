@@ -34,7 +34,6 @@ class GenomeSequences:
     def extract_seqarray(self):
         """Extract the sequence array from the genome object.
         """
-        print ("Extracting string sequences from genome. ", len(self.genome), " sequences.")
         for name, seqrec in self.genome.items():
             self.sequences.append(str(seqrec.seq))
             self.sequence_names.append(name)

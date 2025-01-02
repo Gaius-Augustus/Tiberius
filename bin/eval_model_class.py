@@ -112,8 +112,6 @@ class PredictionGTF:
         Args:
             summary (bool, optional): If True, prints the model summary. Defaults to True.
         """
-        # measure time
-        start_time = time.time()
         if self.hmm and self.model_path_lstm:
             # only the lstm model is provided, use the default HMM Layer
             # if self.transformer or self.trans_lstm:
@@ -213,9 +211,6 @@ class PredictionGTF:
                 self.model.summary()
         else: 
             self.make_default_hmm()
-        end_time = time.time()
-        duration = end_time - start_time
-        print(f"Model loaded in {duration:.4f} seconds.")
     
     def adapt_batch_size(self, adapted_chunksize):
         """Adapts the batch size based on the chunk size.

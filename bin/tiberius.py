@@ -87,7 +87,7 @@ def check_file_exists(file_path):
 def group_sequences(seq_names, seq_lens, t=50000400, chunk_size=500004):
     """ Group seguences into chunks of size t, groups are shown in the progress output.
     """
-    # Sort sequences by decreasing length, so that similar long sequences are grouped together
+    # Sort sequences by increasing length, so that similar long sequences are grouped together
     # and adaptive chunk sizes are effective.
     sorted_seqs = sorted(zip(seq_names, seq_lens), key=lambda x: x[1], reverse=False)
 
@@ -276,7 +276,7 @@ def main():
         seq_groups = group_sequences(genome_fasta.sequence_names,
                                    [len(s) for s in genome_fasta.sequences],
                                     t=seqgroup_size, chunk_size=seq_len)
-        print ("grouping into", len(seq_groups), "groups of size", seqgroup_size)
+
         for k, seq in enumerate(seq_groups):
             logging.info(f'Tiberius gene predicton {k+1+len(seq_groups)*j}/{len(strand)*len(seq_groups)} ')
             x_data, coords, adapted_seqlen = pred_gtf.load_genome_data(genome_fasta, seq,

@@ -108,13 +108,20 @@ def group_sequences(seq_names, seq_lens, t=50000400, chunk_size=500004):
         groups.append(current_group)    
     return groups
 
-def download_weigths(url, file_path):
-    # print(url, file_path)
-    with requests.get(url, stream=True) as r:
-        r.raise_for_status()
-        with open(file_path, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=10000):
-                f.write(chunk)
+def download_weigths(url, file_path):    
+    if file_path.endswith(".tgz") and os.path.exists(file_path[:-4]) and not os.path.getsize(file_path[:-4]) == 0:
+        file_path = file_path[:-4]
+        logging.info(f"Warning: No model weights provided. Using existing file at {file_path}.")
+    elif os.path.exists(file_path) and not os.path.getsize(file_path) == 0:
+        logging.info(f"Warning: No model weights provided. Using existing file at {file_path}.")
+    else:
+        logging.info(f'Warning: No model weights provided, they will be downloaded to {file_path}.')
+        logging.info(f'Weights for Tiberius model will be downloaded from {url}')
+        with requests.get(url, stream=True) as r:
+            r.raise_for_status()
+            with open(file_path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=10000):
+                    f.write(chunk)
     return file_path
 
 def extract_tar_gz(file_path, dest_dir):
@@ -215,29 +222,25 @@ def main():
         if not is_writable(model_weights_dir):
             logging.error(f'No model weights provided, and candidate directorys for download are not writeable. Please download the model weigths manually (see README.md) and specify them with --model!')
             sys.exit(1)
-
-        logging.info(f'Warning: No model weights provided, they will be downloaded into {model_weights_dir}.')
         
         if clamsa_prefix:
             if not softmasking:
                 logging.error(f'ERROR: Clamsa input requires softmasking.')
                 sys.exit(1)
-            logging.info(f'Weights for Tiberius de novo model will be downloaded from {url_weights["Tiberius_denovo"]}')
             model_file_name = url_weights["Tiberius_denovo"].split('/')[-1]       
-            download_weigths(url_weights["Tiberius_denovo"], f'{model_weights_dir}/{model_file_name}')  
+            model_path = download_weigths(url_weights["Tiberius_denovo"], f'{model_weights_dir}/{model_file_name}')  
         elif not softmasking:
-            logging.info(f'Weights for Tiberius model without softmasking will be downloaded from {url_weights["Tiberius_nosm"]}')
             model_file_name = url_weights["Tiberius_nosm"].split('/')[-1]          
-            download_weigths(url_weights["Tiberius_nosm"], f'{model_weights_dir}/{model_file_name}')  
+            model_path = download_weigths(url_weights["Tiberius_nosm"], f'{model_weights_dir}/{model_file_name}')  
         else:
-            logging.info(f'Weights for Tiberius model will be downloaded from {url_weights["Tiberius_default"]}')
             model_file_name = url_weights["Tiberius_default"].split('/')[-1]
-            download_weigths(url_weights["Tiberius_default"], f'{model_weights_dir}/{model_file_name}')
-        if model_file_name[-3:] == 'tgz':
+            model_path = download_weigths(url_weights["Tiberius_default"], f'{model_weights_dir}/{model_file_name}')
+        print(model_path)
+        if model_path[-3:] == 'tgz':
             logging.info(f'Extracting weights to {model_weights_dir}')
-            extract_tar_gz(f'{model_weights_dir}/{model_file_name}', f'{model_weights_dir}')
-            model_file_name = model_file_name[:-4]
-        model_path = f'{model_weights_dir}/{model_file_name}'
+            extract_tar_gz(f'{model_path}', f'{model_weights_dir}')
+            model_path = model_path[:-4]
+        #model_path = f'{model_weights_dir}/{model_file_name}'
         
         if not os.path.exists(model_path):
             logging.error(f'Error: The model weights could not be downloaded. Please download the model weights manually (see README.md) and specify them with --model!')

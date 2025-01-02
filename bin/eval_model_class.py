@@ -65,15 +65,15 @@ class PredictionGTF:
             - parallel_factor (int): The parallel factor used for Viterbi.
             - lstm_cfg (str): path to lstm cfg to load weights instead of the whole model
         """
-        self.model_path = model_path 
+        self.model_path = model_path
         self.seq_len = seq_len
-        print("PredictionGTF initialized with seq_len", self.seq_len)
         self.batch_size = batch_size
+        self.adapted_batch_size = batch_size # can be increased if chunksize is reduced
         self.annot_path = annot_path
         self.genome_path = genome_path
         self.genome = genome
         self.softmask = softmask
-        self.hmm = hmm   
+        self.hmm = hmm
         self.emb = emb
         self.strand=strand
         # self.transformer = transformer
@@ -136,12 +136,12 @@ class PredictionGTF:
                  self.lstm_model.load_weights(self.model_path_lstm + '/variables/variables')
             else:
                 self.lstm_model = keras.models.load_model(self.model_path_lstm, 
-                                          custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.batch_size),
-                                         'loss_': custom_cce_f1_loss(2, self.batch_size)})
+                                          custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
+                                         'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
             if self.model_path_hmm:
                 model_hmm = keras.models.load_model(self.model_path_hmm, 
-                                                    custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.batch_size),
-                                                            'loss_': custom_cce_f1_loss(2, self.batch_size)})
+                                                    custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
+                                                            'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
                 self.gene_pred_hmm_layer = model_hmm.get_layer('gene_pred_hmm_layer')
                 self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
                 self.gene_pred_hmm_layer.cell.recurrent_init() 
@@ -152,13 +152,13 @@ class PredictionGTF:
                 self.lstm_model.summary()
         elif self.model_path_lstm:
             self.lstm_model = keras.models.load_model(self.model_path_lstm, 
-                                                        custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.batch_size),
-                                                         'loss_': custom_cce_f1_loss(2, self.batch_size)})
+                                                        custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
+                                                         'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
         elif self.model_path and self.emb:
             # load LSTM+HMM model and extract LSTM part
             self.model = keras.models.load_model(self.model_path,
-                                                custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.batch_size),
-                                                            'loss_': custom_cce_f1_loss(2, self.batch_size)})
+                                                custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
+                                                            'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
             if summary:
                 self.model.summary()
             self.lstm_model = Model(
@@ -174,8 +174,8 @@ class PredictionGTF:
             if False:
                 self.model = clamsa_only_model()
                 self.model.load_weights(self.model_path+"/variables/variables", 
-                                    custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.batch_size),
-                                        'loss_': custom_cce_f1_loss(2, self.batch_size)})
+                                    custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
+                                        'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
                 if self.hmm:
                     self.lstm_model = Model(
                                     inputs=self.model.input, 
@@ -190,8 +190,8 @@ class PredictionGTF:
                     self.gene_pred_hmm_layer.cell.recurrent_init()
             if True:
                 self.model = keras.models.load_model(self.model_path, 
-                                        custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.batch_size),
-                                            'loss_': custom_cce_f1_loss(2, self.batch_size)})
+                                        custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
+                                            'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
                 
                 if self.hmm:
                     try:
@@ -217,6 +217,17 @@ class PredictionGTF:
         duration = end_time - start_time
         print(f"Model loaded in {duration:.4f} seconds.")
     
+    def adapt_batch_size(self, adapted_chunksize):
+        """Adapts the batch size based on the chunk size.
+        """
+        old_adapted_batch_size = self.adapted_batch_size
+        self.adapted_batch_size = self.batch_size * self.seq_len // adapted_chunksize
+        # round down to nearest power of 2
+        self.adapted_batch_size = 2**int(np.log2(self.adapted_batch_size))
+        if self.adapted_batch_size != old_adapted_batch_size:
+            print(f"Adapted batch size to {self.adapted_batch_size}")
+            self.load_model(summary=False)
+
     def init_fasta(self,  genome_path=None, chunk_len=None):
         if genome_path is None:
             genome_path = self.genome_path
@@ -233,19 +244,18 @@ class PredictionGTF:
             strand = self.strand
             
         fasta_object.encode_sequences(seq=seq_names)
-        print ("Encoded seqs", len(fasta_object.one_hot_encoded))
 
-        f_chunk, coords = fasta_object.get_flat_chunks(strand=strand, coords=True, 
+        f_chunk, coords, adapted_chunksize = fasta_object.get_flat_chunks(strand=strand, coords=True, 
                                                        sequence_names=seq_names, adapt_chunksize=True, 
                                                        parallel_factor = self.parallel_factor)
         if not softmask:
             f_chunk = f_chunk[:,:,:5]
-        return f_chunk, coords
+        return f_chunk, coords, adapted_chunksize
      
     def load_clamsa_data(self, clamsa_prefix, seq_names, strand='', chunk_len=None, pad=False):
         if strand is None:
             strand = self.strand
-            
+
         clamsa_chunks = []
         for seq_name in seq_names:
             if not os.path.exists(f'{clamsa_prefix}{seq_name}.npy'):
@@ -367,7 +377,7 @@ class PredictionGTF:
             lstm_predictions (np.array or list of np.array): The predictions generated by the LSTM model.
         """
         if not batch_size:
-            batch_size = self.batch_size
+            batch_size = self.adapted_batch_size
         num_batches = inp_chunks.shape[0] // batch_size
         lstm_predictions = []
     
@@ -429,7 +439,7 @@ class PredictionGTF:
             HMM predictions (np.array or list of np.array): The predictions generated by the HMM model.
         """
         if not batch_size:
-            batch_size = self.batch_size
+            batch_size = self.adapted_batch_size
         num_batches = nuc_seq.shape[0] // batch_size
         hmm_predictions = []
         print('### HMM Viterbi')
@@ -477,7 +487,7 @@ class PredictionGTF:
             HMM predictions (np.array or list of np.array): The predictions generated by the HMM model.
         """
         if not batch_size:
-            batch_size = self.batch_size
+            batch_size = self.adapted_batch_size
             
         print('### HMM Viterbi')
         
@@ -543,7 +553,7 @@ class PredictionGTF:
             np.ndarray: HMM predictions for all chunks.
         """
         if not batch_size:
-            batch_size = self.batch_size
+            batch_size = self.adapted_batch_size
             
         start_time = time.time()
         if encoding_layer_oracle is not None:
@@ -808,7 +818,7 @@ class PredictionGTF:
             clamsa_inp (np.array): Optional clamsa input with same size as inp_chunks.
             correct_y_label (np.array): Correct y_label for debugging.
         """
-        batch_size = self.batch_size//2
+        batch_size = self.adapted_batch_size//2
 
         # revert data if - strand
         if strand == '-':
@@ -1065,4 +1075,4 @@ class PredictionGTF:
                 parallel_factor=self.parallel_factor,
                 use_border_hints=False
         )
-        self.gene_pred_hmm_layer.build([self.batch_size, self.seq_len, inp_size])
+        self.gene_pred_hmm_layer.build([self.adapted_batch_size, self.seq_len, inp_size])

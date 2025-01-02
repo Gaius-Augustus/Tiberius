@@ -279,8 +279,9 @@ def main():
         print ("grouping into", len(seq_groups), "groups of size", seqgroup_size)
         for k, seq in enumerate(seq_groups):
             logging.info(f'Tiberius gene predicton {k+1+len(seq_groups)*j}/{len(strand)*len(seq_groups)} ')
-            x_data, coords = pred_gtf.load_genome_data(genome_fasta, seq,
+            x_data, coords, adapted_seqlen = pred_gtf.load_genome_data(genome_fasta, seq,
                                                        softmask=softmasking, strand=s_)
+            pred_gtf.adapt_batch_size(adapted_seqlen)
             # print(x_data.shape)
             clamsa=None
             if clamsa_prefix:

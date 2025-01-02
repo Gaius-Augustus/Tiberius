@@ -103,14 +103,17 @@ class GenomeSequences:
         
         Returns: 
             chunks_one_hot (np.array): Flattened chunks of the specified sequence.
+            chunk_coords (list): List of coordinates of the chunks if coors is True.
+            chunksize (int): Possibly reduced size of each chunk.
         """
+        chunk_coords = None
+        chunksize = self.chunksize
 
         if not sequence_names: 
             sequence_names = self.sequence_names
         sequences_i = [self.one_hot_encoded[i] for i in sequence_names]
 
         # if all sequences are shorter than chunksize, reduce the chunksize
-        chunksize = self.chunksize
         if adapt_chunksize:
             max_len = max([len(seq) for seq in sequences_i])
             if max_len < self.chunksize:
@@ -125,7 +128,8 @@ class GenomeSequences:
                 chunksize = divisor * (1 + (chunksize - 1) // divisor)
 
         chunks_one_hot = []
-        chunk_coords = []
+        if coords:
+            chunk_coords = []
         for seq_name, sequence in zip(sequence_names, sequences_i):
             num_chunks = (len(sequence) - self.overlap) \
                 // (chunksize - self.overlap) + 1
@@ -153,6 +157,4 @@ class GenomeSequences:
             chunks_one_hot = chunks_one_hot[::-1, ::-1, [3, 2, 1, 0, 4, 5]]
             chunk_coords.reverse()
 
-        if coords:
-            return chunks_one_hot, chunk_coords
-        return chunks_one_hot
+        return chunks_one_hot, chunk_coords, chunksize

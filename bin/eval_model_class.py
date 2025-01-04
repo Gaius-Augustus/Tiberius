@@ -220,7 +220,7 @@ class PredictionGTF:
         # round down to nearest power of 2
         self.adapted_batch_size = 2**int(np.log2(self.adapted_batch_size))
         if self.adapted_batch_size != old_adapted_batch_size:
-            print(f"Adapted batch size to {self.adapted_batch_size}")
+            # print(f"Adapted batch size to {self.adapted_batch_size} using chunksize {adapted_chunksize}")
             self.load_model(summary=False)
 
     def init_fasta(self,  genome_path=None, chunk_len=None):

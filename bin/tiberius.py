@@ -33,13 +33,13 @@ def check_seq_len(seq_len):
     return True
 
 def check_parallel_factor(parallel_factor, seq_len):    
-    if parallel_factor < 2 or parallel_factor > seq_len-1:
+    if parallel_factor < 2 or 2 * parallel_factor > seq_len:
         logging.info(f'WARNING: The parallel factor is poorely chosen, please choose a different --seq_len or specify a --parallel_factor, which has to be a divisor of --seq_len. Current value: {parallel_factor}.')
     if seq_len % parallel_factor != 0:
-        logging.error(f'ERROR: The argument "parallel_factor" has to be a divisor of --seq_len! Please change the value {parallel_factor} to a different value or choose a different seq_len!')
+        logging.error(f'ERROR: The argument "parallel_factor" has to be a divisor of --seq_len. Please change the value {parallel_factor} to a different value or choose a different seq_len!')
         sys.exit(1)
     if parallel_factor < 1:
-        logging.error(f'ERROR: The argument "parallel_factor" has to be >0! Please change the value {parallel_factor} to a different value!')
+        logging.error(f'ERROR: The argument "parallel_factor" has to be >0. Please change the value {parallel_factor} to a different value!')
         sys.exit(1)
 
 def compute_parallel_factor(seq_len):

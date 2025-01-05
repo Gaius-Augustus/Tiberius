@@ -120,6 +120,8 @@ class GenomeSequences:
                     chunksize = min(2*self.overlap + 1, self.chunksize)
                 if parallel_factor is None:
                     parallel_factor = 1
+                if chunksize < 2 * parallel_factor:
+                    chunksize = 2 * parallel_factor # hmm code requires at least 2 chunks
                 # new chunksize must divide 2, 9 and parallel_factor
                 # round chunksize up to smallest multiple
                 divisor = 2 * 9 * parallel_factor // math.gcd(18, parallel_factor)

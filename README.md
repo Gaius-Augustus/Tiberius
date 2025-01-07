@@ -1,4 +1,4 @@
-![Docker Pulls](https://img.shields.io/docker/pulls/larsgabriel23/tiberius) 
+![Docker Pulls](https://img.shields.io/docker/pulls/larsgabriel23/tiberius) ![GitHub all releases](https://img.shields.io/github/downloads/gaius-augustus/tiberius/total)
 
 # Tiberius: End-to-End Deep Learning with an HMM for Gene Prediction
 

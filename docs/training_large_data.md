@@ -35,7 +35,7 @@ For following instructions, we will assume that the files are named after the sp
 4. Create a config file that contains the parameters for training, a config file with default parameter is located at `docs/config.json`. You can find descriptions of key parametes in `bin/train.py`. Start training:
     
     ```shell
-    python bin/train.py --config config.json --data $tfrecords/ --learnMSA $leanMSA  --cfg $cfg
+    python bin/train.py --data $tfrecords/ --learnMSA $leanMSA  --cfg config.json
     ```
 
     If you want to train without the HMM layer, you can set 'use_hmm' to false in the config file. This will speed up training and reduce the memory requirements. 

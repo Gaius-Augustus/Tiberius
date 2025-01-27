@@ -103,7 +103,9 @@ class GeneStructure:
                 self.one_hot[strand][seq][:, 0] =  1                
 
         # Set the one-hot encoded positions for each gene structure
-        for chromosome, feature, strand, phase, start, end in self.gene_structures:                          
+        for chromosome, feature, strand, phase, start, end in self.gene_structures:    
+            if chromosome not in self.one_hot[strand]:
+                raise KeyError(f"Sequence in fasta '{chromosome}' not found in GTF file.")                      
             if feature == 'CDS':
                 exon_start = (3 - int(phase)) % 3
                 self.one_hot[strand][chromosome][start-1:end, 0] = 0

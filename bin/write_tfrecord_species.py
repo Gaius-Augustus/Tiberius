@@ -52,7 +52,7 @@ def get_species_data_hmm(genome_path='', annot_path='', species='', seq_len=5000
             overlap=overlap_size)
     fasta.encode_sequences() 
     seqs = [len(s) for s in fasta.sequences]
-    seq_names = [seq_n for seq, seq_n in zip(fasta.sequence, fasta.sequence_names) \
+    seq_names = [seq_n for seq, seq_n in zip(fasta.sequences, fasta.sequence_names) \
                     if len(seq)>seq_len]
     f_chunk, _, _ = fasta.get_flat_chunks(strand='+', pad=False)
     del fasta

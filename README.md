@@ -145,7 +145,7 @@ The model was trained end-to-end on 32 mammalian genomes and it reaches state-of
 
 ## Annotations from Tiberius
 
- [Tiberius predictions for 1045 mamallian assemblies](https://bioinf.uni-greifswald.de/bioinf/tiberius/genes/tib-tbl.html)
+ [Tiberius predictions for 1314 mamalian assemblies](https://bioinf.uni-greifswald.de/bioinf/tiberius/genes/tib-tbl.html)
  
 We also provide example annotations for *Homo sapiens* (genome assembly GCF_000001405.40), *Bos taurus* (genome assembly GCF_000003205.7) and *Delphinapterus leucas* (genome assembly GCF_002288925.1) that were generated at the time of writing the paper with Tiberius using the default weights:
 ```shell

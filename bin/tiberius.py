@@ -228,21 +228,25 @@ def main():
                 logging.error(f'ERROR: Clamsa input requires softmasking.')
                 sys.exit(1)
             model_file_name = url_weights["Tiberius_denovo"].split('/')[-1]       
-            model_path = download_weigths(url_weights["Tiberius_denovo"], f'{model_weights_dir}/{model_file_name}')  
+            model_path_lstm = download_weigths(url_weights["Tiberius_denovo"], f'{model_weights_dir}/{model_file_name}')  
         elif not softmasking:
             model_file_name = url_weights["Tiberius_nosm"].split('/')[-1]          
-            model_path = download_weigths(url_weights["Tiberius_nosm"], f'{model_weights_dir}/{model_file_name}')  
+            model_path_lstm = download_weigths(url_weights["Tiberius_nosm"], f'{model_weights_dir}/{model_file_name}')  
         else:
             model_file_name = url_weights["Tiberius_default"].split('/')[-1]
             model_path = download_weigths(url_weights["Tiberius_default"], f'{model_weights_dir}/{model_file_name}')
-        print(model_path)
-        if model_path[-3:] == 'tgz':
+        if model_path and model_path[-3:] == 'tgz':
             logging.info(f'Extracting weights to {model_weights_dir}')
             extract_tar_gz(f'{model_path}', f'{model_weights_dir}')
             model_path = model_path[:-4]
+        if model_path_lstm and model_path_lstm[-3:] == 'tgz':
+            logging.info(f'Extracting weights to {model_weights_dir}')
+            extract_tar_gz(f'{model_path_lstm}', f'{model_weights_dir}')
+            model_path_lstm = model_path_lstm[:-4]
         #model_path = f'{model_weights_dir}/{model_file_name}'
         
-        if not os.path.exists(model_path):
+        if (model_path and not os.path.exists(model_path)) or \
+                (model_path_lstm and not os.path.exists(model_path_lstm)):
             logging.error(f'Error: The model weights could not be downloaded. Please download the model weights manually (see README.md) and specify them with --model!')
             sys.exit(1)
 

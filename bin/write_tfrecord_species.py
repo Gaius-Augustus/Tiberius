@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
 
 import sys, json, os, re, sys, csv, argparse
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-# from transformers import AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM
+#os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 from genome_fasta import GenomeSequences
 from annotation_gtf import GeneStructure
 import subprocess as sp
 import numpy as np
 import tensorflow as tf
 import numpy as np
-import psutil
 import sys
-import zlib
-from copy import deepcopy
 from wig_class import Wig_util
 import h5py
 
@@ -46,7 +42,8 @@ def load_clamsa_data(clamsa_prefix, seq_names, seq_len=None):
         clamsa_chunks = np.concatenate(clamsa_chunks, axis=0)
         return np.concatenate([clamsa_chunks[::-1,::-1, [1,0,3,2]], clamsa_chunks], axis=0)
 
-def get_species_data_hmm(genome_path='', annot_path='', species='', seq_len=500004, overlap_size=0, transition=False):
+def get_species_data_hmm(genome_path='', annot_path='', species='', 
+            seq_len=500004, overlap_size=0, transition=False):
     fasta = GenomeSequences(fasta_file=genome_path,
             chunksize=seq_len,
             overlap=overlap_size)
@@ -56,7 +53,6 @@ def get_species_data_hmm(genome_path='', annot_path='', species='', seq_len=5000
                     if len(seq)>seq_len]
     f_chunk, _, _ = fasta.get_flat_chunks(strand='+', pad=False)
     del fasta
-    print(f_chunk.shape)
     full_f_chunks = np.concatenate((f_chunk[::-1,::-1, [3,2,1,0,4,5]], 
                                     f_chunk), axis=0)
     
@@ -186,10 +182,6 @@ def main():
             overlap_size=0, transition=True)
     
     print('Loaded FASTA and GTF', fasta.shape, ref.shape)
-#     if args.transformer:        
-# #         trans_emb = get_transformer_emb(ref, token_len = args.wsize//18)
-# #         print('AAA')
-#         write_tf_record(fasta, ref, args.out, trans=True)
     if args.clamsa:
         # clamsa = get_clamsa_track('/home/gabriell/deepl_data/clamsa/wig/', seq_len=args.wsize, prefix=args.species)
         clamsa = load_clamsa_data(args.clamsa, seq_names=args.seq_names, seq_len=args.wsize)
@@ -226,10 +218,6 @@ def parseCmd():
         help='Prefix of output files')
     parser.add_argument('--wsize', type=int,
         help='', required=True)
-    # parser.add_argument('--no_transition', action='store_true',
-    #     help='')
-    # parser.add_argument('--transformer', action='store_true',
-    #     help='')
     parser.add_argument('--clamsa',  type=str, default='',
         help='')
     parser.add_argument('--seq_names',  type=str, default='',

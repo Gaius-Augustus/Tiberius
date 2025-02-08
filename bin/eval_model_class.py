@@ -223,21 +223,23 @@ class PredictionGTF:
             # print(f"Adapted batch size to {self.adapted_batch_size} using chunksize {adapted_chunksize}")
             self.load_model(summary=False)
 
-    def init_fasta(self,  genome_path=None, chunk_len=None):
+    def init_fasta(self,  genome_path=None, chunk_len=None, min_seq_len=0):
         if genome_path is None:
             genome_path = self.genome_path
         if chunk_len is None:
             chunk_len = self.seq_len
         if (self.genome):
-            fasta = GenomeSequences(genome=self.genome, chunksize=chunk_len, overlap=0)
+            fasta = GenomeSequences(genome=self.genome, chunksize=chunk_len, 
+                overlap=0, min_seq_len=min_seq_len)
         else:
-            fasta = GenomeSequences(fasta_file=genome_path, chunksize=chunk_len, overlap=0)
+            fasta = GenomeSequences(fasta_file=genome_path, chunksize=chunk_len, 
+                overlap=0, min_seq_len=min_seq_len)
         return fasta
     
     def load_genome_data(self, fasta_object, seq_names, strand='', softmask=True):
         if strand is None:
             strand = self.strand
-            
+        
         fasta_object.encode_sequences(seq=seq_names)
 
         f_chunk, coords, adapted_chunksize = fasta_object.get_flat_chunks(strand=strand, coords=True, 

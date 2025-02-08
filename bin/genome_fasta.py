@@ -3,7 +3,8 @@ import gzip, bz2
 import math
 
 class GenomeSequences:
-    def __init__(self, fasta_file='', genome=None, np_file='', chunksize=20000, overlap=1000):
+    def __init__(self, fasta_file='', genome=None, np_file='', 
+                chunksize=20000, overlap=1000, min_seq_len=0):
         """Initialize the GenomeSequences object.
 
         Arguments:
@@ -17,7 +18,7 @@ class GenomeSequences:
         self.np_file = np_file
         self.chunksize = chunksize
         self.overlap = overlap
-
+        self.min_seq_len = min_seq_len
         self.sequences = []
         self.sequence_names = []
         self.one_hot_encoded = None
@@ -34,6 +35,8 @@ class GenomeSequences:
         """Extract the sequence array from the genome object.
         """
         for name, seqrec in self.genome.items():
+            if len(seqrec.seq) < self.min_seq_len:
+                continue
             self.sequences.append(str(seqrec.seq))
             self.sequence_names.append(name)
 
@@ -52,8 +55,9 @@ class GenomeSequences:
         current_sequence = ""
         for line in lines:
             if line.startswith(">"):
-                if current_sequence:                    
-                    self.sequences.append(current_sequence)
+                if current_sequence:               
+                    if len(current_sequence) >= self.min_seq_len:                             
+                        self.sequences.append(current_sequence)
                     current_sequence = ""
                 self.sequence_names.append(line[1:].strip())
             else:

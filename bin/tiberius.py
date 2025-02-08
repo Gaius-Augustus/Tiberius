@@ -194,6 +194,10 @@ def main():
     logging.info(f'Batch size: {batch_size}')
     seq_len = args.seq_len
     logging.info(f'Tile length: {seq_len}')
+    min_seq_len = args.min_genome_seqlen
+    logging.info(f'Minimum sequence length: {min_seq_len}')
+    if min_seq_len > 0:
+        logging.info(f'Warning: Sequences shorter than {min_seq_len} will be ignored.')
     check_seq_len(seq_len)    
     strand = [s for s in args.strand.split(',') if s in ['+', '-']]
     logging.info(f'Strand: {strand}')    
@@ -278,7 +282,7 @@ def main():
         
         pred_gtf.load_model(summary=j==0)
         
-        genome_fasta = pred_gtf.init_fasta(chunk_len=seq_len)
+        genome_fasta = pred_gtf.init_fasta(chunk_len=seq_len, min_seq_len=min_seq_len)
         
         seq_groups = group_sequences(genome_fasta.sequence_names,
                                    [len(s) for s in genome_fasta.sequences],
@@ -409,6 +413,8 @@ def parseCmd():
         help='Number of sub-sequences per batch.', default=16)
     parser.add_argument('--id_prefix', type=str,
         help='Prefix for gene and transcript IDs in output GTF file.', default='')
+    parser.add_argument('--min_genome_seqlen', type=int,
+        help='Minimum length of input sequences used for predictions.', default=0)
         
     return parser.parse_args()
 

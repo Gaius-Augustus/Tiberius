@@ -277,13 +277,13 @@ def main():
             genome=genome,
             softmask=not args.no_softmasking, strand=s_,
             parallel_factor=parallel_factor,
-            # lstm_cfg=args.lstm_cfg,
         )
         
         pred_gtf.load_model(summary=j==0)
         
         genome_fasta = pred_gtf.init_fasta(chunk_len=seq_len, min_seq_len=min_seq_len)
-        
+        genome_seq_dict = {s_n: len(s) for s_n, s in zip(genome_fasta.sequence_names, genome_fasta.sequences)}
+        print(genome_seq_dict)
         seq_groups = group_sequences(genome_fasta.sequence_names,
                                    [len(s) for s in genome_fasta.sequences],
                                     t=seqgroup_size, chunk_size=seq_len)
@@ -293,7 +293,7 @@ def main():
             x_data, coords, adapted_seqlen = pred_gtf.load_genome_data(genome_fasta, seq,
                                                        softmask=softmasking, strand=s_)
             pred_gtf.adapt_batch_size(adapted_seqlen)
-            # print(x_data.shape)
+
             clamsa=None
             if clamsa_prefix:
                 clamsa = pred_gtf.load_clamsa_data(clamsa_prefix=clamsa_prefix, seq_names=seq, 
@@ -317,6 +317,9 @@ def main():
             filt = True
         # filter out transcripts with cds len shorter than args.filter_short
         if not filt and tx.get_cds_len() < 201:
+            filt = True
+            
+        if not filt and tx.start < 1 or tx.end > genome_seq_dict[tx.chr]:
             filt = True
 
         if not filt:

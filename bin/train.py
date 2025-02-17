@@ -32,6 +32,8 @@ from models import (weighted_categorical_crossentropy, custom_cce_f1_loss, Batch
                     make_weighted_cce_loss,)
 from tensorflow.keras.callbacks import LearningRateScheduler
 
+from gradient_accumulator import GradientAccumulateOptimizer   # CHANGED: for gradiant accumulation... need to try
+
 gpus = tf.config.list_physical_devices('GPU')
 
 strategy = tf.distribute.MirroredStrategy()
@@ -446,7 +448,8 @@ def main():
             'loss_f1_factor': 2.0,
             'sgd': False,
             'oracle': False, # if True, the correct labels will be used as input data. Can be used to debug the HMM.
-            "lru_layer": False
+            "lru_layer": False,
+            "batch_accumulation": 1
         }
         
     config_dict['model_load'] = os.path.abspath(args.load) if args.load else None

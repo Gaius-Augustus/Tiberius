@@ -16,7 +16,7 @@ import tensorflow.keras as keras
 from learnMSA.msa_hmm.Viterbi import viterbi
 from tensorflow.keras.models import Model
 from genome_anno import Anno
-from models import custom_cce_f1_loss, lstm_model
+from models import custom_cce_f1_loss, lstm_model, Cast
 from gene_pred_hmm import class3_emission_matrix, GenePredHMMLayer, make_5_class_emission_kernel, make_aggregation_matrix, make_15_class_emission_kernel
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
 # from transformers import AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM
@@ -189,7 +189,8 @@ class PredictionGTF:
             if True:
                 self.model = keras.models.load_model(self.model_path, 
                                         custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
-                                            'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
+                                            'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
+                                                            'Cast': Cast})
                 
                 if self.hmm:
                     try:
@@ -200,7 +201,7 @@ class PredictionGTF:
                                     inputs=self.model.input, 
                                     outputs=lstm_output
                                     )
-                    self.gene_pred_hmm_layer = self.model.layers[-1]
+                    self.gene_pred_hmm_layer = self.model.layers[-2] # CHANGED
 
                     if self.parallel_factor is not None:
                         self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor

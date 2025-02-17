@@ -221,27 +221,29 @@ def lstm_model(units=200, filter_size=64,
     # Bidirectional LSTM layers
     for i in range(numb_lstm):
         if lru_layer:
-            # period >=3 in first layer, >=20 in deeper layers
-            mp = 2*pi/2 if i<1 else 2*pi/50
-            rmin = 0 if i<1 else 0.9
             lru_block = lru.LRU_Block(
-                  N=2*units, # hidden dim
-                  H=2*units, # output dim
-                  bidirectional=True,
-                  max_tree_depth=17,
-                  r_min=rmin,
-                  # return_sequences=True,
-                   max_phase=mp)
+                  H=2*units,
+                  N=lru_hidden_state_dim, 
+                  bidirectional=True, 
+                  max_tree_depth=lru_max_tree_depth,   #TODO: set tree depth extra???
+                  return_sequences=True,
+                  use_skip_connection=True, 
+                  residual=True,
+                  use_nonlin=True, 
+                  dropout=dropout_rate, #CHANGED: set dropout rate 
+                  use_batch_norm=True, 
+                  init_bounds=lru_init_bounds[i])
             # lru_block.build(input_shape=x.shape)
             x_next = lru_block(x)
+            x = x_next   # no additional dropout for lru layer
         else:
             x_next = Bidirectional(LSTM(units, return_sequences=True), 
                     name=f'biLSTM_{i+1}')(x)
-        if dropout_rate:
-            x_next = Dropout(dropout_rate, name=f'dropout_{i+1}')(x_next)
-            x = LayerNormalization(name=f'layer_normalization_lstm{i+1}')(x_next + x)
-        else:
-            x = x_next
+            if dropout_rate:
+                x_next = Dropout(dropout_rate, name=f'dropout_{i+1}')(x_next)
+                x = LayerNormalization(name=f'layer_normalization_lstm{i+1}')(x_next + x)
+            else:
+                x = x_next
             
         if multi_loss and i < numb_lstm-1:   
             x_loss = Dense(pool_size * output_size, activation='relu', name=f'dense_lstm_{i+1}')(x)

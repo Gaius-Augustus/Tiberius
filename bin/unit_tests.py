@@ -136,8 +136,7 @@ class TestInitialization(unittest.TestCase):
         trans = gene_pred_hmm_transitioner.GenePredHMMTransitioner(
                 initial_ir_len=4,
                 initial_intron_len=5,
-                initial_exon_len=6,
-                init_component_sd=0.)
+                initial_exon_len=6)
         expected = {
             (0,0): 1-1/4,
             (0,7): 1/4,
@@ -240,6 +239,7 @@ class TestInitialization(unittest.TestCase):
             np.testing.assert_almost_equal(A[u,v], expected[(u,v)], err_msg=f"edge {(u,v)}")
 
 
+
 class TestMultiHMM(unittest.TestCase):
 
     def test_multi_copy_transitions(self):
@@ -263,24 +263,69 @@ class TestMultiHMM(unittest.TestCase):
             self.assertTrue(np.any(np.all(indices == [0]+pair, -1)), msg=f"{pair} for in {indices[:,1:]}")
 
 
-    # def test_multi_model_transitions(self):
-    #     for num_models in [2,3,5]: 
-    #         trans = gene_pred_hmm_transitioner.GenePredMultiHMMTransitioner(num_models = num_models)
-    #         indices = trans.make_transition_indices()
-    #         ref_indices = [ [0,0], 
-    #                         [0, 7], [7, 5], #START in / out
-    #                         [14, 0], [5, 14], #STOP in / out
-    #                         [5, 6], [5,9], [9,2], [2,2], [2,12], [12,5], #E1 + Intron 1
-    #                         [6,4],[6,10], [10,3], [3,3], [3,13], [13,6], #E2 + Intron 2
-    #                         [4,5], [7,11], [8,1], [1,1], [1,11], [11,4] #E0 + Intron 0
-    #                         ]
-    #         num_transitions = len(ref_indices)
-    #         #check existence of bijection between num_models copies of ref_indices and indices
-    #         self.assertEqual(len(indices), num_transitions*num_models)
-    #         i = 0
-    #         for j in range(num_models):
-    #             for pair in ref_indices:
-    #                 self.assertTrue(np.any(np.all(indices == [j]+pair, -1)), msg=f"{pair} for in {indices[:,1:]}")
+    def test_model_transitions(self):
+        trans = gene_pred_hmm_transitioner.GenePredHMMTransitioner()
+
+        # test if the transition indices are correct
+        indices = trans.make_transition_indices()
+        ref_indices = [ [0,0], 
+                        [0, 7], [7, 5], #START in / out
+                        [14, 0], [5, 14], #STOP in / out
+                        [5, 6], [5,9], [9,2], [2,2], [2,12], [12,5], #E1 + Intron 1
+                        [6,4],[6,10], [10,3], [3,3], [3,13], [13,6], #E2 + Intron 2
+                        [4,5], [4,8], [8,1], [1,1], [1,11], [11,4] #E0 + Intron 0
+                        ]
+        num_transitions = len(ref_indices)
+        #check existence of bijection between num_models copies of ref_indices and indices
+        self.assertEqual(len(indices), num_transitions)
+        i = 0
+        for pair in ref_indices:
+            self.assertTrue(np.any(np.all(indices == [0]+pair, -1)), msg=f"{pair} not in {indices[:,1:]}")
+
+        # test the final matrix A
+        trans.build()
+        A = trans.make_A()
+        logA = trans.make_log_A()
+        np.testing.assert_almost_equal(np.sum(A, -1), 1.)
+        np.testing.assert_almost_equal(tf.reduce_logsumexp(logA, -1).numpy(), 0.)
+        for i in range(trans.num_states):
+            for j in range(trans.num_states):
+                if [i,j] in ref_indices:
+                    self.assertTrue(A[0,i,j] > 0, msg=f"transition from {i} to {j} not > 0")
+                else:
+                    self.assertEqual(A[0,i,j], 0, msg=f"transition from {i} to {j} not 0")
+
+
+    
+    def test_expected_lengths(self):
+        initial_ir_len = 300
+        initial_intron_len = 200
+        initial_exon_len = 100
+        trans = gene_pred_hmm_transitioner.GenePredHMMTransitioner(
+                                initial_exon_len=initial_exon_len,
+                                initial_intron_len=initial_intron_len,
+                                initial_ir_len=initial_ir_len)
+        trans.build()
+        A = trans.make_A()
+
+        # compute the mean of geometric distribution, i.e. the number of 
+        # Bernoulli trials to get one success (= leaving a state)
+        
+        #intergenic:
+        expected_IR = 1/(1-A[0,0,0])
+        self.assertAlmostEqual(expected_IR.numpy(), initial_ir_len, places=3)
+
+        # introns
+        for i in range(1,4):
+            expected_intron = 1/(1-A[0,i,i])
+            self.assertAlmostEqual(expected_intron.numpy(), initial_intron_len, places=3)
+
+        # exons
+        for i in range(4,7):
+            expected_exon = 1/(1-A[0,i,(i-3)%3+4])
+            self.assertAlmostEqual(expected_exon.numpy(), initial_exon_len, places=3)
+
+
 
 
     def test_multi_model_layer(self):

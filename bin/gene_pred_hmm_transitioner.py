@@ -20,7 +20,6 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
                 starting_distribution_init="zeros",
                 starting_distribution_trainable=True,
                 transitions_trainable=True,
-                init_component_sd=0.2,
                 **kwargs):
         super(SimpleGenePredHMMTransitioner, self).__init__(**kwargs)
         self.num_models = num_models
@@ -36,7 +35,7 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
         self.num_transitions = len(self.indices)
         self.reverse = False
         if init is None:
-            self.init = ConstantInitializer(self.make_transition_init(1, init_component_sd))
+            self.init = ConstantInitializer(self.make_transition_init(1, 0.0))
         else:
             self.init = init
 
@@ -236,12 +235,12 @@ class GenePredHMMTransitioner(SimpleGenePredHMMTransitioner):
             Assumed order of states: Ir, I0, I1, I2, E0, E1, E2, 
                                     START, EI0, EI1, EI2, IE0, IE1, IE2, STOP
     """
-    def __init__(self, init_component_sd=0.2, use_experimental_prior=False, **kwargs):
+    def __init__(self, use_experimental_prior=False, **kwargs):
         if not hasattr(self, "num_states"):
             self.num_states = 15
         if not hasattr(self, "k"):
             self.k = 1
-        super(GenePredHMMTransitioner, self).__init__(init_component_sd=init_component_sd, **kwargs)
+        super(GenePredHMMTransitioner, self).__init__(**kwargs)
         self.use_experimental_prior = use_experimental_prior
         if use_experimental_prior:
             self.alpha = self.make_prior_alpha()
@@ -343,7 +342,8 @@ class GenePredMultiHMMTransitioner(GenePredHMMTransitioner):
     def __init__(self, k=1, init_component_sd=0.2, **kwargs):
         self.k = k
         self.num_states = 1 + 14 * k
-        super(GenePredMultiHMMTransitioner, self).__init__(init_component_sd=init_component_sd, **kwargs)
+        self.init_component_sd = init_component_sd
+        super(GenePredMultiHMMTransitioner, self).__init__(**kwargs)
         self.init = ConstantInitializer(self.make_transition_init(k, init_component_sd))
     
 

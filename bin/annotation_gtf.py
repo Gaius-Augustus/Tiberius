@@ -100,8 +100,7 @@ class GeneStructure:
             self.one_hot[strand] = {seq : np.zeros((seq_l, numb_labels), dtype=np.int8) \
                 for seq, seq_l in zip(sequence_names, sequence_lengths)}
             for seq in sequence_names:
-                self.one_hot[strand][seq][:, 0] =  1                
-
+                self.one_hot[strand][seq][:, 0] =  1
         # Set the one-hot encoded positions for each gene structure
         for chromosome, feature, strand, phase, start, end in self.gene_structures:    
             if chromosome not in sequence_names:
@@ -118,7 +117,9 @@ class GeneStructure:
                 self.one_hot[strand][chromosome][start-1:end, 4:7] = \
                     np.eye(3)[one_help.astype(int)]
                     
-        for chromosome, feature, strand, phase, start, end in self.gene_structures:  
+        for chromosome, feature, strand, phase, start, end in self.gene_structures:
+            if chromosome not in sequence_names:
+                continue
             if feature == 'intron':                
                 if strand == '+':
                     idx = start - 2
@@ -145,7 +146,9 @@ class GeneStructure:
                 self.one_hot[strand][chromosome][position, index] = 1
                 
             # states : Ir, I0, I1, I2, E0, E1, E2, START, EI0, EI1, EI2, IE0, IE1, IE2, STOP
-            for chromosome, feature, strand, phase, start, end in self.gene_structures:                          
+            for chromosome, feature, strand, phase, start, end in self.gene_structures:
+                if chromosome not in sequence_names:
+                    continue
                 if feature == 'CDS':
                     if strand == '+':
                         prev_condition = start - 2 < 0

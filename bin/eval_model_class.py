@@ -16,7 +16,7 @@ import tensorflow.keras as keras
 from learnMSA.msa_hmm.Viterbi import viterbi
 from tensorflow.keras.models import Model
 from genome_anno import Anno
-from models import custom_cce_f1_loss, lstm_model
+from models import custom_cce_f1_loss, lstm_model, Cast
 from gene_pred_hmm import class3_emission_matrix, GenePredHMMLayer, make_5_class_emission_kernel, make_aggregation_matrix, make_15_class_emission_kernel
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
 # from transformers import AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM
@@ -134,8 +134,11 @@ class PredictionGTF:
                  self.lstm_model.load_weights(self.model_path_lstm + '/variables/variables')
             else:
                 self.lstm_model = keras.models.load_model(self.model_path_lstm, 
-                                          custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
-                                         'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
+                        custom_objects={
+                        'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
+                        'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
+                        "Cast": Cast}
+                        )
             if self.model_path_hmm:
                 model_hmm = keras.models.load_model(self.model_path_hmm, 
                                                     custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
@@ -189,7 +192,8 @@ class PredictionGTF:
             if True:
                 self.model = keras.models.load_model(self.model_path, 
                                         custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
-                                            'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
+                                            'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
+                                            "Cast": Cast})
                 
                 if self.hmm:
                     try:
@@ -200,7 +204,8 @@ class PredictionGTF:
                                     inputs=self.model.input, 
                                     outputs=lstm_output
                                     )
-                    self.gene_pred_hmm_layer = self.model.layers[-1]
+                    #self.gene_pred_hmm_layer = self.model.layers[-1]
+                    self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
 
                     if self.parallel_factor is not None:
                         self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
@@ -402,8 +407,6 @@ class PredictionGTF:
                     clamsa_inp[start_pos:end_pos]
                 ])           
             else:
-                # print(start_pos,end_pos, len(inp_chunks), inp_chunks[start_pos].shape)
-                # y = self.lstm_model.predict_on_batch(inp_chunks[start_pos:end_pos])
                 y = self.lstm_model(inp_chunks[start_pos:end_pos])
             if not self.emb and len(y.shape) == 1:
                 y = np.expand_dims(y,0)
@@ -1058,7 +1061,7 @@ class PredictionGTF:
             em_kernel = make_15_class_emission_kernel(smoothing=1e-6)
         self.gene_pred_hmm_layer = GenePredHMMLayer(
                 emitter_init=ConstantInitializer(em_kernel),
-                initial_exon_len=200, 
+                initial_exon_len=200,
                 initial_intron_len=4500,
                 initial_ir_len=10000,
                 emit_embeddings=False,

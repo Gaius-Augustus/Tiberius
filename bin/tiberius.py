@@ -283,7 +283,6 @@ def main():
         
         genome_fasta = pred_gtf.init_fasta(chunk_len=seq_len, min_seq_len=min_seq_len)
         genome_seq_dict = {s_n: len(s) for s_n, s in zip(genome_fasta.sequence_names, genome_fasta.sequences)}
-        print(genome_seq_dict)
         seq_groups = group_sequences(genome_fasta.sequence_names,
                                    [len(s) for s in genome_fasta.sequences],
                                     t=seqgroup_size, chunk_size=seq_len)

@@ -25,7 +25,7 @@ For following instructions, we will assume that the files are named after the sp
     ```
 
 
-3. Create a list of all species that you want to train on. This list (separated by `\n` ) will be used to search for all tfrecords file that start with the species name, for example:    
+3. Create a list of all species that you want to train on. This list (separated by `\n` ) will be used to search for all tfrecords file that start with the species name as `species.txt`, for example:    
     ```shell
     Desmodus_rotundus
     Dipodomys_ordii
@@ -35,9 +35,9 @@ For following instructions, we will assume that the files are named after the sp
 4. Create a config file that contains the parameters for training, a config file with default parameter is located at `docs/config.json`. You can find descriptions of key parametes in `bin/train.py`. Start training:
     
     ```shell
-    python bin/train.py --data $tfrecords/ --learnMSA $leanMSA  --cfg config.json
+    python bin/train.py --data $tfrecords/ --learnMSA $leanMSA  --cfg config.json --train_species_file species.txt
     ```
 
-    If you want to train without the HMM layer, you can set 'use_hmm' to false in the config file. This will speed up training and reduce the memory requirements. 
+    If you want to train with the HMM layer, you can use the '--hmm' argument. This will however require more memory and slow training down.
 
-    You can also start a training from an existing model by providing the path to the model with the `--load` argument. This will continue training from the existing model.
+    You can also start a training from an existing model by providing the path to the model with the `--load` argument. This will continue training from the existing model. 

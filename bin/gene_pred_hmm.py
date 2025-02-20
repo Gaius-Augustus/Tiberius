@@ -72,7 +72,7 @@ class GenePredHMMLayer(HmmLayer):
                 variance_l2_lambda=0.01,
                 disable_metrics=True,
                 parallel_factor=1,
-                use_border_hints=True,
+                use_border_hints=False,
                 **kwargs):
         self.num_models = num_models
         self.num_copies = num_copies

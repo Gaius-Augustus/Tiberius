@@ -134,8 +134,11 @@ class PredictionGTF:
                  self.lstm_model.load_weights(self.model_path_lstm + '/variables/variables')
             else:
                 self.lstm_model = keras.models.load_model(self.model_path_lstm, 
-                                          custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
-                                         'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
+                        custom_objects={
+                        'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
+                        'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
+                        "Cast": Cast}
+                        )
             if self.model_path_hmm:
                 model_hmm = keras.models.load_model(self.model_path_hmm, 
                                                     custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
@@ -190,7 +193,7 @@ class PredictionGTF:
                 self.model = keras.models.load_model(self.model_path, 
                                         custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
                                             'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
-                                                            'Cast': Cast})
+                                            "Cast": Cast})
                 
                 if self.hmm:
                     try:
@@ -201,7 +204,9 @@ class PredictionGTF:
                                     inputs=self.model.input, 
                                     outputs=lstm_output
                                     )
-                    self.gene_pred_hmm_layer = self.model.layers[-2] # CHANGED
+
+                    #self.gene_pred_hmm_layer = self.model.layers[-1]
+                    self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
 
                     if self.parallel_factor is not None:
                         self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
@@ -224,21 +229,23 @@ class PredictionGTF:
             # print(f"Adapted batch size to {self.adapted_batch_size} using chunksize {adapted_chunksize}")
             self.load_model(summary=False)
 
-    def init_fasta(self,  genome_path=None, chunk_len=None):
+    def init_fasta(self,  genome_path=None, chunk_len=None, min_seq_len=0):
         if genome_path is None:
             genome_path = self.genome_path
         if chunk_len is None:
             chunk_len = self.seq_len
         if (self.genome):
-            fasta = GenomeSequences(genome=self.genome, chunksize=chunk_len, overlap=0)
+            fasta = GenomeSequences(genome=self.genome, chunksize=chunk_len, 
+                overlap=0, min_seq_len=min_seq_len)
         else:
-            fasta = GenomeSequences(fasta_file=genome_path, chunksize=chunk_len, overlap=0)
+            fasta = GenomeSequences(fasta_file=genome_path, chunksize=chunk_len, 
+                overlap=0, min_seq_len=min_seq_len)
         return fasta
     
     def load_genome_data(self, fasta_object, seq_names, strand='', softmask=True):
         if strand is None:
             strand = self.strand
-            
+        
         fasta_object.encode_sequences(seq=seq_names)
 
         f_chunk, coords, adapted_chunksize = fasta_object.get_flat_chunks(strand=strand, coords=True, 
@@ -401,8 +408,6 @@ class PredictionGTF:
                     clamsa_inp[start_pos:end_pos]
                 ])           
             else:
-                # print(start_pos,end_pos, len(inp_chunks), inp_chunks[start_pos].shape)
-                # y = self.lstm_model.predict_on_batch(inp_chunks[start_pos:end_pos])
                 y = self.lstm_model(inp_chunks[start_pos:end_pos])
             if not self.emb and len(y.shape) == 1:
                 y = np.expand_dims(y,0)
@@ -1057,7 +1062,7 @@ class PredictionGTF:
             em_kernel = make_15_class_emission_kernel(smoothing=1e-6)
         self.gene_pred_hmm_layer = GenePredHMMLayer(
                 emitter_init=ConstantInitializer(em_kernel),
-                initial_exon_len=200, 
+                initial_exon_len=200,
                 initial_intron_len=4500,
                 initial_ir_len=10000,
                 emit_embeddings=False,

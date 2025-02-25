@@ -194,6 +194,10 @@ def main():
     logging.info(f'Batch size: {batch_size}')
     seq_len = args.seq_len
     logging.info(f'Tile length: {seq_len}')
+    min_seq_len = args.min_genome_seqlen
+    logging.info(f'Minimum sequence length: {min_seq_len}')
+    if min_seq_len > 0:
+        logging.info(f'Warning: Sequences shorter than {min_seq_len} will be ignored.')
     check_seq_len(seq_len)    
     strand = [s for s in args.strand.split(',') if s in ['+', '-']]
     logging.info(f'Strand: {strand}')    
@@ -228,21 +232,25 @@ def main():
                 logging.error(f'ERROR: Clamsa input requires softmasking.')
                 sys.exit(1)
             model_file_name = url_weights["Tiberius_denovo"].split('/')[-1]       
-            model_path = download_weigths(url_weights["Tiberius_denovo"], f'{model_weights_dir}/{model_file_name}')  
+            model_path_lstm = download_weigths(url_weights["Tiberius_denovo"], f'{model_weights_dir}/{model_file_name}')  
         elif not softmasking:
             model_file_name = url_weights["Tiberius_nosm"].split('/')[-1]          
-            model_path = download_weigths(url_weights["Tiberius_nosm"], f'{model_weights_dir}/{model_file_name}')  
+            model_path_lstm = download_weigths(url_weights["Tiberius_nosm"], f'{model_weights_dir}/{model_file_name}')  
         else:
             model_file_name = url_weights["Tiberius_default"].split('/')[-1]
             model_path = download_weigths(url_weights["Tiberius_default"], f'{model_weights_dir}/{model_file_name}')
-        print(model_path)
-        if model_path[-3:] == 'tgz':
+        if model_path and model_path[-3:] == 'tgz':
             logging.info(f'Extracting weights to {model_weights_dir}')
             extract_tar_gz(f'{model_path}', f'{model_weights_dir}')
             model_path = model_path[:-4]
+        if model_path_lstm and model_path_lstm[-3:] == 'tgz':
+            logging.info(f'Extracting weights to {model_weights_dir}')
+            extract_tar_gz(f'{model_path_lstm}', f'{model_weights_dir}')
+            model_path_lstm = model_path_lstm[:-4]
         #model_path = f'{model_weights_dir}/{model_file_name}'
         
-        if not os.path.exists(model_path):
+        if (model_path and not os.path.exists(model_path)) or \
+                (model_path_lstm and not os.path.exists(model_path_lstm)):
             logging.error(f'Error: The model weights could not be downloaded. Please download the model weights manually (see README.md) and specify them with --model!')
             sys.exit(1)
 
@@ -269,13 +277,12 @@ def main():
             genome=genome,
             softmask=not args.no_softmasking, strand=s_,
             parallel_factor=parallel_factor,
-            # lstm_cfg=args.lstm_cfg,
         )
         
         pred_gtf.load_model(summary=j==0)
         
-        genome_fasta = pred_gtf.init_fasta(chunk_len=seq_len)
-        
+        genome_fasta = pred_gtf.init_fasta(chunk_len=seq_len, min_seq_len=min_seq_len)
+        genome_seq_dict = {s_n: len(s) for s_n, s in zip(genome_fasta.sequence_names, genome_fasta.sequences)}
         seq_groups = group_sequences(genome_fasta.sequence_names,
                                    [len(s) for s in genome_fasta.sequences],
                                     t=seqgroup_size, chunk_size=seq_len)
@@ -285,7 +292,7 @@ def main():
             x_data, coords, adapted_seqlen = pred_gtf.load_genome_data(genome_fasta, seq,
                                                        softmask=softmasking, strand=s_)
             pred_gtf.adapt_batch_size(adapted_seqlen)
-            # print(x_data.shape)
+
             clamsa=None
             if clamsa_prefix:
                 clamsa = pred_gtf.load_clamsa_data(clamsa_prefix=clamsa_prefix, seq_names=seq, 
@@ -309,6 +316,9 @@ def main():
             filt = True
         # filter out transcripts with cds len shorter than args.filter_short
         if not filt and tx.get_cds_len() < 201:
+            filt = True
+            
+        if not filt and tx.start < 1 or tx.end > genome_seq_dict[tx.chr]:
             filt = True
 
         if not filt:
@@ -405,6 +415,8 @@ def parseCmd():
         help='Number of sub-sequences per batch.', default=16)
     parser.add_argument('--id_prefix', type=str,
         help='Prefix for gene and transcript IDs in output GTF file.', default='')
+    parser.add_argument('--min_genome_seqlen', type=int,
+        help='Minimum length of input sequences used for predictions.', default=0)
         
     return parser.parse_args()
 

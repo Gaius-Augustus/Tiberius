@@ -38,8 +38,7 @@ def main():
             repeat=True,
             filter=False,
             output_size=15,
-            hmm_factor=0,
-            trans=False,clamsa=args.clamsa
+            hmm_factor=0, clamsa=args.clamsa
       )   
     
     for j in range(args.val_size):

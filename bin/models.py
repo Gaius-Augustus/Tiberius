@@ -134,7 +134,8 @@ def lstm_model(units=200, filter_size=64,
                pool_size=10, stride=0, 
                lstm_mask=False, output_size=7,
                multi_loss=False, residual_conv=False,
-               clamsa=False, clamsa_kernel=6, softmasking=True, lru_layer=False
+               clamsa=False, clamsa_kernel=6, softmasking=True, lru_layer=False,
+               lru_hidden_state_dim=200, lru_max_tree_depth=17, lru_init_bounds=''
               ):
     """
     Constructs a hybrid model that combines CNNs and bLSTM layers for gene prediction.
@@ -219,6 +220,9 @@ def lstm_model(units=200, filter_size=64,
     x = Dense(2*units, name='pre_lstm_dense')(x)
     pi = 3.141
     # Bidirectional LSTM layers
+    if not lru_init_bounds:
+        lru_init_bounds = [[[0.,1.,0.,2*pi,1.]] for _ in range(numb_lstm)]
+    print("LRU init bounds: ", lru_init_bounds)
     for i in range(numb_lstm):
         if lru_layer:
             lru_block = lru.LRU_Block(

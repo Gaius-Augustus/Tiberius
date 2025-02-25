@@ -246,7 +246,7 @@ def train_clamsa(generator, model_save_dir, config, val_data=None, model_load=No
                 steps_per_epoch=1000,
                 callbacks=[epoch_callback, csv_logger])
     
-def train_lstm_model(generator, model_save_dir, config, val_data=None, model_load=None):  
+def train_lstm_model(generator, model_save_dir, config, val_data=None, model_load=None, epochs=2000):  
     """Trains the LSTM model using data provided by a generator, while saving the 
     training checkpoints and logging progress. The model can be trained from scratch or from a 
     pre-loaded state.
@@ -292,10 +292,11 @@ def train_lstm_model(generator, model_save_dir, config, val_data=None, model_loa
                          'numb_conv', 'numb_lstm', 'dropout_rate', 
                          'pool_size', 'stride', 'lstm_mask', 'clamsa',
                          'output_size', 'residual_conv', 'softmasking',
-                        'clamsa_kernel', 'lru_layer']
+                        'clamsa_kernel', 'lru_layer', 'lru_hidden_state_dim', 'lru_max_tree_depth', 'lru_init_bounds']
         relevant_args = {key: config[key] for key in relevant_keys if key in config}
         model = lstm_model(**relevant_args)
         if model_load:
+            print("load weights")
             model.load_weights(model_load + '/variables/variables')
         if config["loss_weights"]:
             model.compile(loss=cce_loss, optimizer=optimizer, 
@@ -307,7 +308,7 @@ def train_lstm_model(generator, model_save_dir, config, val_data=None, model_loa
                 metrics=['accuracy'])        
         model.summary()
 
-        model.fit(generator, epochs=2000, validation_data=val_data,
+        model.fit(generator, epochs=epochs, validation_data=val_data,
                 steps_per_epoch=1000,
                 callbacks=[epoch_callback, csv_logger])
 
@@ -515,7 +516,8 @@ def main():
     else:
         train_lstm_model(generator=generator, val_data=val_data,
             model_save_dir=config_dict["model_save_dir"], config=config_dict,
-            model_load=config_dict["model_load"]
+            model_load=config_dict["model_load"],
+            epochs=config_dict["num_epochs"]
         )
 
 if __name__ == '__main__':

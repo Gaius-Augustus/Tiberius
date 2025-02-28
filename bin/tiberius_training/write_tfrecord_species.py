@@ -47,35 +47,31 @@ def get_species_data_hmm(genome_path='', annot_path='', species='',
     fasta = GenomeSequences(fasta_file=genome_path,
             chunksize=seq_len,
             overlap=overlap_size)
-    fasta.encode_sequences()
+    fasta.encode_sequences() 
     seq_names = [seq_n for seq, seq_n in zip(fasta.sequences, fasta.sequence_names) \
                     if len(seq)>seq_len]
     seqs = [len(seq) for seq in fasta.sequences \
                     if len(seq)>seq_len]
     f_chunk, _, _ = fasta.get_flat_chunks(strand='+', pad=False)
     del fasta
-    full_f_chunks = np.concatenate((f_chunk[::-1,::-1, [3,2,1,0,4,5]], 
+    full_f_chunks = np.concatenate((f_chunk[::-1,::-1, [3,2,1,0,4,5]],
                                     f_chunk), axis=0)
     
     del f_chunk
-    ref_anno = GeneStructure(annot_path, 
-                        chunksize=seq_len, 
-                        overlap=overlap_size)    
+    ref_anno = GeneStructure(annot_path,
+                        chunksize=seq_len,
+                        overlap=overlap_size)
         
     ref_anno.translate_to_one_hot_hmm(seq_names, 
                             seqs, transition=transition)
     del ref_anno.gene_structures
 
-    r_chunk_minus, tx_ids_minus = \
-        ref_anno.get_flat_chunks_hmm(seq_names, strand='-', transcript_ids=True)
-    r_chunk_plus, tx_ids_plus = \
-        ref_anno.get_flat_chunks_hmm(seq_names, strand='+', transcript_ids=True)
+    full_r_chunks = np.concatenate((ref_anno.get_flat_chunks_hmm(seq_names, strand='-'), 
+                                    ref_anno.get_flat_chunks_hmm(seq_names, strand='+')), 
+                                   axis=0)
+    del ref_anno    
     
-    full_r_chunks = np.concatenate((r_chunk_minus, r_chunk_plus), axis=0)
-    tx_ids = np.concatenate((tx_ids_minus, tx_ids_plus), axis=0)
-    del ref_anno
-    
-    return full_f_chunks, full_r_chunks, tx_ids
+    return full_f_chunks, full_r_chunks
 
 def write_h5(fasta, ref, out, ref_phase=None, split=100, 
                     trans=False, clamsa=np.array([])):
@@ -114,22 +110,22 @@ def write_numpy(fasta, ref, out, ref_phase=None, split=100, trans=False, clamsa=
             np.savez(f'{out}_{k}.npz', array1=fasta[indices[k::split],:,:], 
                      array2=ref[indices[k::split],:,:], )
     
-def write_tf_record(fasta, ref, tx_ids, out, 
-        ref_phase=None, split=100, trans=False, clamsa=np.array([])):
+def write_tf_record(fasta, ref, out, ref_phase=None, split=100, trans=False, clamsa=np.array([])):
     fasta = fasta.astype(np.int32)          
     ref = ref.astype(np.int32)
-    # tx_ids = tx_ids.astype(str)
+
     file_size = fasta.shape[0] // split
     indices = np.arange(fasta.shape[0])
     np.random.shuffle(indices)
     print(clamsa.shape, fasta.shape, trans)
     if ref_phase:
         ref_phase = ref_phase.astype(np.int32)
+    for k in range(split):
+        print(f'Writing split {k+1}/{split}')        
 
     def create_example(i):
         feature_bytes_x = tf.io.serialize_tensor(fasta[i,:,:]).numpy()
         feature_bytes_y = tf.io.serialize_tensor(ref[i,:,:]).numpy()
-        feature_bytes_t = tf.io.serialize_tensor(tx_ids[i,:]).numpy()
         if ref_phase is not None:
             feature_bytes_y_phase = tf.io.serialize_tensor(ref_phase[i,:,:]).numpy()                
             example = tf.train.Example(features=tf.train.Features(feature={
@@ -166,9 +162,7 @@ def write_tf_record(fasta, ref, tx_ids, out,
                 'input': tf.train.Feature(
                     bytes_list=tf.train.BytesList(value=[feature_bytes_x])),
                 'output': tf.train.Feature(
-                    bytes_list=tf.train.BytesList(value=[feature_bytes_y])),
-                'tx_ids': tf.train.Feature(
-                    bytes_list=tf.train.BytesList(value=[feature_bytes_t]))
+                    bytes_list=tf.train.BytesList(value=[feature_bytes_y]))
             }))
         return example.SerializeToString()
 
@@ -184,7 +178,7 @@ def write_tf_record(fasta, ref, tx_ids, out,
 def main():
     args = parseCmd()
     
-    fasta, ref, tx_ids = get_species_data_hmm(genome_path=args.fasta, annot_path=args.gtf, 
+    fasta, ref = get_species_data_hmm(genome_path=args.fasta, annot_path=args.gtf, 
                                       species=args.species, seq_len=args.wsize,
             overlap_size=0, transition=True)
     
@@ -203,7 +197,7 @@ def main():
         elif args.np:
             write_numpy(fasta, ref, args.out)
         else:
-            write_tf_record(fasta, ref, tx_ids, args.out)
+            write_tf_record(fasta, ref, args.out)
 
 def parseCmd():
     """Parse command line arguments

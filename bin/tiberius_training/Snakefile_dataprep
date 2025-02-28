@@ -1,0 +1,216 @@
+orthoDBlinks = [
+    ("level2species.tab", "https://data.orthodb.org/v11/download/odb11v0_level2species.tab.gz"),
+    ("levels.tab", "https://data.orthodb.org/v11/download/odb11v0_levels.tab.gz")]
+
+configfile: "config.yaml"
+
+# Precompute the split for each species based on your config lists
+TRAIN_SPECIES = config["species_split"]["train"]
+VAL_SPECIES   = config["species_split"]["val"]
+TEST_SPECIES  = config["species_split"]["test"]
+SPECIES = TRAIN_SPECIES + VAL_SPECIES + TEST_SPECIES
+
+# Combine all species for convenience
+SPECIES = TRAIN_SPECIES + VAL_SPECIES + TEST_SPECIES
+
+species_to_split = {}
+for sp in SPECIES:
+    if sp in TRAIN_SPECIES:
+        species_to_split[sp] = "train"
+    elif sp in VAL_SPECIES:
+        species_to_split[sp] = "val"
+    elif sp in TEST_SPECIES:
+        species_to_split[sp] = "test"
+
+rule all:
+    input:
+        expand("species/{species}/BUSCO/busco.done", species=SPECIES) +
+        ["tfrecords/{}/{}_done.txt".format(species_to_split[sp], sp) for sp in SPECIES] +
+        expand("tfrecords/{split}/species.txt", split=["train", "val", "test"])+
+        expand("species/{species}/annot/tx_nonstandard.txt", species=SPECIES) +
+        expand("species/{species}/annot/tx_repeat.txt", species=SPECIES) +
+        expand("species/{species}/evidence/prot/hintsfile.gff", species=SPECIES)
+
+
+rule busco_lineage:
+    output:
+       "busco_downloads/lineages/viridiplantae_odb10/busco_download.done"
+    singularity: "docker://ezlabgva/busco:v5.8.2_cv1"
+    threads: int(config['SLURM_ARGS']['cpus_per_task'])
+    resources:
+        mem_mb = int(config['SLURM_ARGS']['mem_of_node']),
+        runtime = int(config['SLURM_ARGS']['max_runtime'])
+    # log: WORK_DIR + "/species/{species}/BUSCO/busco.log"
+    shell:
+        """
+        busco --download viridiplantae_odb10
+        touch {output}
+        """
+
+rule busco:
+    input:
+        protein = "species/{species}/prot/protein.faa",
+        busco_lin = "busco_downloads/lineages/viridiplantae_odb10/busco_download.done"
+    output:
+        "species/{species}/BUSCO/busco.done"
+    singularity: "docker://ezlabgva/busco:v5.8.2_cv1"
+    threads: int(config['SLURM_ARGS']['cpus_per_task'])
+    resources:
+        mem_mb = int(config['SLURM_ARGS']['mem_of_node']),
+        runtime = int(config['SLURM_ARGS']['max_runtime'])
+    shell:
+        """
+        busco -m protein \
+            -i {input.protein} -c {threads} \
+            -o  species/{wildcards.species}/BUSCO/ \
+            -l viridiplantae_odb10 -f
+        touch {output}
+        """
+
+rule reformat_annot:
+    input:
+        "species/{species}/annot/annot.gtf"
+    output:
+        "species/{species}/annot/annot_reformat.gtf"
+    resources:
+        mem_mb=int(config['SLURM_ARGS']['mem_of_node']),
+        runtime=int(config['SLURM_ARGS']['max_runtime'])
+    shell:
+        "python3 /home/gabriell/Tiberius/bin/tiberius_training/reformat_gtf.py --input {input} --out {output} --prefix {wildcards.species}_"
+
+rule longest_isoform:
+    input:
+        "species/{species}/annot/annot_reformat.gtf"
+    output:
+        "species/{species}/annot/annot_longest.gtf"
+    # singularity: "docker://larsgabriel23/tiberius:latest"
+    resources:
+        mem_mb=int(config['SLURM_ARGS']['mem_of_node']),
+        runtime=int(config['SLURM_ARGS']['max_runtime'])
+    shell:
+        "python3 /home/gabriell/Tiberius/bin/get_longest_isoform.py {input} > {output}"
+
+rule prot_evi:
+    input:
+        genome="species/{species}/genome/genome.fa",
+        orthodb="orthodb/brassicales_excluded.fa"
+    output:
+        "species/{species}/evidence/prot/hintsfile.gff"
+    # singularity: "docker://larsgabriel23/tiberius:latest"    
+    threads: int(config['SLURM_ARGS']['cpus_per_task'])
+    resources:
+        mem_mb=int(config['SLURM_ARGS']['mem_of_node']),
+        runtime=int(config['SLURM_ARGS']['max_runtime'])
+    shell:
+      """
+        mkdir -p species/{wildcards.species}/evidence/prot/
+        python3 /home/gabriell/evidence_pipeline/EvidencePipeline/bin/evidence_pipeline.py --restart -t {threads} -g {input.genome} -p {input.orthodb} --output_path species/{wildcards.species}/evidence/prot/
+      """
+rule annot_stats:
+    input:
+        gtf="species/{species}/annot/annot_reformat.gtf",
+        fasta="species/{species}/genome/genome.fa"
+    output:
+        "species/{species}/annot/annot_stats.csv"
+    resources:
+        mem_mb=int(config['SLURM_ARGS']['mem_of_node']),
+        runtime=int(config['SLURM_ARGS']['max_runtime'])
+    shell:
+        "python3 /home/gabriell/Tiberius/bin/tiberius_training/get_gtf_stats.py --gtf {input.gtf} --fasta {input.fasta} --out {output}"
+
+rule tx_nonstandard:
+    input:
+        "species/{species}/annot/annot_stats.csv"
+    output:
+        "species/{species}/annot/tx_nonstandard.txt"
+    resources:
+        mem_mb=int(config['SLURM_ARGS']['mem_of_node']),
+        runtime=int(config['SLURM_ARGS']['max_runtime'])
+    shell:
+        "python3 /home/gabriell/Tiberius/bin/tiberius_training/get_tx_nonstandard.py --stats {input} --out {output}"
+    
+rule tx_repeat:
+    input:
+        "species/{species}/annot/annot_stats.csv"
+    output:
+        "species/{species}/annot/tx_repeat.txt"
+    resources:
+        mem_mb=int(config['SLURM_ARGS']['mem_of_node']),
+        runtime=int(config['SLURM_ARGS']['max_runtime'])
+    shell:
+        "python3 /home/gabriell/Tiberius/bin/tiberius_training/get_tx_repeat.py --stats {input} --out {output}"
+
+rule tfrecord:
+    output:
+        "tfrecords/{split}/{species}_done.txt"
+    input:
+        gtf   = "species/{species}/annot/annot_longest.gtf",
+        fasta = "species/{species}/genome/genome.fa"
+    # singularity: "docker://larsgabriel23/tiberius:latest"
+    threads: int(config['SLURM_ARGS']['cpus_per_task'])
+    resources:
+        mem_mb=int(config['SLURM_ARGS']['mem_of_node']),
+        runtime=int(config['SLURM_ARGS']['max_runtime'])
+    log: "tfrecords/{split}/log_{species}.txt"
+    shell:
+        """
+        mkdir -p "tfrecords/{wildcards.split}"        
+        python3 /home/gabriell/Tiberius/bin/write_tfrecord_species.py --wsize 9999 --gtf {input.gtf} --fasta {input.fasta} --out tfrecords/{wildcards.split}/{wildcards.species} &> {log}
+        touch {output}
+        """
+
+rule write_species_list:
+    output:
+        species_list = "tfrecords/{split}/species.txt"
+    run:
+        # Get the species list for the given split from the config file.
+        species = config["species_split"][wildcards.split]
+        # Ensure the output directory exists.
+        import os
+        outdir = os.path.dirname(output.species_list)
+        os.makedirs(outdir, exist_ok=True)
+        # Write each species name to the file.
+        with open(output.species_list, "w") as f:
+            for sp in species:
+                f.write(sp + "\n")
+
+rule validation:
+    output:
+        "tfrecords/val/validation.npz"
+    input:
+        "tfrecords/val/done.txt"
+    singularity: "docker://larsgabriel23/tiberius:latest"
+    threads: int(config['SLURM_ARGS']['cpus_per_task'])
+    resources:
+        mem_mb=int(config['SLURM_ARGS']['mem_of_node']),
+        runtime=int(config['SLURM_ARGS']['max_runtime'])
+    shell:
+        """
+        validation_from_tfrecords.py --tfrec_dir tfrecords/val --species species/val_species.txt --tfrec_per_species 100 --val_size 2000 --batch_size 100 --out {output}
+        """
+
+rule unzip:
+    input:
+        ["orthodb/{f}.gz".format(f=filename) for (filename, _) in orthoDBlinks]
+    output:
+        ["orthodb/{f}".format(f=filename) for (filename, _) in orthoDBlinks]
+    shell:
+        "gunzip {input}"
+
+rule download:
+    output:
+        ["orthodb/{f}.gz".format(f=filename) for (filename, _) in orthoDBlinks]
+    run:
+        for i in range(len(orthoDBlinks)):
+            shell("wget {link} -O {chain_file}".format(
+                link=orthoDBlinks[i][1], chain_file=output[i]))
+
+rule selectArabiOrderExcl:
+    input:
+        "orthodb/Viridiplantae.fa",
+        "orthodb/levels.tab",
+        "orthodb/level2species.tab"
+    output:
+        "orthodb/brassicales_excluded.fa"
+    shell:
+        "/home/gabriell/programs/orthodb-clades/selectClade.py {input} Viridiplantae --exclude Brassicales > {output}"

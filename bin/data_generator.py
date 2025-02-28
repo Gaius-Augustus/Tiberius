@@ -35,11 +35,11 @@ class DataGenerator:
                  repeat=True,                  
                  filter=False,
                  output_size=5,
-                hmm_factor=None,
-                # trans=False, trans_lstm=False, 
+                hmm_factor=None, 
                  seq_weights=0, softmasking=True,
                 clamsa=False,
-                oracle=False):
+                oracle=False,
+                tx_filter=None):
         self.file_path = file_path
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -48,11 +48,10 @@ class DataGenerator:
         self.seq_weights = seq_weights
         self.output_size = output_size
         self.hmm_factor = hmm_factor
-        # self.trans=trans
-        # self.trans_lstm=trans_lstm
         self.softmasking=softmasking
         self.clamsa = clamsa
         self.oracle = oracle
+        self.tx_filter = set(tx_filter)
         
         self.dataset = self._read_tfrecord_file(repeat=repeat)
         self.iterator = iter(self.dataset)
@@ -69,13 +68,15 @@ class DataGenerator:
         features = {
             'input': tf.io.FixedLenFeature([], tf.string),
             'output': tf.io.FixedLenFeature([], tf.string),
+            'tx_ids': tf.io.FixedLenFeature([], tf.string),
             #'output_phase': tf.io.FixedLenFeature([], tf.string)
         }
         parsed_features = tf.io.parse_single_example(example, features)
         x = tf.io.parse_tensor(parsed_features['input'], out_type=tf.int32)
         y = tf.io.parse_tensor(parsed_features['output'], out_type=tf.int32)
+        t = tf.io.parse_tensor(parsed_features['tx_ids'], out_type=tf.string)
         #y_phase = tf.io.parse_tensor(parsed_features['output_phase'], out_type=tf.int32)
-        return x, y#, y_phase
+        return x, y, t#, y_phase
     
     def _parse_fn_clamsa(self, example):
         """Parse function for decoding TFRecord examples including clamsa data.
@@ -141,7 +142,7 @@ class DataGenerator:
         if repeat:
             dataset = dataset.repeat()
 
-        dataset = dataset.batch(self.batch_size, drop_remainder=True)
+        #dataset = dataset.batch(self.batch_size, drop_remainder=True)
         dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
 
         return dataset
@@ -209,12 +210,24 @@ class DataGenerator:
         Returns:
             Tuple[tf.Tensor, List[tf.Tensor]]: Batch of input and output tensors.
         """       
-        if self.clamsa:
-            # expect an additional clamsa track
-            x_batch, y_batch, clamsa_track = next(self.iterator)
-            clamsa_track = np.array(clamsa_track)                
-        else:
-            x_batch, y_batch = next(self.iterator)
+        x_batch = []
+        y_batch = []
+
+        while len(x_batch) < self.batch_size:
+            x, y, t = next(self.iterator)
+            # print(t, tf.shape(t))
+            set_t = set([i[0].numpy().decode('utf-8') for i in t]) if len(tf.shape(t)) > 1 else set([t[0].numpy().decode('utf-8')])
+            if set_t.intersection(self.tx_filter):
+                continue
+            x_batch.append(x)
+            y_batch.append(y)
+            
+        # if self.clamsa:
+        #     # expect an additional clamsa track
+        #     x_batch, y_batch, clamsa_track = next(self.iterator)
+        #     clamsa_track = np.array(clamsa_track)                
+        # else:
+        #     x_batch, y_batch, t_batch = next(self.iterator)
         x_batch = np.array(x_batch)
         y_batch = np.array(y_batch)
          
@@ -270,6 +283,18 @@ class DataGenerator:
                     y_new[:,:,1] = np.sum(y_batch[:,:,[4, 7, 10, 12]], axis=-1)   
                     y_new[:,:,2] = np.sum(y_batch[:,:,[5, 8, 13]], axis=-1)
                     y_new[:,:,3] = np.sum(y_batch[:,:,[6, 9, 11, 14]], axis=-1)
+                y_batch = y_new
+            elif y_batch.shape[-1] == 20:
+                if self.output_size == 20:
+                    y_new = y_batch.astype(np.float32)
+                elif self.output_size == 15:
+                    y_new = np.zeros((y_batch.shape[0], y_batch.shape[1], 15), np.float32)
+                    y_new = y_batch[:,:,:15]
+                    y_new[:,:,4] = np.sum(y_batch[:,:,[4, 16]], axis=-1)
+                    y_new[:,:,5] = np.sum(y_batch[:,:,[5, 17]], axis=-1)
+                    y_new[:,:,6] = np.sum(y_batch[:,:,[6, 18]], axis=-1)
+                    y_new[:,:,7] = np.sum(y_batch[:,:,[7, 15]], axis=-1)
+                    y_new[:,:,14] = np.sum(y_batch[:,:,[14, 19]], axis=-1)
                 y_batch = y_new
         
         if self.hmm_factor:

@@ -1,0 +1,15 @@
+species_split:
+  test:
+  - Arabidopsis_thaliana
+  train:
+  - Arabidopsis_arenosa
+  - Arabidopsis_lyrata
+  - Arabidopsis_suecica
+  val:
+  - Arabidopsis_halleri
+work_dir: /home/gabriell/tiberius_training/Arabidopsis/data
+
+SLURM_ARGS:
+  cpus_per_task: 48
+  mem_of_node: 126000
+  max_runtime: 4320

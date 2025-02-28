@@ -687,6 +687,24 @@ class PredictionGTF:
                 # A = make_aggregation_matrix(k=1)
                 # new_y_lstm = tf.matmul(y_lstm, A)
                 new_y_lstm = y_lstm
+            elif y_lstm.shape[-1] == 20:
+                new_y_lstm = tf.stack([
+                    y_batch[..., 0],
+                    y_batch[..., 1],
+                    y_batch[..., 2],
+                    y_batch[..., 3],
+                    tf.reduce_sum(tf.gather(y_batch, [4, 16], axis=-1), axis=-1),
+                    tf.reduce_sum(tf.gather(y_batch, [5, 17], axis=-1), axis=-1),
+                    tf.reduce_sum(tf.gather(y_batch, [6, 18], axis=-1), axis=-1),
+                    tf.reduce_sum(tf.gather(y_batch, [7, 15], axis=-1), axis=-1),
+                    y_batch[..., 8],
+                    y_batch[..., 9],
+                    y_batch[..., 10],
+                    y_batch[..., 11],
+                    y_batch[..., 12],
+                    y_batch[..., 13],
+                    tf.reduce_sum(tf.gather(y_batch, [14, 19], axis=-1), axis=-1)
+                ], axis=-1)
             elif y_lstm.shape[-1] == 2:
                 new_y_lstm = tf.concat([
                     y_lstm[:,:,:1]/2,

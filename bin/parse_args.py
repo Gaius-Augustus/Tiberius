@@ -25,6 +25,8 @@ def parseCmd():
     #     help='')
     parser.add_argument('--data',  type=str, default='',
         help='')
+    parser.add_argument('--filter_tx',  type=str, default='',
+        help='')
     parser.add_argument('--val_data',  type=str, default='',
         help='')
     parser.add_argument('--train_species_file',  type=str, default='train_species_filtered.txt',

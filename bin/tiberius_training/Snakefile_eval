@@ -1,0 +1,85 @@
+# Example Snakefile
+configfile: "config.yaml"
+import os
+import re
+import glob
+
+# Lists to store matches
+train_list = []
+epoch_list = []
+
+# Use glob to find all paths matching train/train*/epoch*
+for path in glob.glob("train/train*/epoch*"):
+    # Check if it's really a directory (and not a file)
+    if os.path.isdir(path):
+        # Extract the numeric (or string) portion of train and epoch using a regex
+        # e.g. path = "train/train1/epoch00"
+        match = re.match(r"^train/train(\S+)/epoch(\S+)$", path)
+        if match:
+            train_list.append(match.group(1))
+            epoch_list.append(match.group(2))
+
+# Now train_list and epoch_list contain only directory-based matches
+# We'll mock up a small "struct" for convenience
+from collections import namedtuple
+TrainEpochMatches = namedtuple("TrainEpochMatches", ["train", "epoch"])
+train_epoch_matches = TrainEpochMatches(train_list, epoch_list)
+print(train_epoch_matches)
+########################################
+# Snakefile rules
+########################################
+
+rule all:
+    # We want the final gffcompare outputs for each discovered directory
+    input:
+        expand(
+            "eval/train{train}/epoch{epoch}.stats",
+            zip,
+            train=train_epoch_matches.train,
+            epoch=train_epoch_matches.epoch
+        )
+
+
+rule run_tiberius:
+    """
+    Generate the GTF for each epoch using tiberius.py.
+    """
+    input:
+        # Path to the epoch weights in train/train{train}/epoch{epoch}
+        "train/train{train}/epoch{epoch}"
+    output:
+        # Output GTF file
+        "eval/train{train}/epoch{epoch}.gtf"
+    #singularity: "docker://larsgabriel23/tiberius:latest"
+    threads: int(config['SLURM_ARGS']['cpus_per_task'])
+    log: "eval/train{train}/epoch{epoch}.log"
+    resources:
+        mem_mb=int(config['SLURM_ARGS']['mem_of_node']),
+        runtime=int(config['SLURM_ARGS']['max_runtime']),
+        slurm_extra="-G 1"
+    # conda: "envs/tf2_10.yaml"
+    shell:
+        """
+        source ~//anaconda3/etc/profile.d/conda.sh && conda activate tf2_10 && \
+        /home/gabriell/Tiberius/bin/tiberius.py \
+          --genome /home/gabriell/tiberius_training/Arabidopsis/data/species/Arabidopsis_thaliana/genome/genome.fa \
+          --model_lstm {input} \
+          --out {output} --learnMSA ~/install/learnMSA &> {log}
+        """
+
+rule run_gffcompare:
+    """
+    Run gffcompare on the generated GTF file.
+    """
+    input:
+        "eval/train{train}/epoch{epoch}.gtf"
+    output:
+        "eval/train{train}/epoch{epoch}.stats"
+    shell:
+        """
+        gffcompare \
+          -r /home/gabriell/tiberius_training/Arabidopsis/data/species/Arabidopsis_thaliana/annot/annot.gtf \
+          --strict-match -e 0 -T --no-merge \
+          {input} \
+          -o eval/train{wildcards.train}/epoch{wildcards.epoch}
+        """

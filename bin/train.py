@@ -306,7 +306,7 @@ def train_lstm_model(generator, model_save_dir, config, val_data=None, model_loa
         model.summary()
 
         model.fit(generator, epochs=2000, validation_data=val_data,
-                steps_per_epoch=1000,
+                steps_per_epoch=5000,
                 callbacks=[epoch_callback, csv_logger])
 
 def load_val_data(file, hmm_factor=1, output_size=7, clamsa=False, softmasking=True, oracle=False):
@@ -453,6 +453,7 @@ def main():
     config_dict['model_save_dir'] = os.path.abspath(args.out)
     config_dict['model_load_lstm'] = os.path.abspath(args.load_lstm) if args.load_lstm else None
     config_dict['model_load_hmm'] = os.path.abspath(args.load_hmm) if args.load_hmm else None
+    config_dict['filter_tx'] = os.path.abspath(args.filter_tx) if args.filter_tx else None
     
     data_path = args.data
                                                  
@@ -467,8 +468,9 @@ def main():
     # get paths of tfrecord files
     species_file = f'{args.data}/{args.train_species_file}'
     species = read_species(species_file)
-    file_paths = [f'{data_path}/{s}_{i}.tfrecords' for s in species for i in range(99)]
-
+    file_paths = [f'{data_path}/{s}_{i}.tfrecords' for s in species for i in range(100)]
+    tx_filter = read_species(config_dict['filter_tx'])
+    print(len(tx_filter))
     # init tfrecord generator
     generator = DataGenerator(file_path=file_paths, 
           batch_size=config_dict['batch_size'], 
@@ -481,7 +483,8 @@ def main():
           softmasking=config_dict["softmasking"],
           clamsa=False if not "clamsa" in config_dict else config_dict["clamsa"],
           # trans_lstm = config_dict['nuc_trans'],
-          oracle=False if 'oracle' not in config_dict else config_dict['oracle']
+          oracle=False if 'oracle' not in config_dict else config_dict['oracle'],
+          tx_filter=tx_filter
       )
         
     if args.val_data:

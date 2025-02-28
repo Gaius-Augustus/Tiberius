@@ -6,6 +6,7 @@
 
 import numpy as np
 import sys 
+from collections import defaultdict
 
 class GeneStructure:
     """Handles gene structure information from a gtf file, 
@@ -25,6 +26,7 @@ class GeneStructure:
         self.overlap = overlap
 
         self.gene_structures = []
+        self.tx_ranges = {}
 
         # one hot encoding for each sequence (intergenic [0], CDS [1], intron [2])
         self.one_hot = None
@@ -41,33 +43,29 @@ class GeneStructure:
             self.load_np_array(self.np_file)
 
     def read_gtf(self, filename):
-        """Read gene structure information from a GTF file.
-
-        Arguments:
-            filename (str): Path to GTF file."""
         with open(filename, 'r') as f:
             for line in f:
-                # Skip comments and header lines
                 if line.startswith('#') or line.startswith('track'):
                     continue
-                
-                # Parse the GTF line
-                line_parts = line.strip().split('\t')
-                
-                # Extract the gene structure information
-                chromosome = line_parts[0]
-                feature = line_parts[2]
-                strand =  line_parts[6]
-                phase = line_parts[7]
-                
-                start = int(line_parts[3])
-                end = int(line_parts[4])
-                
-                # Store the gene structure information
-                self.gene_structures.append((chromosome, feature, strand, phase, start, end))
-        
-        # Sort the gene structures by chromosome and end position
-        self.gene_structures.sort(key=lambda x: (x[0], x[5]))
+                parts = line.strip().split('\t')
+                chromosome, source, feature, start, end, score, strand, phase, attributes = parts
+                # Extract transcript_id from attributes
+                transcript_id = None
+                if 'transcript_id' in attributes:
+                    transcript_id = attributes.split('transcript_id "')[1].split('"')[0]
+                elif 'ID' in attributes:
+                    transcript_id = attributes.split('ID=')[1].split(';')[0]
+                else:
+                    # Fallback to gene_id if transcript_id is missing
+                    transcript_id = attributes.split('gene_id "')[1].split('"')[0]
+                if transcript_id and transcript_id not in self.tx_ranges:
+                    self.tx_ranges[transcript_id] = [int(start), int(end)]
+                elif transcript_id:
+                    self.tx_ranges[transcript_id][0] = min(int(start), self.tx_ranges[transcript_id][0])
+                    self.tx_ranges[transcript_id][1] = min(int(end), self.tx_ranges[transcript_id][1])
+                # Append as a 7-tuple
+                self.gene_structures.append((chromosome, feature, strand, phase, int(start), int(end), transcript_id))
+
     
     def save_to_file(self, filename):
         """Save one-hot encoding to a numpy file.
@@ -80,100 +78,146 @@ class GeneStructure:
     def load_np_array(self):
         """Load one-hot encoding from a numpy file."""
         self.one_hot = np.load(self.np_file)
-        
+
     def translate_to_one_hot_hmm(self, sequence_names, sequence_lengths, transition=False):
-        """Translate gene structure information to one-hot encoding.
-            7 classes IR, I0, I1, I2, E0, E1, E2
+        """
+        A faster, more vectorized version to translate gene structure information to one-hot encoding.
 
-        Arguments:
-            sequence_names (list): Names of sequences.
-            sequence_lengths (list): Lengths of sequences."""
-        
-        self.one_hot = {}
+        If transition is True, then for multi-exon genes we use 15 labels:
+            0: Intergenic (IR)
+            1-3: Intron (I0, I1, I2) based on reading frame from preceding CDS
+            4-6: Exon interior (E0, E1, E2)
+            7: START (first base of a multi-exon transcript)
+            8-10: Exon-to-intron transition (EI0, EI1, EI2)
+            11-13: Intron-to-exon transition (IE0, IE1, IE2)
+            14: STOP (last base of a multi-exon transcript)
+        Single-exon genes (when transition=True) get additional 5 labels:
+            15: START_single
+            16-18: Exon_Single (depending on reading frame)
+            19: STOP_single
 
-        numb_labels = 7
-        if transition:
-            numb_labels = 15
-            
-        # Initialize a numpy array to store the one-hot encoded positions
-        for strand in ['+', '-']:
-            self.one_hot[strand] = {seq : np.zeros((seq_l, numb_labels), dtype=np.int8) \
-                for seq, seq_l in zip(sequence_names, sequence_lengths)}
-            for seq in sequence_names:
-                self.one_hot[strand][seq][:, 0] =  1
-        # Set the one-hot encoded positions for each gene structure
-        for chromosome, feature, strand, phase, start, end in self.gene_structures:    
-            if chromosome not in sequence_names:
+        If transition is False, only 7 labels are used:
+            0: IR, 1-3: Intron, 4-6: Exon.
+        """
+
+        # Determine total number of labels.
+        total_labels = 20 if transition else 7
+
+        # Pre-allocate one-hot arrays for each strand and sequence.
+        self.one_hot = {strand: {} for strand in ['+', '-']}
+        for strand in self.one_hot:
+            for seq, seq_len in zip(sequence_names, sequence_lengths):
+                arr = np.zeros((seq_len, total_labels), dtype=np.int8)
+                # Default label is intergenic (IR, index 0)
+                arr[:, 0] = 1
+                self.one_hot[strand][seq] = arr
+
+        # Group CDS features by transcript_id.
+        # Each gene structure tuple is assumed to be: 
+        # (chrom, feature, strand, phase, start, end, transcript_id)
+        transcripts = defaultdict(lambda: {"CDS": []})
+        for gs in self.gene_structures:
+            if len(gs) < 7:
+                continue  # Skip entries without transcript_id.
+            chrom, feature, strand, phase, start, end, tx_id = gs
+            if chrom not in sequence_names:
                 continue
-            if chromosome not in self.one_hot[strand]:
-                raise KeyError(f"Sequence in fasta '{chromosome}' not found in GTF file.")                      
-            if feature == 'CDS':
-                exon_start = (3 - int(phase)) % 3
-                self.one_hot[strand][chromosome][start-1:end, 0] = 0
-                
-                one_help = (np.linspace(0, end-start, end-start+1) + exon_start) % 3
-                if strand == '-':
-                    one_help = one_help[::-1]
-                self.one_hot[strand][chromosome][start-1:end, 4:7] = \
-                    np.eye(3)[one_help.astype(int)]
-                    
-        for chromosome, feature, strand, phase, start, end in self.gene_structures:
-            if chromosome not in sequence_names:
+            if feature == "CDS":
+                transcripts[tx_id]["CDS"].append((start, end))
+                transcripts[tx_id]["chrom"] = chrom
+                transcripts[tx_id]["strand"] = strand
+
+        for tx_id, info in transcripts.items():
+            if not info["CDS"]:
                 continue
-            if feature == 'intron':                
-                if strand == '+':
-                    idx = start - 2
-                    if transition:
-                        idx = start - 3
-                    exon_strand = np.argmax(self.one_hot[strand][chromosome][idx]) - 4
-                else:
-                    idx = end
-                    if transition:
-                        idx = end + 1 
-                    exon_strand = np.argmax(self.one_hot[strand][chromosome][idx])-4
-                self.one_hot[strand][chromosome][start-1:end, 1 + exon_strand] = 1
-                self.one_hot[strand][chromosome][start-1:end, 0] = 0  
-        
-        if transition:
-            def calculate_index(array, position, default, offset, condition):
-                if condition:
-                    return default
-                else:
-                    return np.argmax(array[position, :4]) + offset
+            chrom = info["chrom"]
+            strand = info["strand"]
 
-            def update_one_hot(self, strand, chromosome, position, index):
-                self.one_hot[strand][chromosome][position] = 0
-                self.one_hot[strand][chromosome][position, index] = 1
-                
-            # states : Ir, I0, I1, I2, E0, E1, E2, START, EI0, EI1, EI2, IE0, IE1, IE2, STOP
-            for chromosome, feature, strand, phase, start, end in self.gene_structures:
-                if chromosome not in sequence_names:
-                    continue
-                if feature == 'CDS':
-                    if strand == '+':
-                        prev_condition = start - 2 < 0
-                        prev = calculate_index(self.one_hot[strand][chromosome], start - 2, 7, 10, prev_condition)
-                        prev = 7 if prev == 10 else prev
-                        
-                        end_condition = end >= len(self.one_hot[strand][chromosome])
-                        after = calculate_index(self.one_hot[strand][chromosome], end, 14, 7, end_condition)
-                        after = 14 if after == 7 else after
+            # Convert CDS list to a NumPy array for vectorized operations.
+            # Each row is (start, end, phase)
+            cds_list = info["CDS"]
+            if strand == '+':
+                cds_list.sort(key=lambda x: x[0])
+            else:
+                cds_list.sort(key=lambda x: x[0], reverse=True)
+            is_single_exon = (len(cds_list) == 1)
 
-                        update_one_hot(self, strand, chromosome, start-1, prev)
-                        update_one_hot(self, strand, chromosome, end-1, after)                        
+            # Process exons while computing phases from scratch.
+            exon_info = []  # Will store tuples: (start, end, computed_phase, frames_array)
+            running_total = 0  # Sum of exon lengths processed so far.
+            for seg in cds_list:
+                start, end = seg
+                # Compute the phase for this exon.
+                computed_phase = (3 - (running_total % 3)) % 3  # First exon gets 0.
+                s_idx = start - 1  # Convert 1-indexed to 0-indexed.
+                e_idx = end        # Python slice end is exclusive.
+                # Calculate an offset to assign reading frame labels.
+                # (The idea is that after "removing" computed_phase bases from the start,
+                # the remaining bases are in frame 0.)
+                offset = (3 - computed_phase) % 3
+                length = e_idx - s_idx
+                # Compute reading frame for each base in this exon.
+                frames = (np.arange(length) + offset) % 3
+
+                # Clear the exon region (remove default IR label) and assign the exon interior.
+                self.one_hot[strand][chrom][s_idx:e_idx, :] = 0
+                if transition:
+                    if is_single_exon:
+                        self.one_hot[strand][chrom][s_idx:e_idx, 16:19] = np.eye(3, dtype=np.int8)[frames]
                     else:
-                        end_condition = end >= len(self.one_hot[strand][chromosome])
-                        prev = calculate_index(self.one_hot[strand][chromosome], end, 7, 10, end_condition)
-                        prev = 7 if prev == 10 else prev
+                        self.one_hot[strand][chrom][s_idx:e_idx, 4:7] = np.eye(3, dtype=np.int8)[frames]
+                else:
+                    self.one_hot[strand][chrom][s_idx:e_idx, 4:7] = np.eye(3, dtype=np.int8)[frames]
+                if strand == '-':
+                    self.one_hot[strand][chrom][s_idx:e_idx, :] = self.one_hot[strand][chrom][s_idx:e_idx][::-1]
 
-                        start_condition = start - 2 < 0
-                        after = calculate_index(self.one_hot[strand][chromosome], start - 2, 14, 7, start_condition)
-                        after = 14 if after == 7 else after
+                exon_info.append((start, end, computed_phase, frames))
+                running_total += (e_idx - s_idx)
 
-                        update_one_hot(self, strand, chromosome, end-1, prev)
-                        update_one_hot(self, strand, chromosome, start-1, after)                        
+            exon_info.sort(key=lambda x: x[0])
+            if transition:
+                # position of START label
+                start_pos = exon_info[0][0]-1 if strand == '+' else exon_info[-1][1]-1
+                # position of STOP label
+                stop_pos = exon_info[-1][1]-1 if strand == '+' else exon_info[0][0]-1
+                self.one_hot[strand][chrom][start_pos] = np.zeros(total_labels, dtype=np.int8)                
+                self.one_hot[strand][chrom][stop_pos] = np.zeros(total_labels, dtype=np.int8)
+                if is_single_exon:
+                    self.one_hot[strand][chrom][start_pos, 15] = 1  # START_single
+                    self.one_hot[strand][chrom][stop_pos, 19] = 1  # STOP_single
+                else:
+                    self.one_hot[strand][chrom][start_pos, 7] = 1  # START.
+                    self.one_hot[strand][chrom][stop_pos, 14] = 1  # STOP.
 
-    def get_flat_chunks_hmm(self, seq_names, strand='+', coords=False):
+                    # Process intron regions and transitions between consecutive CDS segments.
+                    for i in range(len(exon_info) - 1):
+                        cur_start, cur_end, cur_phase, cur_frames = exon_info[i]
+                        nxt_start, nxt_end, nxt_phase, nxt_frames = exon_info[i+1]
+                        # Define the intron region between current CDS and next CDS.
+                        intron_start = cur_end
+                        intron_end = nxt_start - 1
+                        if intron_start < intron_end:
+                            # Compute reading frame at the end of current CDS.
+                            last_frame = (cur_frames[-1]-1)%3 if strand == '+' else (nxt_frames[-1]-1)%3
+                            intron_label = 1 + last_frame  # Intron labels are at indices 1-3.
+                            self.one_hot[strand][chrom][intron_start:intron_end, :] = 0
+                            self.one_hot[strand][chrom][intron_start:intron_end, intron_label] = 1
+
+                            # Set the exon-to-intron (EI) transition at the last base of the current exon.
+                            pos_EI = cur_end - 1 if strand == '+' else nxt_start - 1
+                            self.one_hot[strand][chrom][pos_EI] = np.zeros(total_labels, dtype=np.int8)
+                            self.one_hot[strand][chrom][pos_EI, 8 + last_frame] = 1
+
+                            # Set the intron-to-exon (IE) transition at the first base of the next exon.
+                            pos_IE = nxt_start - 1 if strand == '+' else cur_end - 1
+                            self.one_hot[strand][chrom][pos_IE] = np.zeros(total_labels, dtype=np.int8)
+                            first_frame = (nxt_frames[0]+1)%3  if strand == '+' else (cur_frames[0]+1)%3 
+                            self.one_hot[strand][chrom][pos_IE, 11 + first_frame] = 1
+
+        return self.one_hot
+              
+
+    def get_flat_chunks_hmm(self, seq_names, strand='+', coords=False, transcript_ids=False):
         """Get one-hot encoded chunks, chunks smaller than chunksize are removed.
 
         Arguments:
@@ -186,6 +230,7 @@ class GeneStructure:
         """
         self.chunks = []
         chunk_coords = []
+        transcript_list = []
         for seq_name in seq_names:
             num_chunks = (len(self.one_hot[strand][seq_name]) - self.overlap) \
                 // (self.chunksize - self.overlap) + 1
@@ -201,12 +246,27 @@ class GeneStructure:
             self.chunks += [self.one_hot[strand][seq_name][i * (self.chunksize - self.overlap):\
                 i * (self.chunksize - self.overlap) + self.chunksize, :] \
                 for i in range(num_chunks-1)]
-            
+            if transcript_ids:
+                # compute list of transcript ids for each chunk and generate list of transcript ids and overlap of transcript and chunk
+                for i in range(num_chunks-1):
+                    chunk_transcripts = []
+                    for transcript_id, (tx_start, tx_end) in self.tx_ranges.items():
+                        if tx_start < (i * (self.chunksize - self.overlap) + self.chunksize) \
+                            and tx_end > i * (self.chunksize - self.overlap):
+                            chunk_transcripts = [
+                                transcript_id, str(max(tx_start, i * (self.chunksize - self.overlap)+1)), 
+                                    str(min(tx_end, i * (self.chunksize - self.overlap) + self.chunksize))]
+                            chunk_transcripts = ['', '', ''] if not chunk_transcripts else chunk_transcripts
+                            transcript_list.append(chunk_transcripts)
+                
+
         self.chunks = np.array(self.chunks)
         if strand == '-':
             self.chunks = self.chunks[::-1,::-1,:]
             chunk_coords.reverse()
         if coords:
             return self.chunks, chunk_coords
+        if transcript_ids:
+            return self.chunks, np.array(transcript_list, dtype='<U50')
         return self.chunks
     

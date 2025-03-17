@@ -23,7 +23,7 @@ class EpochSave(tf.keras.callbacks.Callback):
         self.model_save_dir = model_save_dir
 
     def on_epoch_end(self, epoch, logs=None):
-        self.model.save(f"{self.model_save_dir}/epoch_{epoch:02d}", save_traces=False)
+        self.model.save(f"{self.model_save_dir}/epoch_{epoch:02d}.keras") # save_traces not supported anymore
 
 class BatchLearningRateScheduler(tf.keras.callbacks.Callback):
     def __init__(self, peak=0.1, warmup=0, min_lr=0.0001):
@@ -59,7 +59,7 @@ class ValidationCallback(tf.keras.callbacks.Callback):
             if loss < self.best_val_loss:
                 print("Saving the model as the validation loss improved.")
                 self.best_val_loss = loss
-                self.model.save(self.save_path, save_traces=False)
+                self.model.save(self.save_path)
                 #self.model.save_weights(self.save_path)
                 
 class BatchSave(tf.keras.callbacks.Callback):
@@ -72,7 +72,7 @@ class BatchSave(tf.keras.callbacks.Callback):
     def on_train_batch_end(self, batch, logs=None):
         if (batch + 1) % self.batch_number == 0:   
             self.prev_batch_numb += batch           
-            self.model.save(self.save_path.format(self.prev_batch_numb), save_traces=False)
+            self.model.save(self.save_path.format(self.prev_batch_numb))
 
 
 def custom_cce_f1_loss(f1_factor, batch_size, 

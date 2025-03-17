@@ -1,16 +1,14 @@
 # ==============================================================
 # Authors: Lars Gabriel
 #
-# Class loading tfrecords so that they fit different traing 
+# Class loading tfrecords so that they fit different training 
 # scenarios
 # 
-# Transformers 4.31.0
 # ==============================================================
 
 import sys
 import tensorflow as tf
 import numpy as np
-# from transformers import AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM
 
 class DataGenerator:
     """DataGenerator class for reading and processing TFRecord files 
@@ -55,7 +53,6 @@ class DataGenerator:
         self.oracle = oracle
         
         self.dataset = self._read_tfrecord_file(repeat=repeat)
-        self.iterator = iter(self.dataset)
     
     def _parse_fn(self, example):
         """Parse function for decoding TFRecord examples.
@@ -131,7 +128,7 @@ class DataGenerator:
         
         if self.filter:
             dataset = dataset.filter(
-#                 lambda x, y: tf.greater(tf.size(tf.unique(tf.argmax(y, axis=-1))[0]), 1)
+                #  lambda x, y: tf.greater(tf.size(tf.unique(tf.argmax(y, axis=-1))[0]), 1)
                 lambda x, y, t: tf.greater(tf.reduce_max(tf.argmax(y, axis=-1)), 0)
                 )
         
@@ -141,158 +138,186 @@ class DataGenerator:
         if repeat:
             dataset = dataset.repeat()
 
-        dataset = dataset.batch(self.batch_size, drop_remainder=True)
-        dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
+        def preprocess(x, y):
+            x = tf.ensure_shape(x, [None, None])  # Adjust shape as needed
+            y = tf.ensure_shape(y, [None, self.output_size])
 
-        return dataset
-    
-    def __iter__(self):
-        """Return the iterator object for iteration.
+            if not self.softmasking:
+                x = x[:, :, :5]
 
-        Returns:
-            DataGenerator: Iterator object.
-        """
-        return self
+            if y.shape[-1] != self.output_size:
+                y = self._reformat_labels(y)
 
-    def __getitem__(self, _index):
-        """Get the item at the given index.
+            if self.hmm_factor:
+                step_width = y.shape[1] // self.hmm_factor
+                start = y[::step_width, :]
+                end = y[step_width-1::step_width, :]
+                hints = tf.stack([start, end], axis=-2)
+                X = (x, hints)
+                Y = (y, y)
+            elif self.clamsa:
+                X = (x, clamsa_track)  # clamsa_track from parse_fn_clamsa
+                Y = y
+            elif self.oracle:
+                X = (x, y)
+                Y = y
+            else:
+                X = x
+                Y = y
 
-        Args:
-            _index: Index of the item.
-
-        Returns:
-            Tuple[tf.Tensor, List[tf.Tensor]]: Batch of input and output tensors.
-        """
-        return self.__next__()
-    
-    def decode_one_hot(self, encoded_seq):
-        # Define the mapping from index to nucleotide
-        index_to_nucleotide = np.array(['A', 'C', 'G', 'T', 'A'])
-        # Use np.argmax to find the index of the maximum value in each row
-        nucleotide_indices = np.argmax(encoded_seq, axis=-1)
-        # Map indices to nucleotides
-        decoded_seq = index_to_nucleotide[nucleotide_indices]
-        # Convert from array of characters to string for each sequence
-        decoded_seq_str = [''.join(seq) for seq in decoded_seq]
-        return decoded_seq_str
-    
-    def get_seq_weights(self, array, r=250, w=100):
-        """
-            Get weight matrix where the weights are w around label transitions from non coding to coding.
-
-            Args:
-            - labels: A numpy array of shape (batch_size, seq_len, label_size) containing one-hot encoded labels
-
-            Returns:
-            - A list of numpy arrays, one per batch, indicating the positions of transitions.
-        """
-        simp_array = array.argmax(-1)
-        seq_weights = np.ones(simp_array.shape, float)
-        if array.shape[-1] == 5:
-            simp_array = np.where(simp_array < 2, 0, 1)
-        elif array.shape[-1] == 7:
-            simp_array = np.where(simp_array < 4, 0, 1)
-        elif array.shape[-1] == 3:
-            simp_array = labels
-            
-        for i in range(array.shape[0]):
-            # Detect changes for the current sequence
-            changes = np.diff(simp_array[i])
-            transition_points = np.where(changes != 0)[0] + 1  # +1 because np.diff shifts indices to the left
-            for t in transition_points:
-                seq_weights[i, max(0, t-r):t+r] = w
-        return seq_weights
-    
-    def __next__(self):
-        """Get the next batch of data.
-
-        Returns:
-            Tuple[tf.Tensor, List[tf.Tensor]]: Batch of input and output tensors.
-        """       
-        if self.clamsa:
-            # expect an additional clamsa track
-            x_batch, y_batch, clamsa_track = next(self.iterator)
-            clamsa_track = np.array(clamsa_track)                
-        else:
-            x_batch, y_batch = next(self.iterator)
-        x_batch = np.array(x_batch)
-        y_batch = np.array(y_batch)
-         
-        if not self.softmasking:
-            # remove softmasking track
-            x_batch = x_batch[:,:,:5]
-            
-        if not y_batch.shape[-1] == self.output_size:
-            # reformat labels so that they fit the output size
-            if y_batch.shape[-1] == 7:
-                if self.output_size == 5:
-                    # reduce intron labels
-                    y_new = np.zeros((y_batch.shape[0], y_batch.shape[1], 5), np.float32)
-                    y_new[:,:,0] = y_batch[:,:,0]
-                    y_new[:,:,1] = np.sum(y_batch[:,:,1:4], axis=-1)            
-                    y_new[:,:,2:] = y_batch[:,:,4:]
-                elif self.output_size == 3:
-                    # reduce intron and exon labels
-                    y_new = np.zeros((y_batch.shape[0], y_batch.shape[1], 3), np.float32)
-                    y_new[:,:,0] = y_batch[:,:,0]
-                    y_new[:,:,1] = np.sum(y_batch[:,:,1:4], axis=-1)            
-                    y_new[:,:,2] = np.sum(y_batch[:,:,4:], axis=-1)  
-                y_batch = y_new
-            elif y_batch.shape[-1] == 15:
-                if self.output_size == 3:
-                    # reduce intron and exon labels
-                    y_new = np.zeros((y_batch.shape[0], y_batch.shape[1], 3), np.float32)
-                    y_new[:,:,0] = y_batch[:,:,0]
-                    y_new[:,:,1] = np.sum(y_batch[:,:,1:4], axis=-1)            
-                    y_new[:,:,2] = np.sum(y_batch[:,:,4:], axis=-1) 
-                elif self.output_size == 5:
-                    y_new = np.zeros((y_batch.shape[0], y_batch.shape[1], 5), np.float32)
-                    y_new[:,:,0] = y_batch[:,:,0]
-                    y_new[:,:,1] = np.sum(y_batch[:,:,1:4], axis=-1)            
-                    y_new[:,:,2] = np.sum(y_batch[:,:,[4, 7, 10, 12]], axis=-1)   
-                    y_new[:,:,3] = np.sum(y_batch[:,:,[5, 8, 13]], axis=-1)
-                    y_new[:,:,4] = np.sum(y_batch[:,:,[6, 9, 11, 14]], axis=-1)
-                elif self.output_size == 7:
-                    y_new = np.zeros((y_batch.shape[0], y_batch.shape[1], 7), np.float32)
-                    y_new[:,:,:4] = y_batch[:,:,:4]       
-                    y_new[:,:,4] = np.sum(y_batch[:,:,[4, 7, 10, 12]], axis=-1)   
-                    y_new[:,:,5] = np.sum(y_batch[:,:,[5, 8, 13]], axis=-1)
-                    y_new[:,:,6] = np.sum(y_batch[:,:,[6, 9, 11, 14]], axis=-1)
-                elif self.output_size == 15:
-                    y_new = y_batch.astype(np.float32)
-                elif self.output_size == 2:
-                    y_new = np.zeros((y_batch.shape[0], y_batch.shape[1], 2), np.float64)
-                    y_new[:,:,0] = np.sum(y_batch[:,:,:4], axis=-1) 
-                    y_new[:,:,1] = np.sum(y_batch[:,:,4:], axis=-1) 
-                elif self.output_size == 4:
-                    y_new = np.zeros((y_batch.shape[0], y_batch.shape[1], 4), np.float32)
-                    y_new[:,:,0] = np.sum(y_batch[:,:,:4], axis=-1)            
-                    y_new[:,:,1] = np.sum(y_batch[:,:,[4, 7, 10, 12]], axis=-1)   
-                    y_new[:,:,2] = np.sum(y_batch[:,:,[5, 8, 13]], axis=-1)
-                    y_new[:,:,3] = np.sum(y_batch[:,:,[6, 9, 11, 14]], axis=-1)
-                y_batch = y_new
-        
-        if self.hmm_factor:
-            # deprecated by the parallelization of the HMM
-            step_width = y_batch.shape[1] // self.hmm_factor
-            start = y_batch[:,::step_width,:] # shape (batch_size, hmm_factor, 5)
-            end = y_batch[:,step_width-1::step_width,:] # shape (batch_size, hmm_factor, 5)
-            hints = np.concatenate([start[:,:,tf.newaxis,:], end[:,:,tf.newaxis,:]],-2)
-            X = [x_batch, hints]
-            Y = [y_batch, y_batch]
-        elif self.clamsa:
-            X = [x_batch, clamsa_track]
-            #X = clamsa_track
-            Y = y_batch
-        elif self.oracle:
-            X = [x_batch, y_batch]
-            Y = y_batch
-        else:
-            X = x_batch
-            Y = y_batch
-            
-        if self.seq_weights:
-            return X, Y, self.get_seq_weights(y_batch, w=self.seq_weights)
-        else:
+            if self.seq_weights:
+                weights = self._get_seq_weights(y, r=250, w=100)
+                return X, Y, weights
             return X, Y
 
+        dataset = dataset.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
+        dataset = dataset.batch(self.batch_size, drop_remainder=True)
+        dataset = dataset.prefetch(tf.data.AUTOTUNE)
+
+        return dataset
+
+    def _reformat_labels(self, y):
+        """Reformat label tensor to match the desired output_size using TensorFlow operations.
+
+        Args:
+            y: A TensorFlow tensor of shape (batch_size, seq_len, input_classes) containing one-hot encoded labels.
+
+        Returns:
+            A TensorFlow tensor of shape (batch_size, seq_len, output_size) with reformatted labels.
+        """
+        batch_size = tf.shape(y)[0]
+        seq_len = tf.shape(y)[1]
+        input_classes = tf.shape(y)[-1]
+    
+        # Case 1: Input has 7 classes
+        if input_classes == 7:
+            if self.output_size == 5:
+                # Reduce intron labels (1,2,3 -> 1)
+                y_new = tf.concat([
+                    y[:, :, :1],                    # 0 (non-coding)
+                    tf.reduce_sum(y[:, :, 1:4], axis=-1, keepdims=True),  # 1-3 (introns)
+                    y[:, :, 4:]                     # 4-6 (exons)
+                ], axis=-1)
+            elif self.output_size == 3:
+                # Reduce intron (1-3) and exon (4-6) labels
+                y_new = tf.concat([
+                    y[:, :, :1],                    # 0 (non-coding)
+                    tf.reduce_sum(y[:, :, 1:4], axis=-1, keepdims=True),  # 1-3 (introns)
+                    tf.reduce_sum(y[:, :, 4:], axis=-1, keepdims=True)    # 4-6 (exons)
+                ], axis=-1)
+            else:
+                # For other output_sizes, return unchanged or handle separately
+                y_new = y
+
+                # Case 2: Input has 15 classes
+        elif input_classes == 15:
+            if self.output_size == 3:
+                # Reduce intron (1-3) and exon (4-14) labels
+                y_new = tf.concat([
+                    y[:, :, :1],                    # 0 (non-coding)
+                    tf.reduce_sum(y[:, :, 1:4], axis=-1, keepdims=True),  # 1-3 (introns)
+                    tf.reduce_sum(y[:, :, 4:], axis=-1, keepdims=True)    # 4-14 (exons)
+                ], axis=-1)
+            elif self.output_size == 5:
+                # Reduce to 5 classes: 0, 1-3, 4/7/10/12, 5/8/13, 6/9/11/14
+                y_new = tf.concat([
+                    y[:, :, :1],                    # 0 (non-coding)
+                    tf.reduce_sum(y[:, :, 1:4], axis=-1, keepdims=True),  # 1-3 (introns)
+                    tf.reduce_sum(tf.gather(y, [4, 7, 10, 12], axis=-1), axis=-1, keepdims=True),  # Exon 1
+                    tf.reduce_sum(tf.gather(y, [5, 8, 13], axis=-1), axis=-1, keepdims=True),      # Exon 2
+                    tf.reduce_sum(tf.gather(y, [6, 9, 11, 14], axis=-1), axis=-1, keepdims=True)   # Exon 3
+                ], axis=-1)
+            elif self.output_size == 7:
+                # Reduce to 7 classes: 0-3 unchanged, 4/7/10/12, 5/8/13, 6/9/11/14
+                y_new = tf.concat([
+                    y[:, :, :4],                    # 0-3 (non-coding, introns)
+                    tf.reduce_sum(tf.gather(y, [4, 7, 10, 12], axis=-1), axis=-1, keepdims=True),  # Exon 1
+                    tf.reduce_sum(tf.gather(y, [5, 8, 13], axis=-1), axis=-1, keepdims=True),      # Exon 2
+                    tf.reduce_sum(tf.gather(y, [6, 9, 11, 14], axis=-1), axis=-1, keepdims=True)   # Exon 3
+                ], axis=-1)
+            elif self.output_size == 15:
+                # No reformatting needed
+                y_new = tf.cast(y, tf.float32)
+            elif self.output_size == 2:
+                # Binary: non-coding (0-3) vs. coding (4-14)
+                y_new = tf.concat([
+                    tf.reduce_sum(y[:, :, :4], axis=-1, keepdims=True),   # 0-3 (non-coding)
+                    tf.reduce_sum(y[:, :, 4:], axis=-1, keepdims=True)    # 4-14 (coding)
+                ], axis=-1)
+            elif self.output_size == 4:
+                # 4 classes: 0-3, 4/7/10/12, 5/8/13, 6/9/11/14
+                y_new = tf.concat([
+                    tf.reduce_sum(y[:, :, :4], axis=-1, keepdims=True),   # 0-3 (non-coding/introns)
+                    tf.reduce_sum(tf.gather(y, [4, 7, 10, 12], axis=-1), axis=-1, keepdims=True),  # Exon 1
+                    tf.reduce_sum(tf.gather(y, [5, 8, 13], axis=-1), axis=-1, keepdims=True),      # Exon 2
+                    tf.reduce_sum(tf.gather(y, [6, 9, 11, 14], axis=-1), axis=-1, keepdims=True)   # Exon 3
+                ], axis=-1)
+            else:
+                y_new = y
+                
+                # If input_classes already matches output_size, no change needed
+        else:
+            y_new = y
+
+        return y_new
+
+    def _get_seq_weights(self, y, r=250, w=100):
+            """Get weight matrix where weights are `w` around label transitions from non-coding to coding.
+            Args:
+                y: A TensorFlow tensor of shape (batch_size, seq_len, label_size) containing one-hot encoded labels.
+                r: Range around transitions (default: 250).
+                w: Weight value to apply around transitions (default: 100).
+
+            Returns:
+                A TensorFlow tensor of shape (batch_size, seq_len) with weights, dtype tf.float32.
+            """
+            # Simplify one-hot labels to binary (0 for non-coding, 1 for coding)
+            simp_array = tf.argmax(y, axis=-1)  # Shape: (batch_size, seq_len)
+
+            # Adjust based on output_size (from your original logic)
+            if self.output_size == 5:
+                simp_array = tf.where(simp_array < 2, 0, 1)  # 0,1 -> 0 (non-coding); 2,3,4 -> 1 (coding)
+            elif self.output_size == 7:
+                simp_array = tf.where(simp_array < 4, 0, 1)  # 0-3 -> 0; 4-6 -> 1
+            elif self.output_size == 3:
+                simp_array = simp_array  # Already binary-ish, assuming 0=non-coding, 1=coding, 2=other
+
+            # Initialize weights as ones
+            seq_weights = tf.ones_like(simp_array, dtype=tf.float32)  # Shape: (batch_size, seq_len)
+
+            # Compute differences to detect transitions
+            changes = tf.concat([
+                tf.zeros([tf.shape(simp_array)[0], 1], dtype=simp_array.dtype),  # Pad start
+                tf.experimental.numpy.diff(simp_array, axis=1)  # Diff along seq_len
+            ], axis=1)  # Shape: (batch_size, seq_len)
+
+            # Find transition points (where changes != 0)
+            transition_points = tf.where(changes != 0)  # Shape: (num_transitions, 2) [batch_idx, seq_idx]
+
+            # Use self.seq_weights if set, otherwise fall back to default w
+            weight_value = tf.cast(self.seq_weights if self.seq_weights != 0 else w, tf.float32)
+
+            # Function to update weights for each transition
+            def update_weights(weights, transition):
+                batch_idx, t = transition[0], transition[1]
+                start = tf.maximum(0, t - r)
+                end = t + r  # End is exclusive in range, handled by scatter
+                indices = tf.range(start, end, dtype=tf.int64)
+                indices = tf.clip_by_value(indices, 0, tf.shape(weights)[1] - 1)  # Ensure within bounds
+                indices = tf.stack([tf.fill([tf.shape(indices)[0]], batch_idx), indices], axis=1)
+                updates = tf.fill([tf.shape(indices)[0]], weight_value)
+                return tf.tensor_scatter_nd_update(weights, indices, updates)
+
+            # Apply updates for all transitions
+            if tf.size(transition_points) > 0:  # Only if there are transitions
+                seq_weights = tf.foldl(
+                    lambda acc, t: update_weights(acc, t),
+                    transition_points,
+                initializer=seq_weights
+                )
+
+            return seq_weights
+
+    def get_dataset(self):
+        """Return the tf.data.Dataset for use in model.fit."""
+        return self.dataset

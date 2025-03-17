@@ -204,8 +204,10 @@ class PredictionGTF:
                                     inputs=self.model.input, 
                                     outputs=lstm_output
                                     )
-                    #self.gene_pred_hmm_layer = self.model.layers[-1]
-                    self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
+                    # The recognition of the hmm layer by this name did not work under tf 2.16
+                    # therefore we use the last layer of the model.
+                    self.gene_pred_hmm_layer = self.model.layers[-1]
+                    #self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
 
                     if self.parallel_factor is not None:
                         self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor

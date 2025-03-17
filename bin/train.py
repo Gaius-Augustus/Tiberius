@@ -38,7 +38,7 @@ strategy = tf.distribute.MirroredStrategy()
 
 batch_save_numb = 1000
 
-def train_hmm_model(generator, model_save_dir, config, val_data=None,
+def train_hmm_model(dataset, model_save_dir, config, val_data=None,
                   model_load=None, model_load_lstm=None, model_load_hmm=None, trainable=True, constant_hmm=False
                  ):  
     """Trains a hybrid HMM-LSTM model with trainings example from a generator 
@@ -147,10 +147,10 @@ def train_hmm_model(generator, model_save_dir, config, val_data=None,
         b_lr_sched = BatchLearningRateScheduler(peak=config["lr"], warmup=config["warmup"],
                                         min_lr=config["min_lr"])
         model.save(model_save_dir+"/untrained.keras")
-        model.fit(generator, epochs=500, validation_data=val_data,
-                steps_per_epoch=1000,
-                validation_batch_size=config['batch_size'],
-                callbacks=[epoch_callback, csv_logger])
+    model.fit(dataset, epochs=500, validation_data=val_data,
+              steps_per_epoch=1000,
+              validation_batch_size=config['batch_size'],
+              callbacks=[epoch_callback, csv_logger])
 
 def read_species(file_name):
     """Reads a list of species from a given file, filtering out empty lines and comments.
@@ -166,11 +166,11 @@ def read_species(file_name):
         species = f_h.read().strip().split('\n')
     return [s for s in species if s and s[0] != '#']
 
-def train_clamsa(generator, model_save_dir, config, val_data=None, model_load=None, model_load_lstm=None):
+def train_clamsa(dataset, model_save_dir, config, val_data=None, model_load=None, model_load_lstm=None):
     """Train simple CNN model that uses only CLAMSA as input.
 
     Parameters:
-        - generator (DataGenerator): A data generator for training data.
+        - dataset (tf.data.Dataset): A data generator for training data.
         - model_save_dir (str): Directory path to save model weights and logs.
         - config (dict): Configuration dictionary specifying model 
                          parameters and training settings.
@@ -240,11 +240,11 @@ def train_clamsa(generator, model_save_dir, config, val_data=None, model_load=No
                 metrics=['accuracy'])        
         model.summary()
 
-        model.fit(generator, epochs=500, 
-                steps_per_epoch=1000,
-                callbacks=[epoch_callback, csv_logger])
+    model.fit(dataset, epochs=500, 
+              steps_per_epoch=1000,
+              callbacks=[epoch_callback, csv_logger])
     
-def train_lstm_model(generator, model_save_dir, config, val_data=None, model_load=None):  
+def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=None):  
     """Trains the LSTM model using data provided by a generator, while saving the 
     training checkpoints and logging progress. The model can be trained from scratch or from a 
     pre-loaded state.
@@ -259,33 +259,31 @@ def train_lstm_model(generator, model_save_dir, config, val_data=None, model_loa
                                  to load a preexisting model that will be trained
     """
     
-    model_save = model_save_dir + "/weights.{epoch:02d}.h5"
+    model_save = model_save_dir + "/weights.{epoch:02d}.keras"
     checkpoint = ModelCheckpoint(model_save, monitor='loss', verbose=1, 
                         save_best_only=False, save_weights_only=False, mode='auto')
 
-    batch_callback = BatchSave(model_save_dir + "/weights_batch.{}.h5", batch_save_numb)
+    batch_callback = BatchSave(model_save_dir + "/weights_batch.{}.keras", batch_save_numb)
     epoch_callback = EpochSave(model_save_dir)
-    
-    if config['sgd']:
-        optimizer = SGD(learning_rate=config['lr'])
-    else:
-        optimizer = Adam(learning_rate=config['lr'])
+    csv_logger = CSVLogger(f'{model_save_dir}/training.log', append=True, separator=';')
     
     
-    custom_objects = {}
-    if config["loss_f1_factor"]:
-        cce_loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
-        custom_objects['loss_'] = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
-    else:
-        cce_loss = tf.keras.losses.CategoricalCrossentropy()
-    
-    if config["output_size"] == 1:
-        cce_loss = tf.keras.losses.BinaryCrossentropy()
-    
-    csv_logger = CSVLogger(f'{model_save_dir}/training.log', 
-                append=True, separator=';')
     with strategy.scope():
-        
+        if config['sgd']:
+            optimizer = SGD(learning_rate=config['lr'])
+        else:
+            optimizer = Adam(learning_rate=config['lr'])
+
+        custom_objects = {}
+        if config["loss_f1_factor"]:
+            cce_loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
+            custom_objects['loss_'] = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
+        else:
+            cce_loss = tf.keras.losses.CategoricalCrossentropy()
+    
+        if config["output_size"] == 1:
+            cce_loss = tf.keras.losses.BinaryCrossentropy()
+    
         relevant_keys = ['units', 'filter_size', 'kernel_size', 
                          'numb_conv', 'numb_lstm', 'dropout_rate', 
                          'pool_size', 'stride', 'lstm_mask', 'clamsa',
@@ -305,9 +303,13 @@ def train_lstm_model(generator, model_save_dir, config, val_data=None, model_loa
                 metrics=['accuracy'])        
         model.summary()
 
-        model.fit(generator, epochs=2000, validation_data=val_data,
-                steps_per_epoch=1000,
-                callbacks=[epoch_callback, csv_logger])
+    for X, Y in dataset.take(1):  # Or (X, Y, weights) if seq_weights is set
+        print("X shape:", X.shape if not isinstance(X, tuple) else [x.shape for x in X])
+        print("Y shape:", Y.shape if not isinstance(Y, tuple) else [y.shape for y in Y])
+
+    model.fit(dataset, epochs=2000, validation_data=val_data,
+              steps_per_epoch=1000,
+              callbacks=[epoch_callback, csv_logger])
 
 def load_val_data(file, hmm_factor=1, output_size=7, clamsa=False, softmasking=True, oracle=False):
     """
@@ -483,7 +485,7 @@ def main():
           # trans_lstm = config_dict['nuc_trans'],
           oracle=False if 'oracle' not in config_dict else config_dict['oracle']
       )
-        
+    dataset = generator.get_dataset()
     if args.val_data:
         val_data = load_val_data(args.val_data, 
                     hmm_factor=0, 
@@ -493,9 +495,9 @@ def main():
                                 )
     else:
         val_data = None
-        
+
     if args.hmm:
-        train_hmm_model(generator=generator, val_data=val_data,
+        train_hmm_model(dataset=dataset, val_data=val_data,
             model_save_dir=config_dict["model_save_dir"], config=config_dict,
             model_load_lstm=config_dict["model_load_lstm"],
             model_load_hmm=config_dict["model_load_hmm"],
@@ -504,13 +506,13 @@ def main():
                       constant_hmm=config_dict["constant_hmm"]
         )
     elif args.clamsa:
-        train_clamsa(generator=generator,
+        train_clamsa(dataset=dataset,
                     model_save_dir=config_dict["model_save_dir"], 
                     config=config_dict, 
                     model_load=config_dict["model_load"], 
                     model_load_lstm=config_dict["model_load_lstm"])
     else:
-        train_lstm_model(generator=generator, val_data=val_data,
+        train_lstm_model(dataset=dataset, val_data=val_data,
             model_save_dir=config_dict["model_save_dir"], config=config_dict,
             model_load=config_dict["model_load"]
         )

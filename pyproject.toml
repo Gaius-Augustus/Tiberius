@@ -10,6 +10,7 @@ authors = [
   { name="Felix Becker", email="beckerfelix94@gmail.com" },
   { name="Katharina Hoff", email="katharina.hoff@uni-greifswald.de" },
   { name="Mario Stanke", email="mario.stanke@uni-greifswald.de " },
+  # please add yourself if you are a contributor
 ]
 description = "Tiberius is a deep learning gene finder."
 readme = "README.md"

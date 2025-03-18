@@ -4,7 +4,7 @@ import sys
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
 from learnMSA.msa_hmm.Utility import deserialize
 from learnMSA.protein_language_models.MvnMixture import MvnMixture, DefaultDiagBijector
-import kmer
+from tiberius import kmer
 
 
 class SimpleGenePredHMMEmitter(tf.keras.layers.Layer):

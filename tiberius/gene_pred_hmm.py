@@ -6,8 +6,8 @@ from learnMSA.msa_hmm.MsaHmmLayer import MsaHmmLayer as HmmLayer
 from learnMSA.msa_hmm.Viterbi import viterbi
 from learnMSA.msa_hmm.Utility import deserialize
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
-from gene_pred_hmm_emitter import SimpleGenePredHMMEmitter, GenePredHMMEmitter
-from gene_pred_hmm_transitioner import SimpleGenePredHMMTransitioner, GenePredHMMTransitioner, GenePredMultiHMMTransitioner
+from tiberius.gene_pred_hmm_emitter import SimpleGenePredHMMEmitter, GenePredHMMEmitter
+from tiberius.gene_pred_hmm_transitioner import SimpleGenePredHMMTransitioner, GenePredHMMTransitioner, GenePredMultiHMMTransitioner
     
 
 

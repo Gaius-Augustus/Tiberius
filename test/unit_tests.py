@@ -1,62 +1,57 @@
 import os
 import sys
-sys.path.insert(0, "../../learnMSA")
-sys.path.insert(0, "../../programs/learnMSA")
 # don't use GPU for tests
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 import unittest
 import numpy as np
 import tensorflow as tf
-import kmer
-import gene_pred_hmm
-import gene_pred_hmm_transitioner
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
+import tiberius
+
 
 
 class TestKmer(unittest.TestCase):
 
-
     def test_encode_kmer(self):
-        a = kmer.encode_kmer_string("AAA")
+        a = tiberius.kmer.encode_kmer_string("AAA")
         self.assertEqual(a.shape, (16, 4))
         self.assertEqual(np.sum(a), 1)
         self.assertEqual(a[0,0], 1)
-        a2 = kmer.encode_kmer_string("AAA", pivot_left=False)
+        a2 = tiberius.kmer.encode_kmer_string("AAA", pivot_left=False)
         self.assertEqual(a2.shape, (16, 4))
         self.assertEqual(np.sum(a2), 1)
         self.assertEqual(a2[0,0], 1)
 
-        b = kmer.encode_kmer_string("ACG")
+        b = tiberius.kmer.encode_kmer_string("ACG")
         self.assertEqual(b.shape, (16, 4))
         self.assertEqual(np.sum(b), 1)
         self.assertEqual(b[6,0], 1)
-        b2 = kmer.encode_kmer_string("ACG", pivot_left=False)
+        b2 = tiberius.kmer.encode_kmer_string("ACG", pivot_left=False)
         self.assertEqual(b2.shape, (16, 4))
         self.assertEqual(np.sum(b2), 1)
         self.assertEqual(b2[4,2], 1)
 
-        c = kmer.encode_kmer_string("NAA")
+        c = tiberius.kmer.encode_kmer_string("NAA")
         self.assertEqual(c.shape, (16, 4))
         self.assertEqual(np.sum(c), 1)
         for i in range(4):
             self.assertEqual(c[0,i], 0.25)
-        c2 = kmer.encode_kmer_string("NAA", pivot_left=False)
+        c2 = tiberius.kmer.encode_kmer_string("NAA", pivot_left=False)
         self.assertEqual(c2.shape, (16, 4))
         self.assertEqual(np.sum(c2), 1)
         for i in range(4):
             self.assertEqual(c2[i,0], 0.25)
 
-        d = kmer.encode_kmer_string("ANA")
+        d = tiberius.kmer.encode_kmer_string("ANA")
         self.assertEqual(d.shape, (16, 4))
         self.assertEqual(np.sum(d), 1)
         for i in range(4):
             self.assertEqual(d[i*4,0], 0.25)
-        d2 = kmer.encode_kmer_string("ANA", pivot_left=False)
+        d2 = tiberius.kmer.encode_kmer_string("ANA", pivot_left=False)
         self.assertEqual(d2.shape, (16, 4))
         self.assertEqual(np.sum(d2), 1)
         for i in range(4):
             self.assertEqual(d2[i*4,0], 0.25)
-
 
 
     def test_3mers(self):
@@ -65,16 +60,16 @@ class TestKmer(unittest.TestCase):
         example_sequence = tf.constant([[[1., 0, 0, 0, 0], [0, 1, 0, 0, 0], [0, 0, 1, 0, 0], [0, 0, 0, 1, 0]]])
 
         expected_3mers_left = ["ACG", "CGT", "GTN", "TNN"]
-        k_mers_left = kmer.make_k_mers(example_sequence, k=3, pivot_left=True)
+        k_mers_left = tiberius.kmer.make_k_mers(example_sequence, k=3, pivot_left=True)
         for i, k in enumerate(expected_3mers_left):
             np.testing.assert_equal(k_mers_left[0,i].numpy(), 
-                                    kmer.encode_kmer_string(k).numpy())
+                                    tiberius.kmer.encode_kmer_string(k).numpy())
 
         expected_3mers_right = ["NNA", "NAC", "ACG", "CGT"]
-        k_mers_right = kmer.make_k_mers(example_sequence, k=3, pivot_left=False)
+        k_mers_right = tiberius.kmer.make_k_mers(example_sequence, k=3, pivot_left=False)
         for i, k in enumerate(expected_3mers_right):
             np.testing.assert_equal(k_mers_right[0,i].numpy(), 
-                                    kmer.encode_kmer_string(k, pivot_left=False).numpy())
+                                    tiberius.kmer.encode_kmer_string(k, pivot_left=False).numpy())
 
 
     def test_unknown_symbols(self):
@@ -82,58 +77,24 @@ class TestKmer(unittest.TestCase):
         example_sequence = tf.constant([[[1., 0, 0, 0, 0], [0, 1, 0, 0, 0], [0, 0, 0, 0, 1], [0, 0, 0, 1, 0]]])
 
         expected_3mers_left = ["ACN", "CNT", "NTN", "TNN"]
-        k_mers_left = kmer.make_k_mers(example_sequence, k=3, pivot_left=True)
+        k_mers_left = tiberius.kmer.make_k_mers(example_sequence, k=3, pivot_left=True)
         for i, k in enumerate(expected_3mers_left):
             np.testing.assert_equal(k_mers_left[0,i].numpy(), 
-                                    kmer.encode_kmer_string(k).numpy())
+                                    tiberius.kmer.encode_kmer_string(k).numpy())
 
         expected_3mers_right = ["NNA", "NAC", "ACN", "CNT"]
-        k_mers_right = kmer.make_k_mers(example_sequence, k=3, pivot_left=False)
+        k_mers_right = tiberius.kmer.make_k_mers(example_sequence, k=3, pivot_left=False)
         for i, k in enumerate(expected_3mers_right):
             np.testing.assert_equal(k_mers_right[0,i].numpy(), 
-                                    kmer.encode_kmer_string(k, pivot_left=False).numpy())
-
-
-# missing model file, need to fix this test
-# class TestInputs(unittest.TestCase):
-#     def test_inputs(self):
-#         from eval_model_class import PredictionGTF
-
-#         batch_size = 12
-#         seq_len = 99999
-#         strand = '+'
-
-#         inp_data_dir = '../test_data/Panthera_pardus/inp/'
-#         out_dir = '../test_data/unittest_workdir/'
-#         if not os.path.exists(out_dir):
-#             os.mkdir(out_dir)
-
-#         model_path = f'../test_data/model_lstm.h5'
-#         genome_path = f'{inp_data_dir}/genome.fa'
-#         annot_path= f'{inp_data_dir}/annot.gtf'
-#         temp_dir = f'{out_dir}/temp_model/'
-
-#         # load input data and model
-#         pred_gtf = PredictionGTF( 
-#         #     model_path='/home/jovyan/brain/deepl_data//exclude_primates/weights/train2/train6/1/epoch_02',
-#             model_path_lstm=model_path, 
-#             seq_len=seq_len, batch_size=batch_size, hmm=True, temp_dir=temp_dir)
-#         pred_gtf.load_model()
-
-#         f_chunks, r_chunks, coords = pred_gtf.load_inp_data(
-#             genome_path=genome_path,
-#             annot_path=annot_path, 
-#             overlap_size=0, strand=strand, chunk_coords=True
-#         )
-
-#         np.testing.assert_equal(np.sum(f_chunks[..., :5], -1), 1.)
+                                    tiberius.kmer.encode_kmer_string(k, pivot_left=False).numpy())
 
 
         
-class TestInitialization(unittest.TestCase):
+class TestHMMInitialization(unittest.TestCase):
+
 
     def test_hmm_init(self):
-        trans = gene_pred_hmm_transitioner.GenePredHMMTransitioner(
+        trans = tiberius.gene_pred_hmm_transitioner.GenePredHMMTransitioner(
                 initial_ir_len=4,
                 initial_intron_len=5,
                 initial_exon_len=6)
@@ -167,7 +128,7 @@ class TestInitialization(unittest.TestCase):
         for i,(_,u,v) in enumerate(trans.indices):
             np.testing.assert_almost_equal(A[u,v], expected[(u,v)], err_msg=f"edge {(u,v)}")
         #the same as above
-        trans2 = gene_pred_hmm_transitioner.GenePredMultiHMMTransitioner(
+        trans2 = tiberius.gene_pred_hmm_transitioner.GenePredMultiHMMTransitioner(
                 k=1,
                 initial_ir_len=4,
                 initial_intron_len=5,
@@ -180,7 +141,7 @@ class TestInitialization(unittest.TestCase):
 
 
     def test_multi_hmm_init(self):
-        trans = gene_pred_hmm_transitioner.GenePredMultiHMMTransitioner(
+        trans = tiberius.gene_pred_hmm_transitioner.GenePredMultiHMMTransitioner(
                 k=2,
                 initial_ir_len=4,
                 initial_intron_len=5,
@@ -240,10 +201,17 @@ class TestInitialization(unittest.TestCase):
 
 
 
+class TestHMMPosterior(unittest.TestCase):
+
+    def test_hmm_posterior_example_1(self):
+        pass
+
+
+
 class TestMultiHMM(unittest.TestCase):
 
     def test_multi_copy_transitions(self):
-        trans = gene_pred_hmm_transitioner.GenePredMultiHMMTransitioner(k = 2)
+        trans = tiberius.gene_pred_hmm_transitioner.GenePredMultiHMMTransitioner(k = 2)
         indices = trans.make_transition_indices()
         ref_indices = [ [0,0], 
                         [0, 13], [0, 14], [13, 9], [14, 10], #START in / out
@@ -264,7 +232,7 @@ class TestMultiHMM(unittest.TestCase):
 
 
     def test_model_transitions(self):
-        trans = gene_pred_hmm_transitioner.GenePredHMMTransitioner()
+        trans = tiberius.gene_pred_hmm_transitioner.GenePredHMMTransitioner()
 
         # test if the transition indices are correct
         indices = trans.make_transition_indices()
@@ -301,7 +269,7 @@ class TestMultiHMM(unittest.TestCase):
         initial_ir_len = 300
         initial_intron_len = 200
         initial_exon_len = 100
-        trans = gene_pred_hmm_transitioner.GenePredHMMTransitioner(
+        trans = tiberius.gene_pred_hmm_transitioner.GenePredHMMTransitioner(
                                 initial_exon_len=initial_exon_len,
                                 initial_intron_len=initial_intron_len,
                                 initial_ir_len=initial_ir_len)
@@ -326,11 +294,9 @@ class TestMultiHMM(unittest.TestCase):
             self.assertAlmostEqual(expected_exon.numpy(), initial_exon_len, places=3)
 
 
-
-
     def test_multi_model_layer(self):
         for num_models in [2,3,5]:
-            hmm_layer = gene_pred_hmm.GenePredHMMLayer(num_models = num_models)
+            hmm_layer = tiberius.gene_pred_hmm.GenePredHMMLayer(num_models = num_models)
             hmm_layer.build([None, None, 15])
             #check if the number of parameters is correct
             self.assertEqual(hmm_layer.cell.transitioner.transition_kernel.shape, (1, 23))
@@ -340,8 +306,8 @@ class TestMultiHMM(unittest.TestCase):
 
     def test_multi_model_parameter_noise(self):
         n = 2
-        kernel_init = gene_pred_hmm.make_15_class_emission_kernel(smoothing=0.01, num_models=n, noise_strength=0.001)
-        hmm_layer = gene_pred_hmm.GenePredHMMLayer(num_models=n, emitter_init=ConstantInitializer(kernel_init))
+        kernel_init = tiberius.gene_pred_hmm.make_15_class_emission_kernel(smoothing=0.01, num_models=n, noise_strength=0.001)
+        hmm_layer = tiberius.gene_pred_hmm.GenePredHMMLayer(num_models=n, emitter_init=ConstantInitializer(kernel_init))
         np.random.seed(77) #make the test deterministic
         hmm_layer.build([None, None, 15])
         #check if emission matrices are different...
@@ -355,7 +321,7 @@ class TestMultiHMM(unittest.TestCase):
 
     def test_multi_model_algorithms(self):
         for num_models in [1,2]:
-            hmm_layer = gene_pred_hmm.GenePredHMMLayer(num_models = num_models)
+            hmm_layer = tiberius.gene_pred_hmm.GenePredHMMLayer(num_models = num_models)
             hmm_layer.build([None, None, 15])
             inputs = np.random.rand(5, 100, 15).astype(np.float32)
             inputs /= np.sum(inputs, -1, keepdims=True)
@@ -365,6 +331,7 @@ class TestMultiHMM(unittest.TestCase):
             #check shapes, omit model dimension if num_models = 1 for compatibility 
             self.assertEqual(posterior.shape, (5, 100, 15) if num_models == 1 else (5, 100, num_models, 15))
             self.assertEqual(viterbi.shape, (5, 100) if num_models == 1 else (5, 100, num_models))
+
 
 
 class TestUtility(unittest.TestCase):
@@ -379,7 +346,7 @@ class TestUtility(unittest.TestCase):
                           0.05,0.0,0.05, #IE
                           0.0]) #stop
         probs_agg_ref = np.array([0.2, 0.1, 0.3, 0.2, 0.2])  
-        A = gene_pred_hmm.make_aggregation_matrix(k=1)
+        A = tiberius.gene_pred_hmm.make_aggregation_matrix(k=1)
         probs_agg = np.matmul(probs[np.newaxis], A)
         np.testing.assert_almost_equal(np.sum(probs_agg, -1), 1.)
         np.testing.assert_almost_equal(probs_agg[0], probs_agg_ref)
@@ -394,7 +361,43 @@ class TestUtility(unittest.TestCase):
                             0.05, 0, 0, 0, 0.02, 0.03, #IE
                             0.0, 0.0]) #stop
         probs_agg_ref = np.array([0.2, 0.1, 0.3, 0.2, 0.2])  
-        A = gene_pred_hmm.make_aggregation_matrix(k=2)
+        A = tiberius.gene_pred_hmm.make_aggregation_matrix(k=2)
         probs_agg = np.matmul(probs[np.newaxis], A)
         np.testing.assert_almost_equal(np.sum(probs_agg, -1), 1.)
         np.testing.assert_almost_equal(probs_agg[0], probs_agg_ref)
+
+
+
+# missing model file, need to fix this test
+# class TestInputs(unittest.TestCase):
+#     def test_inputs(self):
+#         from eval_model_class import PredictionGTF
+
+#         batch_size = 12
+#         seq_len = 99999
+#         strand = '+'
+
+#         inp_data_dir = '../test_data/Panthera_pardus/inp/'
+#         out_dir = '../test_data/unittest_workdir/'
+#         if not os.path.exists(out_dir):
+#             os.mkdir(out_dir)
+
+#         model_path = f'../test_data/model_lstm.h5'
+#         genome_path = f'{inp_data_dir}/genome.fa'
+#         annot_path= f'{inp_data_dir}/annot.gtf'
+#         temp_dir = f'{out_dir}/temp_model/'
+
+#         # load input data and model
+#         pred_gtf = PredictionGTF( 
+#         #     model_path='/home/jovyan/brain/deepl_data//exclude_primates/weights/train2/train6/1/epoch_02',
+#             model_path_lstm=model_path, 
+#             seq_len=seq_len, batch_size=batch_size, hmm=True, temp_dir=temp_dir)
+#         pred_gtf.load_model()
+
+#         f_chunks, r_chunks, coords = pred_gtf.load_inp_data(
+#             genome_path=genome_path,
+#             annot_path=annot_path, 
+#             overlap_size=0, strand=strand, chunk_coords=True
+#         )
+
+#         np.testing.assert_equal(np.sum(f_chunks[..., :5], -1), 1.)

@@ -21,6 +21,18 @@ classifiers = [
 ]
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
+dependencies = [
+  "learnMSA",
+  # "pyBigWig",
+  # "biopython",
+  # "bcbio",
+  # "requests",
+  # "gzip",
+  # "bz2"
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
 
 [project.urls]
 Homepage = "https://github.com/Gaius-Augustus/Tiberius"

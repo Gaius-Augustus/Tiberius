@@ -99,26 +99,18 @@ def train_hmm_model(generator, model_save_dir, config, val_data=None,
                 gene_pred_layer = model_hmm.layers[-3]
             else:
                 gene_pred_layer = None
-            model = add_hmm_layer(model, gene_pred_layer,
+            model = add_hmm_layer(model, 
+                                    gene_pred_layer,
                                     dense_size=config['hmm_dense'], 
-                                    pool_size=config['pool_size'],
                                     output_size=config['output_size'], 
                                     num_hmm=config['num_hmm_layers'],
-                                    l2_lambda=config['l2_lambda'],
                                     hmm_factor=config['hmm_factor'], 
-                                    batch_size=config['batch_size'],
-                                    seq_len=config['w_size'],
-                                    initial_variance=config['initial_variance'],
-                                    temperature=config['temperature'],
-                                    emit_embeddings=config['hmm_emit_embeddings'], 
                                     share_intron_parameters=config['hmm_share_intron_parameters'],
                                     trainable_nucleotides_at_exons=config['hmm_nucleotides_at_exons'],
                                     trainable_emissions=config['hmm_trainable_emissions'],
                                     trainable_transitions=config['hmm_trainable_transitions'],
                                     trainable_starting_distribution=config['hmm_trainable_starting_distribution'],
-                                    use_border_hints=False,
-                                    include_lstm_in_output=config['multi_loss'],
-                                    neutral_hmm=config['neutral_hmm'])
+                                    include_lstm_in_output=config['multi_loss'])
         if model_load:
             # load the weights onto the raw model instead of using model.load to allow hyperparameter changes
             # i.e. you can change hmm_factor and still use checkpoint saved with a different hmm_factor
@@ -421,22 +413,17 @@ def main():
             # hmm code will try to adapt if output size of loaded lstm is different to this number
             'output_size': 15, 
             'multi_loss': False, #if both this and use_hmm are True, uses a additional LSTM loss during training
-            'l2_lambda': 0., 
-            'temperature': 32*3,
-            'initial_variance': 0.1,
             'hmm_factor': 99, # parallelization factor of HMM, use the factor of w_size that is closest to sqrt(w_size) (271 works well for w_size=99999, 99 for w_size=9999)
             'seq_weights': False, # Adds 3d weights with higher weights around positions of exon borders
             'softmasking': True, # Adds softmasking track to input 
             'residual_conv': True, # Adds result of CNNs to the input to the last dense layer of the LSTM model
             'hmm_loss_weight_mul': 0.1,
-            'hmm_emit_embeddings': False,
             "hmm_dense": 32, # size of embedding for HMM input
             'hmm_share_intron_parameters': False,
             'hmm_nucleotides_at_exons': False,
             'hmm_trainable_transitions': False,
             'hmm_trainable_starting_distribution': False,
-            'hmm_trainable_emissions': False, #does not affect embedding emissions, use hmm_emit_embeddings for that
-            "neutral_hmm": False, # initializes an HMM without human expert bias, currently not implemented
+            'hmm_trainable_emissions': False, 
             'constant_hmm': False, # maybe not working anymore
             'num_hmm_layers': 1, # numb. of parallel HMMs, currently only 1 is used
             'clamsa': args.clamsa, # adds clamsa track to input

@@ -1,8 +1,8 @@
 import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (Conv1D, Conv1DTranspose, LSTM, 
-                                Dense, Concatenate, Bidirectional, Dropout, Activation, Input, 
-                                BatchNormalization, Reshape, Embedding, Add, LayerNormalization)
+                                Dense, Bidirectional, Dropout, Activation, Input, 
+                                Reshape, LayerNormalization)
 import sys 
 import numpy as np
 from tensorflow import keras
@@ -11,12 +11,16 @@ from gene_pred_hmm import (GenePredHMMLayer, make_5_class_emission_kernel,
                             make_15_class_emission_kernel, ReduceOutputSize)
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
 from learnMSA.msa_hmm.Training import Identity
-from tensorflow.keras.callbacks import Callback
+
+
+
 
 class Cast(tf.keras.layers.Layer):
     def call(self, x):
         return tf.cast(x[0][..., :5] if isinstance(x, list) else x[..., :5], tf.float32)
     
+
+
 class EpochSave(tf.keras.callbacks.Callback):
     def __init__(self, model_save_dir):
         super(EpochSave, self).__init__()
@@ -24,6 +28,8 @@ class EpochSave(tf.keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         self.model.save(f"{self.model_save_dir}/epoch_{epoch:02d}", save_traces=False)
+
+
 
 class BatchLearningRateScheduler(tf.keras.callbacks.Callback):
     def __init__(self, peak=0.1, warmup=0, min_lr=0.0001):
@@ -41,6 +47,8 @@ class BatchLearningRateScheduler(tf.keras.callbacks.Callback):
             new_lr = (self.total_batches-self.warmup)**(-1/2) * self.peak
         if new_lr > self.min_lr:            
             tf.keras.backend.set_value(self.model.optimizer.lr, new_lr)
+
+
 
 class ValidationCallback(tf.keras.callbacks.Callback):
     def __init__(self, val_gen, save_path):
@@ -62,6 +70,8 @@ class ValidationCallback(tf.keras.callbacks.Callback):
                 self.model.save(self.save_path, save_traces=False)
                 #self.model.save_weights(self.save_path)
                 
+
+
 class BatchSave(tf.keras.callbacks.Callback):
     def __init__(self, save_path, batch_number):
         super(BatchSave, self).__init__()
@@ -73,6 +83,7 @@ class BatchSave(tf.keras.callbacks.Callback):
         if (batch + 1) % self.batch_number == 0:   
             self.prev_batch_numb += batch           
             self.model.save(self.save_path.format(self.prev_batch_numb), save_traces=False)
+
 
 
 def custom_cce_f1_loss(f1_factor, batch_size, 
@@ -127,6 +138,7 @@ def custom_cce_f1_loss(f1_factor, batch_size,
         return combined_loss
     return loss_
 
+       
        
 def lstm_model(units=200, filter_size=64, 
               kernel_size=9, numb_conv=2, 
@@ -278,6 +290,8 @@ def lstm_model(units=200, filter_size=64,
 
     return Model(inputs=inp, outputs=outputs)
 
+
+
 def reduce_lstm_output_7(x, new_size=5):
     """Reduces the output a legacy LSTM that was trained with 7 output classes."""
     assert(x.shape[-1] == 7)
@@ -318,36 +332,36 @@ def reduce_lstm_output_5(x, new_size=3):
     return x_out
 
 
-def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9, 
-                  output_size=5, num_hmm=1, num_copy=1, l2_lambda=0.01, 
-                  hmm_factor=9, batch_size=32, seq_len=99999,
-                 emit_embeddings = False, share_intron_parameters=True, 
-                  trainable_nucleotides_at_exons = True, trainable_emissions = True,
-                  trainable_transitions = True, trainable_starting_distribution=True,
-                  use_border_hints=False, temperature=100., initial_variance=0.05,
+
+def add_hmm_layer(model, 
+                  gene_pred_layer=None, 
+                  output_size=5, 
+                  num_hmm=1, 
+                  num_copy=1, 
+                  hmm_factor=9, 
+                  share_intron_parameters=True, 
+                  trainable_nucleotides_at_exons = False, 
+                  trainable_emissions = True,
+                  trainable_transitions = True, 
+                  trainable_starting_distribution=True,
                   include_lstm_in_output=False,
-                  neutral_hmm=False, emission_noise_strength=0.001):
+                  emission_noise_strength=0.001):
     """Add trainable HMM layer to existing hel_model.
 
     Parameters:
         model (tf.keras.Model): The initial model to which the layers will be added.
         gene_pred_layer (GenePredHMMLayer): The Gene Prediction HMM layer to add to the model. 
-                                            If None, a new layer will be created.
-        dense_size (int): Number of neurons in the newly added Dense layer.
-        pool_size (int): Downsampling factor applied before the HMM layer, affecting the Dense layer's output.
+                                            If None, a new layer will be created with the parameters passed to this method.
         output_size (int): The size of the output layer of the model. Will try to adapt if the model has 7 or 5 outputs but output_size is smaller.
         num_hmm (int): Number of semi-independent HMMs (see GenePredHMMLayer for more details).
         num_copy (int): The number of gene model copies in an HMM that share the IR state.
-        l2_lambda (float): L2 regularization lambda for the variance parameters within the HMM layer.
         hmm_factor (int): Downsampling factor for sequence length processing in the HMM layer.
         batch_size (int): Batch size for the model's training (used for shaping inputs).
-        seq_len (int): Maximum sequence length the model can handle.
-        emit_embeddings (bool): If True, the HMM layer will additionally emit embeddings (experimental).
         share_intron_parameters (bool): If True, the HMM layer will share parameters for intron states for the emissions.
         trainable_nucleotides_at_exons (bool): If True, the HMM layer will train nucleotide distributions at exon states.
-        use_border_hints (bool): If True, the HMM layer will use border hints as input. Set to false to use proper parallel HMM.
-        temperature (float): Temperature parameter for the softmax calculation in the HMM layer.
-        initial_variance (float): Initial variance for the Gaussian distributions used in the HMM layer.
+        trainable_emissions (bool): If True, the HMM layer will train the emission probabilities.
+        trainable_transitions (bool): If True, the HMM layer will train the transition probabilities.
+        trainable_starting_distribution (bool): If True, the HMM layer will train the starting distribution.
         include_lstm_in_output (bool): If True, the LSTM output will be included in the model's output (for multi-loss training).
         emission_noise_strength: Strength of the noise added to the emissions of the HMM layer.
 
@@ -355,17 +369,6 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
         tf.keras.Model: The enhanced model with an added Dense layer and a custom Gene Prediction HMM layer.
     """
     inputs = model.input
-    if use_border_hints:
-        input_hints = Input(shape=(hmm_factor,2,5), name='border_hints')
-    
-    if emit_embeddings:
-        # create embeddings for hmm layer of size dense_size
-        emb = model.get_layer('out_dense').input
-        emb = Dense(4*dense_size, name='dense_hmm_1', activation="relu")(emb)
-        emb = Dense(dense_size, name='dense_hmm')(emb)
-        emb = LayerNormalization(name=f'layer_normalization_hmm')(emb)
-    else:
-        emb = None
     
     x = model.output    
     x = x[0] if isinstance(x, list) else x
@@ -388,48 +391,25 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
         assert not share_intron_parameters, "Can not share intron parameters if output size is 15."
         emitter_init = make_15_class_emission_kernel(smoothing=1e-2, num_copies=num_copy, 
                                                      noise_strength=emission_noise_strength)
-    #currently, the emissions of the semi-independent HMMs are initialized the same
+        
+    # while HMM copies (num_copies > 1) are initialized with noise,
+    # the (semi-)independent HMMs (num_hmm > 1) are initialized with the same kernel here
     emitter_init = np.repeat(emitter_init, num_hmm, axis=0)
+    
     if gene_pred_layer is None:
         gene_pred_layer = GenePredHMMLayer(
             num_models=num_hmm,
             num_copies=num_copy,
-            initial_exon_len=200, 
-            initial_intron_len=4500,
-            initial_ir_len=10000,
-            start_codons=[("ATG", 1.)],
-            stop_codons=[("TAG", .34), ("TAA", 0.33), ("TGA", 0.33)],
-            intron_begin_pattern=[("NGT", 0.99), ("NGC", 0.01)],
-            intron_end_pattern=[("AGN", 1.)],
             emitter_init=ConstantInitializer(emitter_init),
-            starting_distribution_init="zeros",
-            emit_embeddings = emit_embeddings,
-            embedding_dim = dense_size if emit_embeddings else None,
-            full_covariance=False,
-            embedding_kernel_init="random_normal",
-            initial_variance=initial_variance,
-            temperature=temperature,
             share_intron_parameters=share_intron_parameters,
             trainable_emissions=trainable_emissions,
             trainable_transitions=trainable_transitions,
             trainable_starting_distribution=trainable_starting_distribution,
             trainable_nucleotides_at_exons=trainable_nucleotides_at_exons,
-            variance_l2_lambda=l2_lambda,
-            parallel_factor=1 if use_border_hints else hmm_factor,
-            use_border_hints=use_border_hints
+            parallel_factor=hmm_factor
         )
 
-    if use_border_hints:
-        input_hints_hmm = tf.reshape(input_hints, (-1, 2,5), name='reshape_border_hints')
-        input_hints_hmm = tf.matmul(input_hints_hmm, A, transpose_b=True, name='matmul_hint_labels')
-        window_size = seq_len//hmm_factor
-        factor_x = tf.reshape(x, (-1, window_size, 5))
-        factor_nuc = tf.reshape(nuc, (-1, window_size, 5))
-        factor_emb = tf.reshape(emb, (-1, window_size, dense_size))
-        y_hmm = gene_pred_layer(factor_x, nucleotides=factor_nuc, embeddings=factor_emb, end_hints=input_hints_hmm)
-        y_hmm = tf.reshape(y_hmm, (-1, seq_len, 14*num_copy+1))
-    else:
-        y_hmm = gene_pred_layer(x, nucleotides=nuc, embeddings=emb)
+    y_hmm = gene_pred_layer(x, nuc)
 
     if output_size < 15:
         y = ReduceOutputSize(output_size, num_copies=num_copy, name='hmm_out')(y_hmm)
@@ -437,10 +417,12 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
         y = Reshape((-1, output_size) if num_hmm == 1 else (-1, num_hmm, output_size), 
                     name='hmm_out')(y_hmm) #make sure the last dimension is not None
         
-    model_hmm = Model(inputs=[inputs, input_hints] if use_border_hints else inputs, 
+    model_hmm = Model(inputs=inputs, 
                     outputs=[x, y] if include_lstm_in_output else y)
     
     return model_hmm
+
+
 
 def add_constant_hmm(model, seq_len=9999, batch_size=450, output_size=3):
     """Extends a given model with a Hidden Markov Model (HMM) layer that has constant emission probabilities.
@@ -472,7 +454,6 @@ def add_constant_hmm(model, seq_len=9999, batch_size=450, output_size=3):
                         initial_exon_len=150, 
                         initial_intron_len=4000,
                         initial_ir_len=100000,
-                        emit_embeddings=False,
                         start_codons=[("ATG", 1.)],
                         stop_codons=[("TAG", .34), ("TAA", .33), ("TGA", .33)],
                         intron_begin_pattern=[("NGT", 0.99), ("NGC", 0.01)],
@@ -506,6 +487,8 @@ def add_constant_hmm(model, seq_len=9999, batch_size=450, output_size=3):
     model_hmm = Model(inputs=inputs, outputs=y)
     return model_hmm
 
+
+
 def add_hmm_only(model):
     inputs = model.input
     x = model.layers[-1].output         
@@ -516,6 +499,8 @@ def add_hmm_only(model):
     
     return model_hmm
 
+
+
 def get_positional_encoding(seq_len, d_model):
     positions = tf.range(seq_len, dtype=tf.float32)[:, tf.newaxis]
     div_terms = tf.exp(tf.range(0, d_model, 2, dtype=tf.float32) * -(np.log(10000.0) / d_model))
@@ -524,6 +509,7 @@ def get_positional_encoding(seq_len, d_model):
     pos_encoding = tf.concat([sines, cosines], axis=-1)
     pos_encoding = pos_encoding[tf.newaxis, ...]
     return pos_encoding
+
 
 
 def weighted_categorical_crossentropy(class_weights, overall_weight):
@@ -549,6 +535,8 @@ def weighted_categorical_crossentropy(class_weights, overall_weight):
         # Calculate mean loss across all classes
         return tf.reduce_mean(weighted_loss)    
     return loss
+
+
 
 #Felix: added to make my code run
 #do you have your own weighted loss? lets merge/remove one later

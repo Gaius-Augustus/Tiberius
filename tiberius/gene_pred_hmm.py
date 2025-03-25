@@ -30,18 +30,13 @@ class GenePredHMMLayer(HmmLayer):
         initial_exon_len: The initial expected length of exons.
         initial_intron_len: The initial expected length of introns.
         initial_ir_len: The initial expected length of intergenic regions.
-        emitter_init: The initializer for the class emission parameters. 
-        starting_distribution_init: The initializer for the starting distribution.
-        starting_distribution_trainable: Whether the starting distribution should be trainable.
-        emit_embeddings: Whether to emit embeddings of the inputs as output by a language model.
-        embedding_dim: The dimensionality of the embeddings. Must be specified if and only if emit_embeddings=True.
-        full_covariance: Whether to use a full covariance matrix for the emission distribution. False is recommended too keep the parameter count low.
-        embedding_kernel_init: The initializer for the embedding kernel. Only relevant if emit_embeddings=True.
-        initial_variance: The initial variance of each embedding dimension. Only relevant if emit_embeddings=True.
-        temperature: A temperature parameter to regulate the mvn pdf.
+        emitter_init: The initializer for the class emission parameters. Default: Kernel for the standard 15 class HMM.
+        starting_distribution_init: The initializer for the starting distribution. 
+        trainable_emissions: Whether the emission parameters should be trainable.
+        trainable_transitions: Whether the transition parameters should be trainable.
+        trainable_starting_distribution: Whether the starting distribution should be trainable.
+        trainable_nucleotides_at_exons: Adds additional trainable nucleotide emissions per exon state.
         share_intron_parameters: Whether to share the emission parameters of the intron states. This does currently not affect transitions.
-        simple: Whether to use a simple HMM with only 3 states (IR, I, E) instead of the full 7 state HMM (use only for backwards compatibility).
-        disable_metrics: Disabled additional metrics added during training.
         parallel_factor: The number of chunks the input is split into to process them in parallel. Must devide the length of the input.
                         Increases speed and GPU utilization but also memory usage.
     """
@@ -50,29 +45,19 @@ class GenePredHMMLayer(HmmLayer):
                 num_copies=1,
                 start_codons=[("ATG", 1.)],
                 stop_codons=[("TAG", .34), ("TAA", 0.33), ("TGA", 0.33)],
-                intron_begin_pattern=[("NGT", 0.99), ("NGC", 0.005), ("NAT", 0.005)],
-                intron_end_pattern=[("AGN", 0.99), ("ACN", 0.01)],
-                initial_exon_len=100,
-                initial_intron_len=10000,
+                intron_begin_pattern=[("NGT", 0.99), ("NGC", 0.01)],
+                intron_end_pattern=[("AGN", 1.)],
+                initial_exon_len=200, 
+                initial_intron_len=4500,
                 initial_ir_len=10000,
-                emitter_init=ConstantInitializer(0.),
+                emitter_init=None,
                 starting_distribution_init="zeros",
                 trainable_emissions=True,
                 trainable_transitions=True,
                 trainable_starting_distribution=True,
                 trainable_nucleotides_at_exons=False,
-                emit_embeddings = False,
-                embedding_dim=None, 
-                full_covariance=False,
-                embedding_kernel_init="random_normal",
-                initial_variance=1.,
-                temperature=100.,
                 share_intron_parameters=False,
-                simple=False,
-                variance_l2_lambda=0.01,
-                disable_metrics=True,
                 parallel_factor=1,
-                use_border_hints=False,
                 **kwargs):
         self.num_models = num_models
         self.num_copies = num_copies
@@ -80,7 +65,13 @@ class GenePredHMMLayer(HmmLayer):
         self.stop_codons = stop_codons
         self.intron_begin_pattern = intron_begin_pattern
         self.intron_end_pattern = intron_end_pattern
-        self.emitter_init = emitter_init
+        if emitter_init is None:
+            emitter_init = make_15_class_emission_kernel(smoothing=1e-2, 
+                                                         num_models=num_models,
+                                                         num_copies=num_copies)
+            self.emitter_init = ConstantInitializer(emitter_init)
+        else:
+            self.emitter_init = emitter_init
         self.initial_exon_len = initial_exon_len
         self.initial_intron_len = initial_intron_len
         self.initial_ir_len = initial_ir_len
@@ -89,80 +80,44 @@ class GenePredHMMLayer(HmmLayer):
         self.trainable_transitions = trainable_transitions
         self.trainable_starting_distribution = trainable_starting_distribution
         self.trainable_nucleotides_at_exons = trainable_nucleotides_at_exons
-        self.emit_embeddings = emit_embeddings
-        self.embedding_dim = embedding_dim
-        self.full_covariance = full_covariance
-        self.embedding_kernel_init = embedding_kernel_init
-        self.initial_variance = initial_variance
-        self.temperature = temperature
         self.share_intron_parameters = share_intron_parameters
-        self.simple = simple
-        self.variance_l2_lambda = variance_l2_lambda
-        self.disable_metrics = disable_metrics
         self.parallel_factor = parallel_factor
-        self.use_border_hints = use_border_hints
-        if use_border_hints:
-            super(GenePredHMMLayer, self).__init__(cell=None, use_prior=False, num_seqs=1e6, **kwargs)
-        else:
-            super(GenePredHMMLayer, self).__init__(cell=None, use_prior=False, num_seqs=1e6, parallel_factor=parallel_factor, **kwargs)
+        super(GenePredHMMLayer, self).__init__(cell=None, use_prior=False, num_seqs=1e6, parallel_factor=parallel_factor, **kwargs)
+
 
 
     def build(self, input_shape):
         if self.built:
             return
-        if self.simple:
-            emitter = SimpleGenePredHMMEmitter(init=self.emitter_init,
-                                                trainable_emissions=self.trainable_emissions,
-                                                emit_embeddings=self.emit_embeddings,
-                                                embedding_dim=self.embedding_dim,
-                                                full_covariance=self.full_covariance,
-                                                embedding_kernel_init=self.embedding_kernel_init,
-                                                initial_variance=self.initial_variance,
-                                                temperature=self.temperature,
-                                                share_intron_parameters=self.share_intron_parameters),
-            transitioner = SimpleGenePredHMMTransitioner(initial_exon_len=self.initial_exon_len,
-                                                        initial_intron_len=self.initial_intron_len,
-                                                        initial_ir_len=self.initial_ir_len,
-                                                        starting_distribution_init=self.starting_distribution_init,
-                                                        starting_distribution_trainable=self.trainable_starting_distribution,
-                                                        transitions_trainable=self.trainable_transitions)
+        emitter = GenePredHMMEmitter(start_codons=self.start_codons,
+                                    stop_codons=self.stop_codons,
+                                    intron_begin_pattern=self.intron_begin_pattern,
+                                    intron_end_pattern=self.intron_end_pattern,
+                                    num_models=self.num_models,
+                                    num_copies=self.num_copies,
+                                    init=self.emitter_init,
+                                    trainable_emissions=self.trainable_emissions,
+                                    share_intron_parameters=self.share_intron_parameters,
+                                    trainable_nucleotides_at_exons=self.trainable_nucleotides_at_exons)
+        #note that for num_models>1, the transition parameters are shared between the models,
+        #the argument num_models is currently just to get the correct shapes
+        if self.num_copies == 1:
+            transitioner = GenePredHMMTransitioner(num_models=self.num_models,
+                                                    initial_exon_len=self.initial_exon_len,
+                                                    initial_intron_len=self.initial_intron_len,
+                                                    initial_ir_len=self.initial_ir_len,
+                                                    starting_distribution_init=self.starting_distribution_init,
+                                                    starting_distribution_trainable=self.trainable_starting_distribution,
+                                                    transitions_trainable=self.trainable_transitions)
         else:
-            emitter = GenePredHMMEmitter(start_codons=self.start_codons,
-                                        stop_codons=self.stop_codons,
-                                        intron_begin_pattern=self.intron_begin_pattern,
-                                        intron_end_pattern=self.intron_end_pattern,
-                                        l2_lambda=self.variance_l2_lambda,
-                                        num_models=self.num_models,
-                                        num_copies=self.num_copies,
-                                        init=self.emitter_init,
-                                        trainable_emissions=self.trainable_emissions,
-                                        emit_embeddings=self.emit_embeddings,
-                                        embedding_dim=self.embedding_dim,
-                                        full_covariance=self.full_covariance,
-                                        embedding_kernel_init=self.embedding_kernel_init,
-                                        initial_variance=self.initial_variance,
-                                        temperature=self.temperature,
-                                        share_intron_parameters=self.share_intron_parameters,
-                                        trainable_nucleotides_at_exons=self.trainable_nucleotides_at_exons)
-            #note that for num_models>1, the transition parameters are shared between the models,
-            #the argument num_models is currently just to get the correct shapes
-            if self.num_copies == 1:
-                transitioner = GenePredHMMTransitioner(num_models=self.num_models,
-                                                        initial_exon_len=self.initial_exon_len,
-                                                        initial_intron_len=self.initial_intron_len,
-                                                        initial_ir_len=self.initial_ir_len,
-                                                        starting_distribution_init=self.starting_distribution_init,
-                                                        starting_distribution_trainable=self.trainable_starting_distribution,
-                                                        transitions_trainable=self.trainable_transitions)
-            else:
-                transitioner = GenePredMultiHMMTransitioner(k=self.num_copies,
-                                                        num_models=self.num_models,
-                                                        initial_exon_len=self.initial_exon_len,
-                                                        initial_intron_len=self.initial_intron_len,
-                                                        initial_ir_len=self.initial_ir_len,
-                                                        starting_distribution_init=self.starting_distribution_init,
-                                                        starting_distribution_trainable=self.trainable_starting_distribution,
-                                                        transitions_trainable=self.trainable_transitions)
+            transitioner = GenePredMultiHMMTransitioner(k=self.num_copies,
+                                                    num_models=self.num_models,
+                                                    initial_exon_len=self.initial_exon_len,
+                                                    initial_intron_len=self.initial_intron_len,
+                                                    initial_ir_len=self.initial_ir_len,
+                                                    starting_distribution_init=self.starting_distribution_init,
+                                                    starting_distribution_trainable=self.trainable_starting_distribution,
+                                                    transitions_trainable=self.trainable_transitions)
         # configure the cell
         self.cell = HmmCell([emitter.num_states]*self.num_models,
                             dim=input_shape[-1],
@@ -173,65 +128,63 @@ class GenePredHMMLayer(HmmLayer):
         super(GenePredHMMLayer, self).build(input_shape)
 
 
-    def concat_inputs(self, inputs, nucleotides, embeddings=None):
+
+    def concat_inputs(self, inputs, nucleotides):
         assert nucleotides is not None
         inputs = tf.expand_dims(inputs, 0)
         nucleotides = tf.expand_dims(nucleotides, 0)
         input_list = [inputs, nucleotides]
-        if self.emit_embeddings:
-            assert embeddings is not None
-            embeddings = tf.expand_dims(embeddings, 0)
-            input_list.insert(1, embeddings)
         stacked_inputs = tf.concat(input_list, axis=-1)
         return stacked_inputs
 
 
-    def call(self, inputs, nucleotides=None, embeddings=None, end_hints=None, training=False, use_loglik=True):
+
+    def call(self, inputs, nucleotides=None, training=False, use_loglik=True):
         """ 
         Computes the state posterior log-probabilities.
         Args: 
                 inputs: Shape (batch, len, alphabet_size)
                 nucleotides: Shape (batch, len, 5) one-hot encoded nucleotides with N in the last position.
-                embeddings: Shape (batch, len, dim) embeddings of the inputs as output by a language model.
-                end_hints: A tensor of shape (batch, 2, num_states) that contains the correct state for the left and right ends of each chunk.
         Returns:
                 State posterior log-probabilities (without loglik if use_loglik is False). The order of the states is Ir, I0, I1, I2, E0, E1, E2.
                 Shape (batch, len, number_of_states) if num_models=1 and (batch, len, num_models, number_of_states) if num_models>1.
         """ 
-        #batch matmul of k inputs with k matricies
-        if end_hints is not None:
-            end_hints = tf.expand_dims(end_hints, 0)
-        if self.simple:
-            log_post, prior, _ = self.state_posterior_log_probs(tf.expand_dims(inputs, 0), return_prior=True, end_hints=end_hints, training=training, no_loglik=not use_loglik)
-        else:
-            stacked_inputs = self.concat_inputs(inputs, nucleotides, embeddings)
-            log_post, prior, _ = self.state_posterior_log_probs(stacked_inputs, end_hints=end_hints, return_prior=True, training=training, no_loglik=not use_loglik) 
+
+        stacked_inputs = self.concat_inputs(inputs, nucleotides)
+
+        log_post, prior, _ = self.state_posterior_log_probs(stacked_inputs, 
+                                                            return_prior=True, 
+                                                            training=training, 
+                                                            no_loglik=not use_loglik) 
+        
         if training:
             prior = tf.reduce_mean(prior)
             self.add_loss(prior)
-            #self.add_metric(prior, "prior") #deprecated in tf 2.17
+
         return log_post[0] if self.num_models == 1 else tf.transpose(log_post, [1,2,0,3])
 
 
-    def viterbi(self, inputs, nucleotides=None, embeddings=None, end_hints=None):
+
+    def viterbi(self, inputs, nucleotides):
         """ 
         Computes the most likely state sequence.
         Args: 
                 inputs: Shape (batch, len, alphabet_size)
                 nucleotides: Shape (batch, len, 5) one-hot encoded nucleotides with N in the last position.
-                embeddings: Shape (batch, len, dim) embeddings of the inputs as output by a language model.
         Returns:
                 Most likely state sequence of shape (batch, len) if num_models=1 and (batch, len, num_models) if num_models>1.
         """
+
         if not self.built:
             self.build(inputs.shape)
+
         self.cell.recurrent_init()
-        if self.simple:
-            viterbi_seq = viterbi(tf.expand_dims(inputs, 0), self.cell, parallel_factor=self.parallel_factor)
-        else:
-            stacked_inputs = self.concat_inputs(inputs, nucleotides, embeddings)
-            viterbi_seq = viterbi(stacked_inputs, self.cell, end_hints=end_hints, parallel_factor=self.parallel_factor)
+
+        stacked_inputs = self.concat_inputs(inputs, nucleotides)
+        viterbi_seq = viterbi(stacked_inputs, self.cell, parallel_factor=self.parallel_factor)
+
         return viterbi_seq[0] if self.num_models == 1 else tf.transpose(viterbi_seq, [1,2,0])
+
 
 
     def get_config(self):
@@ -250,16 +203,7 @@ class GenePredHMMLayer(HmmLayer):
                 "trainable_transitions": self.trainable_transitions,
                 "trainable_starting_distribution": self.trainable_starting_distribution,
                 "trainable_nucleotides_at_exons": self.trainable_nucleotides_at_exons,
-                "emit_embeddings": self.emit_embeddings,
-                "embedding_dim": self.embedding_dim,
-                "full_covariance": self.full_covariance,
-                "embedding_kernel_init": self.embedding_kernel_init,
-                "initial_variance": self.initial_variance,
-                "temperature": self.temperature,
                 "share_intron_parameters": self.share_intron_parameters,
-                "simple": self.simple,
-                "variance_l2_lambda": self.variance_l2_lambda,
-                "use_border_hints": self.use_border_hints,
                 "parallel_factor" : self.parallel_factor}
 
 

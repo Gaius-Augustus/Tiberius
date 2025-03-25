@@ -164,3 +164,4 @@ def test_multi_model_algorithms() -> None:
         assert viterbi.shape == (
             (5, 100) if num_models == 1 else (5, 100, num_models)
         )
+    

@@ -223,6 +223,8 @@ class GenePredHMMLayer(HmmLayer):
         Returns:
                 Most likely state sequence of shape (batch, len) if num_models=1 and (batch, len, num_models) if num_models>1.
         """
+        if not self.built:
+            self.build(inputs.shape)
         self.cell.recurrent_init()
         if self.simple:
             viterbi_seq = viterbi(tf.expand_dims(inputs, 0), self.cell, parallel_factor=self.parallel_factor)

@@ -24,6 +24,13 @@ You can now import tiberius in any python script or jupyter notebook:
 ```python
 import tiberius
 ```
+*Optional but recommended step:*
+
+By default, TensorFlow allocates all available GPU memory even though it might use only a fraction of it. This is problematic, when sharing a GPU for collaborative development. In your development conda environment run
+```bash
+env config vars set TF_FORCE_GPU_ALLOW_GROWTH=true
+```
+to permanently disable that behavior. Not recommended for production environments for efficiency reasons.
 
 
 #### Running tests

@@ -292,7 +292,9 @@ def train_lstm_model(generator, model_save_dir, config, val_data=None, model_loa
                          'numb_conv', 'numb_lstm', 'dropout_rate', 
                          'pool_size', 'stride', 'lstm_mask', 'clamsa',
                          'output_size', 'residual_conv', 'softmasking',
-                        'clamsa_kernel', 'lru_layer', 'lru_hidden_state_dim', 'lru_max_tree_depth', 'lru_init_bounds']
+                        'clamsa_kernel', 'lru_layer', 'lru_hidden_state_dim', 
+                        'lru_max_tree_depth', 'lru_init_bounds', 'lru_scan_use_tf_while_loop',
+                        'lru_scan_base_case_n']
         relevant_args = {key: config[key] for key in relevant_keys if key in config}
         model = lstm_model(**relevant_args)
         if model_load:
@@ -305,12 +307,13 @@ def train_lstm_model(generator, model_save_dir, config, val_data=None, model_loa
                 )
         else:
             model.compile(loss=cce_loss, optimizer=optimizer, 
-                metrics=['accuracy'])        
+                metrics=['accuracy']) #, jit_compile=True)       #ATTENTION JIT_COMPILE=TRUE 
         model.summary()
 
         model.fit(generator, epochs=epochs, validation_data=val_data,
                 steps_per_epoch=1000,
-                callbacks=[epoch_callback, csv_logger])
+                callbacks=[epoch_callback, csv_logger],
+                verbose=2)
 
 def load_val_data(file, hmm_factor=1, output_size=7, clamsa=False, softmasking=True, oracle=False):
     """

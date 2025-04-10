@@ -42,7 +42,7 @@ class PredictionGTF:
                  # transformer=False, trans_lstm=False, 
                  annot_path='', genome_path='', genome=None, softmask=True,
                  strand='+', parallel_factor=1, oracle=False,
-                 lstm_cfg='',):
+                 lstm_cfg='',lru=False):
         """
         Arguments:
             - model_path (str): Path to the main model file that includes a HMM layer.
@@ -74,6 +74,7 @@ class PredictionGTF:
         self.genome = genome
         self.softmask = softmask
         self.hmm = hmm
+        self.lru=lru
         self.emb = emb
         self.strand=strand
         # self.transformer = transformer
@@ -91,6 +92,9 @@ class PredictionGTF:
         self.lstm_pred = None
         self.parallel_factor = parallel_factor
         self.lstm_model = None
+
+        if self.lru:
+            sys.path.insert(0, self.lru)
     
     def reduce_label(self, arr, num_hmm=1):
         """Reduces intron and exon labels.
@@ -133,11 +137,14 @@ class PredictionGTF:
                  self.lstm_model = lstm_model(**relevant_args)
                  self.lstm_model.load_weights(self.model_path_lstm + '/variables/variables')
             else:
+                custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
+                                'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
+                                'Cast': Cast}
+                if self.lru:
+                    import LRU_tf as lru
+                    custom_objects['LRU_Block'] = lru.LRU_Block
                 self.lstm_model = keras.models.load_model(self.model_path_lstm, 
-                        custom_objects={
-                        'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
-                        'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
-                        "Cast": Cast}
+                        custom_objects=custom_objects
                         )
             if self.model_path_hmm:
                 model_hmm = keras.models.load_model(self.model_path_hmm, 

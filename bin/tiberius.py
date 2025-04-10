@@ -143,7 +143,7 @@ def load_genome(genome_path):
     return genome
 
 def main():    
-    args = parseCmd()        
+    args = parseCmd()      
 
     import tensorflow as tf
 
@@ -166,7 +166,9 @@ def main():
             sys.exit(1)
     
     if args.learnMSA:
-        sys.path.insert(0, args.learnMSA)  
+        sys.path.insert(0, args.learnMSA) 
+    if args.LRU:
+        lru = args.LRU
        
     from eval_model_class import PredictionGTF
     from models import make_weighted_cce_loss        
@@ -277,6 +279,7 @@ def main():
             genome=genome,
             softmask=not args.no_softmasking, strand=s_,
             parallel_factor=parallel_factor,
+            lru=lru
         )
         
         pred_gtf.load_model(summary=j==0)
@@ -398,7 +401,9 @@ def parseCmd():
         help='')
     parser.add_argument('--learnMSA',  type=str, default='',
         #help='Path to the learnMSA repository (only required if it is not installed with pip)')
-        help=argparse.SUPPRESS)                        
+        help=argparse.SUPPRESS)   
+    parser.add_argument('--LRU',  type=str, default='',
+        help='Path to the LRU repository')                     
     parser.add_argument('--codingseq', type=str, default='',
         help='Ouputs the coding sequences of all predicted genes as a FASTA file.')
     parser.add_argument('--protseq', type=str, default='',

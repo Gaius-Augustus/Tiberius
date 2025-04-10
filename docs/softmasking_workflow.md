@@ -15,7 +15,7 @@ RepeatModeler -database ${DB} -pa 72 -LTRStruct
 RepeatMasker -pa 72 -lib ${DB} -xsmall ${SPECIES}.fa
 ```
 
-3. Sometimes the previous steps miss some repetitive regions. Therefore, run Tandem Repeats Finder as an additional masking step:
+3. Sometimes the previous steps miss some repetitive regions. Therefore, run Tandem Repeats Finder as an additional masking step using using [splitMfasta.pl](https://github.com/Gaius-Augustus/Augustus/blob/master/scripts/splitMfasta.pl) and [parseTrfOutput.py](https://github.com/gatech-genemark/BRAKER2-exp/blob/master/bin/trf-scripts/parseTrfOutput.py):
 
 ```shell
 mkdir trf

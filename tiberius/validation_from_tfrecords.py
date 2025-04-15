@@ -39,7 +39,7 @@ def main():
             filter=False,
             output_size=15,
             hmm_factor=0, clamsa=args.clamsa
-      )   
+      )
     
     for j in range(args.val_size):
         i = np.random.randint(0, args.batch_size)

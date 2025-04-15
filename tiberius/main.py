@@ -143,7 +143,7 @@ def load_genome(genome_path):
     return genome
 
 def main():    
-    args = parseCmd()        
+    args = parseCmd()
 
     import tensorflow as tf
 

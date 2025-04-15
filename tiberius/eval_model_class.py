@@ -7,19 +7,20 @@
 # ==============================================================
 
 import sys, json, os, re, sys, csv, time
-from genome_fasta import GenomeSequences
-from annotation_gtf import GeneStructure
 import subprocess as sp
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras as keras
 from learnMSA.msa_hmm.Viterbi import viterbi
 from tensorflow.keras.models import Model
-from genome_anno import Anno
-from models import custom_cce_f1_loss, lstm_model, Cast
-from gene_pred_hmm import class3_emission_matrix, GenePredHMMLayer, make_5_class_emission_kernel, make_aggregation_matrix, make_15_class_emission_kernel
+from tiberius import (GenePredHMMLayer, 
+                    make_5_class_emission_kernel, 
+                    make_aggregation_matrix, 
+                    make_15_class_emission_kernel,
+                    GenomeSequences,
+                    GeneStructure, Anno)
+from tiberius.models import custom_cce_f1_loss, lstm_model, Cast
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
-# from transformers import AutoTokenizer, TFAutoModelForMaskedLM, TFEsmForMaskedLM
 from tensorflow.keras.layers import (Conv1D, SimpleRNN, Conv1DTranspose, LSTM, GRU, Dense, Bidirectional, Dropout, Activation, Input, BatchNormalization, LSTM, Reshape, Embedding, Add, LayerNormalization,
                                     AveragePooling1D)
 
@@ -37,9 +38,8 @@ class PredictionGTF:
         """
     def __init__(self, model_path='', seq_len=500004, batch_size=200, 
                  hmm=False, model_path_lstm='', model_path_hmm='', 
-                 temp_dir='', emb=False, num_hmm=1,
+                 temp_dir='', num_hmm=1,
                  hmm_factor=None, 
-                 # transformer=False, trans_lstm=False, 
                  annot_path='', genome_path='', genome=None, softmask=True,
                  strand='+', parallel_factor=1, oracle=False,
                  lstm_cfg='',):
@@ -52,7 +52,6 @@ class PredictionGTF:
             - model_path_lstm (str): Path to the LSTM model file. A default HMM will then be used except when model_path_hmm is provided.
             - model_path_hmm (str): Path to the HMM model file.
             - temp_dir (str): Temporary directory path for intermediate files. 
-            - emb (bool): A flag to indicate whether HMM embedding should be used. 
             - num_hmm (int): Number of HMMs to be used.
             - hmm_factor: Parallelization factor of HMM (deprecated, remove in a later version)
             - transformer (bool): A flag to indicate whether a transformer model should be used. (depprecated!)
@@ -74,7 +73,6 @@ class PredictionGTF:
         self.genome = genome
         self.softmask = softmask
         self.hmm = hmm
-        self.emb = emb
         self.strand=strand
         # self.transformer = transformer
         self.model = None
@@ -113,14 +111,6 @@ class PredictionGTF:
             summary (bool, optional): If True, prints the model summary. Defaults to True.
         """
         if self.hmm and self.model_path_lstm:
-            # only the lstm model is provided, use the default HMM Layer
-            # if self.transformer or self.trans_lstm:
-            #     # lstm model includes transformer
-            #     lstm_model_full = keras.models.load_model(self.model_path_lstm, 
-            #                               custom_objects={'TFEsmForMaskedLM': TFEsmForMaskedLM})
-            #     self.trans_model = self.transformer_model(self.seq_len, lstm_model_full)
-            #     self.lstm_model = self.trans_lstm_model(lstm_model_full)
-            # elif self.lstm_cfg:
             if self.lstm_cfg:
                  with open(self.lstm_cfg, 'r') as f:
                     config = json.load(f)
@@ -154,64 +144,30 @@ class PredictionGTF:
         elif self.model_path_lstm:
             self.lstm_model = keras.models.load_model(self.model_path_lstm, 
                                                         custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
-                                                         'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
-        elif self.model_path and self.emb:
-            # load LSTM+HMM model and extract LSTM part
-            self.model = keras.models.load_model(self.model_path,
-                                                custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
-                                                            'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
-            if summary:
-                self.model.summary()
-            self.lstm_model = Model(
-                    inputs=self.model.input, 
-                    outputs=[self.model.get_layer('lstm_out').output,
-                            self.model.get_layer('layer_normalization_hmm').output]
-                    )
-            self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
-            if self.parallel_factor is not None:
-                self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
-            self.gene_pred_hmm_layer.cell.recurrent_init()            
-        elif self.model_path:
-            if False:
-                self.model = clamsa_only_model()
-                self.model.load_weights(self.model_path+"/variables/variables", 
-                                    custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
-                                        'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
-                if self.hmm:
-                    self.lstm_model = Model(
-                                    inputs=self.model.input, 
-                                    outputs=self.model.get_layer('lstm_out').output
-                                    )
-                    self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
+                                                         'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})          
+        elif self.model_path:            
+            self.model = keras.models.load_model(self.model_path, 
+                                    custom_objects={
+                                        'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
+                                        'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
+                                        "Cast": Cast})            
+            if self.hmm:
+                try:
+                    lstm_output=self.model.get_layer('out').output
+                except ValueError as e:
+                    lstm_output=self.model.get_layer('lstm_out').output
+                self.lstm_model = Model(
+                                inputs=self.model.input, 
+                                outputs=lstm_output
+                                )
+                #self.gene_pred_hmm_layer = self.model.layers[-1]
+                self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
 
-                    if self.parallel_factor is not None:
-                        self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
-                    print(f"Running gene pred hmm layer with parallel factor {self.gene_pred_hmm_layer.parallel_factor}")
+                if self.parallel_factor is not None:
+                    self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
+                print(f"Running gene pred hmm layer with parallel factor {self.gene_pred_hmm_layer.parallel_factor}")
 
-                    self.gene_pred_hmm_layer.cell.recurrent_init()
-            if True:
-                self.model = keras.models.load_model(self.model_path, 
-                                        custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
-                                            'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
-                                            "Cast": Cast})
-                
-                if self.hmm:
-                    try:
-                        lstm_output=self.model.get_layer('out').output
-                    except ValueError as e:
-                        lstm_output=self.model.get_layer('lstm_out').output
-                    self.lstm_model = Model(
-                                    inputs=self.model.input, 
-                                    outputs=lstm_output
-                                    )
-                    #self.gene_pred_hmm_layer = self.model.layers[-1]
-                    self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
-
-                    if self.parallel_factor is not None:
-                        self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
-                    print(f"Running gene pred hmm layer with parallel factor {self.gene_pred_hmm_layer.parallel_factor}")
-
-                    self.gene_pred_hmm_layer.cell.recurrent_init()
+                self.gene_pred_hmm_layer.cell.recurrent_init()
             if summary:
                 self.model.summary()
         else: 
@@ -386,10 +342,7 @@ class PredictionGTF:
         print('### LSTM prediction')
         if save and self.temp_dir and os.path.exists(f'{self.temp_dir}/lstm_predictions.npz'):
             lstm_predictions = np.load(f'{self.temp_dir}/lstm_predictions.npz')
-            if self.emb:
-                lstm_predictions = [lstm_predictions['array1'],  lstm_predictions['array2']]
-            else:
-                lstm_predictions = lstm_predictions['array1']
+            lstm_predictions = lstm_predictions['array1']
             return lstm_predictions
         
         if inp_chunks.shape[0] % batch_size > 0:
@@ -408,23 +361,11 @@ class PredictionGTF:
                 ])           
             else:
                 y = self.lstm_model(inp_chunks[start_pos:end_pos])
-            if not self.emb and len(y.shape) == 1:
-                y = np.expand_dims(y,0)
-            elif self.emb and len(y[0].shape) == 1:
-                y[0] = np.expand_dims(y[0],0)
-                y[1] = np.expand_dims(y[1],0)
-            lstm_predictions.append(y)
-            #print(len(lstm_predictions), '/', num_batches, file=sys.stderr) 
-        if self.emb:
-            lstm_predictions = [np.concatenate([l[0] for l in lstm_predictions], axis=0),
-                               np.concatenate([l[1] for l in lstm_predictions], axis=0)]
-        else:
-            lstm_predictions = np.concatenate(lstm_predictions, axis=0)
-        if save and self.temp_dir:
-            if self.emb:
-                np.savez(f'{self.temp_dir}/lstm_predictions.npz', array1=lstm_predictions[0], array2=lstm_predictions[1])
-            else:
-                np.savez(f'{self.temp_dir}/lstm_predictions.npz', array1=lstm_predictions)
+            y = np.expand_dims(y,0)
+            lstm_predictions.append(y)        
+        lstm_predictions = np.concatenate(lstm_predictions, axis=0)
+        if save and self.temp_dir:            
+            np.savez(f'{self.temp_dir}/lstm_predictions.npz', array1=lstm_predictions)
         return lstm_predictions
     
     def hmm_prediction(self, nuc_seq, lstm_predictions, save=True, batch_size=None):
@@ -451,15 +392,9 @@ class PredictionGTF:
             num_batches += 1
         for i in range(num_batches):
             start_pos = i * batch_size
-            end_pos = (i+1) * batch_size
-            if self.emb:
-                y_hmm = self.predict_vit(nuc_seq[start_pos:end_pos], 
-                    [lstm_predictions[0][start_pos:end_pos], 
-                     lstm_predictions[1][start_pos:end_pos]]
-                           ).numpy().squeeze()
-            else:
-                y_hmm = self.predict_vit(nuc_seq[start_pos:end_pos], 
-                    lstm_predictions[start_pos:end_pos]).numpy().squeeze()
+            end_pos = (i+1) * batch_size            
+            y_hmm = self.predict_vit(nuc_seq[start_pos:end_pos], 
+                lstm_predictions[start_pos:end_pos]).numpy().squeeze()
             if len(y_hmm.shape) == 1:
                 y_hmm = np.expand_dims(y_hmm,0)
             hmm_predictions.append(y_hmm)
@@ -512,23 +447,14 @@ class PredictionGTF:
         hmm_predictions = np.zeros((inp_chunks.shape[0],inp_chunks.shape[1]), int)
         for i in range(inp_chunks.shape[0]):
             slide_mean = 0
-            if self.emb:
-                slide_mean = sliding_window_avg(lstm_predictions[0][i], 200)[:,0].min()
             if slide_mean < 0.8:
                 batch_i += [i]
             else:
                 hmm_predictions[i] = lstm_predictions[0][i].argmax(-1)
 
-            if len(batch_i) == batch_size*self.hmm_factor or i == inp_chunks.shape[0]-1:
-                #print(i, '/', inp_chunks.shape[0], file=sys.stderr)  
-                if self.emb:
-                    y_hmm = self.predict_vit(inp_chunks[batch_i], 
-                            [lstm_predictions[0][batch_i], 
-                             lstm_predictions[1][batch_i]], border_hints=False
-                                   ).numpy().squeeze()
-                else:
-                    y_hmm = self.predict_vit(inp_chunks[batch_i], 
-                            lstm_predictions[batch_i]).numpy().squeeze()
+            if len(batch_i) == batch_size*self.hmm_factor or i == inp_chunks.shape[0]-1:                
+                y_hmm = self.predict_vit(inp_chunks[batch_i], 
+                        lstm_predictions[batch_i]).numpy().squeeze()
                 if len(y_hmm.shape) == 1:
                     y_hmm = np.expand_dims(y_hmm,0)
                 for j1, j2 in enumerate(batch_i):
@@ -539,7 +465,8 @@ class PredictionGTF:
             np.save(f'{self.temp_dir}/hmm_predictions.npy', hmm_predictions)
         return hmm_predictions
     
-    def get_predictions(self, inp_chunks, clamsa_inp=None, hmm_filter=False, save=True, encoding_layer_oracle=None, batch_size=None):
+    def get_predictions(self, inp_chunks, clamsa_inp=None, hmm_filter=False, 
+                save=True, encoding_layer_oracle=None, batch_size=None):
         """Gets predictions for input chunks.
 
         Args:
@@ -640,7 +567,7 @@ class PredictionGTF:
         return metrics_dict
 
     @tf.function
-    def predict_vit(self, x, y_lstm, border_hints=False):
+    def predict_vit(self, x, y_lstm):
         """Perform prediction using the Viterbi algorithm on the output of an LSTM model.
         
         This method applies the Viterbi algorithm to the sequence probabilities output by
@@ -654,31 +581,7 @@ class PredictionGTF:
             tf.Tensor: The predicted state sequence tensor after applying Viterbi decoding.
         """
         # print(x.shape, y_lstm.shape)
-        if self.emb and border_hints:
-            if y_lstm[0].shape[-1] > 5:
-                class_emb = tf.concat([y_lstm[0][:,:,0:1], 
-                        tf.reduce_sum(y_lstm[0][:,:,1:4], axis=-1, keepdims=True), 
-                        y_lstm[0][:,:,4:]], axis=-1)
-            else:
-                class_emb = y_lstm[0]
-            nuc = tf.cast(x[:,:,:5], tf.float32)
-            A = make_aggregation_matrix(k=self.num_hmm)
-            hints = tf.stack([class_emb[:,0,:],class_emb[:,-1,:]], axis=1)
-            hints = tf.matmul(hints, A, transpose_b=True)
-            y_vit = self.gene_pred_hmm_layer.viterbi(class_emb, nucleotides=nuc,
-                                    embeddings=y_lstm[1],
-                                    end_hints=hints)
-        elif self.emb:
-            if y_lstm[0].shape[-1] > 5 and self.gene_pred_hmm_layer.share_intron_parameters:
-                class_emb = tf.concat([y_lstm[0][:,:,0:1],
-                        tf.reduce_sum(y_lstm[0][:,:,1:4], axis=-1, keepdims=True),
-                        y_lstm[0][:,:,4:]], axis=-1)
-            else:
-                class_emb = y_lstm[0]
-            nuc = tf.cast(x[:,:,:5], tf.float32)
-            y_vit = self.gene_pred_hmm_layer.viterbi(class_emb, nucleotides=nuc,
-                                                     embeddings=y_lstm[1])
-        elif self.lstm_model and self.hmm:
+        if self.lstm_model and self.hmm:
             if y_lstm.shape[-1] ==7:          
                 new_y_lstm = tf.concat([y_lstm[:,:,0:1],
                         tf.reduce_sum(y_lstm[:,:,1:4], axis=-1, keepdims=True),
@@ -711,7 +614,7 @@ class PredictionGTF:
             y_vit = self.gene_pred_hmm_layer.viterbi(y_lstm, nucleotides=nuc)
         return y_vit
         
-    def merge_re_prediction(self, all_tx, new_tx, breakpoint):     
+    def merge_re_prediction(self, all_tx, new_tx, breakpoint): 
         """Merges two sets of transcript predictions (`all_tx` and `new_tx`) at a specified breakpoint.
 
         This function integrates predictions from two different prediction sets by considering their overlaps and the
@@ -738,6 +641,7 @@ class PredictionGTF:
         - If there's an overlap and one of the transcripts surrounding the breakpoint is larger, the larger transcript
           is preferred in the merged output.
         """
+        # print(all_tx, new_tx, breakpoint)
         overlap1 = 0
         for i, tx in enumerate(all_tx):
             if breakpoint < tx[0][1]:
@@ -799,7 +703,7 @@ class PredictionGTF:
         return initial_tx, txs, current_tx
         
     def create_gtf(self, y_label, coords, f_chunks, out_file='', clamsa_inp=None, 
-                   strand='+', border_hints=False, correct_y_label=None, anno=None, tx_id=0,
+                   strand='+', correct_y_label=None, anno=None, tx_id=0,
                   filt=True):
         """Create a GTF file with the gene annotations from predictions.
         
@@ -958,7 +862,7 @@ class PredictionGTF:
             
         for tx in remove_tx:
             anno.transcripts.pop(tx)
-            
+
         if out_file:
             anno.norm_tx_format()
             anno.find_genes()
@@ -966,8 +870,7 @@ class PredictionGTF:
             
         return anno, tx_id
     
-    def create_gtf_single_batch(self, nuc_seq, lstm_predictions, coords, out_file, strand='+'):
-        
+    def create_gtf_single_batch(self, nuc_seq, lstm_predictions, coords, out_file, strand='+'):        
         anno = Anno(out_file, f'anno')
         tx_id = 0
         inp_nuc = [[nuc_seq[0]]]
@@ -1064,15 +967,12 @@ class PredictionGTF:
                 initial_exon_len=200,
                 initial_intron_len=4500,
                 initial_ir_len=10000,
-                emit_embeddings=False,
                 start_codons=[("ATG", 1.)],
                 stop_codons=[("TAG", .34), ("TAA", 0.33), ("TGA", 0.33)],
                 intron_begin_pattern=[("NGT", 0.99), ("NGC", 0.01)],
                 intron_end_pattern=[("AGN", 1.)],
                 starting_distribution_init="zeros",
-                simple=False,
                 trainable_nucleotides_at_exons=False,
-                parallel_factor=self.parallel_factor,
-                use_border_hints=False
+                parallel_factor=self.parallel_factor
         )
         self.gene_pred_hmm_layer.build([self.adapted_batch_size, self.seq_len, inp_size])

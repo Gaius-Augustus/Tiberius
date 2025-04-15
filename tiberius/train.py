@@ -28,7 +28,6 @@ import models
 from models import (weighted_categorical_crossentropy, custom_cce_f1_loss, BatchLearningRateScheduler, 
                     add_hmm_only, add_hmm_layer, ValidationCallback, 
                     BatchSave, EpochSave, lstm_model, add_constant_hmm, 
-                    # add_transformer2lstm, transformer_model, 
                     make_weighted_cce_loss,)
 from tensorflow.keras.callbacks import LearningRateScheduler
 

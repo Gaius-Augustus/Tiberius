@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import sys, json, os, re, sys, csv, argparse
-#os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 from genome_fasta import GenomeSequences
 from annotation_gtf import GeneStructure
 import subprocess as sp

@@ -1,13 +1,13 @@
+import sys 
+import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (Conv1D, Conv1DTranspose, LSTM, 
                                 Dense, Bidirectional, Dropout, Activation, Input, 
                                 Reshape, LayerNormalization)
-import sys 
-import numpy as np
 from tensorflow import keras
 from tensorflow.keras import backend as K
-from gene_pred_hmm import (GenePredHMMLayer, make_5_class_emission_kernel, 
+from tiberius import (GenePredHMMLayer, make_5_class_emission_kernel, 
                             make_15_class_emission_kernel, ReduceOutputSize)
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
 from learnMSA.msa_hmm.Training import Identity

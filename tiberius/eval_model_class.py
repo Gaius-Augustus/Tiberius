@@ -127,7 +127,8 @@ class PredictionGTF:
                         custom_objects={
                         'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
                         'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
-                        "Cast": Cast}
+                        "Cast": Cast},
+                        compile=False #prevent a warning
                         )
             if self.model_path_hmm:
                 model_hmm = keras.models.load_model(self.model_path_hmm, 

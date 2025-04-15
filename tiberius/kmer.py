@@ -38,18 +38,19 @@ def make_k_mers(sequences, k, pivot_left=True):
 
 
 
-def encode_kmer_string(kmer, pivot_left=True, alphabet="ACGT"):
+def encode_kmer_string(kmer : str, pivot_left=True, alphabet="ACGT"):
     """ Converts a k-mer to classes in the format (i,j) with i < n^{k-1} and j < n where n is the alphabet size. 
         E.g. AAA -> (0,0), AAT -> (3,0), TAA -> (0,3) if pivot_left is True, otherwise
              AAA -> (0,0), AAT -> (0,3), TAA -> (12, 0)
         The output is a one-hot encoding of these classes in case of A,C,G,T. 
         If the k-mer contains N, this is expressed equiprobably among the regular 4 nucleotides.
     """
+    k = len(kmer)
     alphabet_with_unknown = alphabet + "N"
     kmer = [alphabet_with_unknown.index(x) for x in kmer]
     kmer = tf.constant(kmer)
     one_hot = tf.one_hot(kmer, len(alphabet_with_unknown)) 
-    encoded_kmers = make_k_mers(one_hot[tf.newaxis, ...], k=len(kmer), pivot_left=pivot_left)
+    encoded_kmers = make_k_mers(one_hot[tf.newaxis, ...], k=k, pivot_left=pivot_left)
     if pivot_left:
         return tf.squeeze(encoded_kmers)[0]
     else:

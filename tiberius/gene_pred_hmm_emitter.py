@@ -126,7 +126,7 @@ def assert_codons(codons):
 def make_codon_probs(codons, pivot_left):
     assert_codons(codons)
     codon_probs = sum(prob * kmer.encode_kmer_string(triplet, pivot_left) for triplet, prob in codons) #(16,4)
-    codon_probs = tf.reshape(codon_probs, (64))
+    codon_probs = tf.reshape(codon_probs, (64,))
     return codon_probs[tf.newaxis, tf.newaxis, :] #(1,1,64)
 
 

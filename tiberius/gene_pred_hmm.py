@@ -174,10 +174,6 @@ class GenePredHMMLayer(HmmLayer):
         Returns:
                 Most likely state sequence of shape (batch, len) if num_models=1 and (batch, len, num_models) if num_models>1.
         """
-
-        if not self.built:
-            self.build(inputs.shape)
-
         self.cell.recurrent_init()
 
         stacked_inputs = self.concat_inputs(inputs, nucleotides)

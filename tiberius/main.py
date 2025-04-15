@@ -271,7 +271,6 @@ def main():
             batch_size=batch_size, 
             hmm=True, 
             temp_dir=None,
-            emb=args.emb, 
             num_hmm=1,
             hmm_factor=1,    
             genome=genome,

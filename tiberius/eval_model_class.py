@@ -350,10 +350,6 @@ class PredictionGTF:
         for i in range(num_batches):
             start_pos = i * batch_size
             end_pos = (i+1) * batch_size
-            # if self.trans_lstm:
-            #     y = self.lstm_model(
-            #         (inp_chunks[start_pos:end_pos],
-            #         trans_emb[start_pos:end_pos]))
             if clamsa_inp is not None:
                 y = self.lstm_model.predict_on_batch([
                     inp_chunks[start_pos:end_pos],
@@ -361,7 +357,8 @@ class PredictionGTF:
                 ])           
             else:
                 y = self.lstm_model(inp_chunks[start_pos:end_pos])
-            y = np.expand_dims(y,0)
+            if len(y.shape) == 1:
+                y = np.expand_dims(y,0)
             lstm_predictions.append(y)        
         lstm_predictions = np.concatenate(lstm_predictions, axis=0)
         if save and self.temp_dir:            

@@ -81,6 +81,9 @@ def test_nuc_pattern_detection() -> None:
                                         # always start intergenic
                                         starting_distribution_init=ConstantInitializer([0] + [-100.]*14))
     
-    most_likely_states = hmm_layer.viterbi(*get_inputs())
+    inputs, nuc = get_inputs()
+    hmm_layer.build(inputs.shape)
+
+    most_likely_states = hmm_layer.viterbi(inputs, nuc)
 
     assert_outputs(most_likely_states)

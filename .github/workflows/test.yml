@@ -2,9 +2,9 @@ name: Run Tests
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, refactor_hmm_improve_testing ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, refactor_hmm_improve_testing ]
 
 jobs:
   test:

@@ -290,8 +290,6 @@ def lstm_model(units=200, filter_size=64,
 
     return Model(inputs=inp, outputs=outputs)
 
-
-
 def reduce_lstm_output_7(x, new_size=5):
     """Reduces the output a legacy LSTM that was trained with 7 output classes."""
     assert(x.shape[-1] == 7)
@@ -330,8 +328,6 @@ def reduce_lstm_output_5(x, new_size=3):
     else:
         raise ValueError("Invalid new_size")
     return x_out
-
-
 
 def add_hmm_layer(model, 
                   gene_pred_layer=None, 

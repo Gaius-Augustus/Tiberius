@@ -2,8 +2,6 @@
 # Authors: Lars Gabriel
 #
 # Class handling the prediction and evaluation for a single species
-# 
-# 
 # ==============================================================
 
 import sys, json, os, re, sys, csv, time
@@ -18,8 +16,8 @@ from tiberius import (GenePredHMMLayer,
                     make_aggregation_matrix, 
                     make_15_class_emission_kernel,
                     GenomeSequences,
-                    GeneStructure, Anno)
-from tiberius.models import custom_cce_f1_loss, lstm_model, Cast
+                    GeneStructure, Anno,
+                    custom_cce_f1_loss, lstm_model, Cast)
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
 from tensorflow.keras.layers import (Conv1D, SimpleRNN, Conv1DTranspose, LSTM, GRU, Dense, Bidirectional, Dropout, Activation, Input, BatchNormalization, LSTM, Reshape, Embedding, Add, LayerNormalization,
                                     AveragePooling1D)
@@ -151,7 +149,9 @@ class PredictionGTF:
                                     custom_objects={
                                         'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
                                         'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
-                                        "Cast": Cast})            
+                                        "Cast": Cast},
+                                        compile=False #prevent a warning
+                                        )            
             if self.hmm:
                 try:
                     lstm_output=self.model.get_layer('out').output
@@ -161,16 +161,15 @@ class PredictionGTF:
                                 inputs=self.model.input, 
                                 outputs=lstm_output
                                 )
-                #self.gene_pred_hmm_layer = self.model.layers[-1]
                 self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
-
+                # self.make_default_hmm(inp_size=self.lstm_model.output.shape[-1])
                 if self.parallel_factor is not None:
                     self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
-                print(f"Running gene pred hmm layer with parallel factor {self.gene_pred_hmm_layer.parallel_factor}")
+                # print(f"Running gene pred hmm layer with parallel factor {self.gene_pred_hmm_layer.parallel_factor}")
 
                 self.gene_pred_hmm_layer.cell.recurrent_init()
             if summary:
-                self.model.summary()
+                self.lstm_model.summary()
         else: 
             self.make_default_hmm()
     
@@ -578,7 +577,6 @@ class PredictionGTF:
         Returns:
             tf.Tensor: The predicted state sequence tensor after applying Viterbi decoding.
         """
-        # print(x.shape, y_lstm.shape)
         if self.lstm_model and self.hmm:
             if y_lstm.shape[-1] ==7:          
                 new_y_lstm = tf.concat([y_lstm[:,:,0:1],
@@ -604,8 +602,7 @@ class PredictionGTF:
                     y_lstm[:,:,2:]/3], axis=-1)
             else:
                 new_y_lstm = y_lstm
-            # print(new_y_lstm.shape)
-            nuc = tf.cast(x[:,:,:5], tf.float32)
+            nuc = Cast()(x)
             y_vit = self.gene_pred_hmm_layer.viterbi(new_y_lstm, nucleotides=nuc)
         else:
             nuc = tf.cast(x[:,:,:5], tf.float32)

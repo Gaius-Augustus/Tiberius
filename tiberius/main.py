@@ -167,10 +167,8 @@ def main():
     
     if args.learnMSA:
         sys.path.insert(0, args.learnMSA)  
-       
-    from eval_model_class import PredictionGTF
-    from models import make_weighted_cce_loss        
-    from genome_anno import Anno
+        
+    from tiberius import Anno, make_weighted_cce_loss, PredictionGTF
     
     model_path = os.path.abspath(args.model) if args.model else None
     if model_path:        

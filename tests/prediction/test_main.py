@@ -236,10 +236,10 @@ def test_full_workflow(tmp_path, monkeypatch) -> None:
         "--genome", str(genome_file),
         "--out", str(output_gtf),
         "--seq_len", "500004",
-        "--batch_size", "16",
+        "--batch_size", "8",
         "--strand", "+",
         "--id_prefix", "integration_",
-        "--model_lstm", "/home/nas-hs/projs/lars/deepfinder/transfer/tiberius_weights_lstm/"
+       # "--model_lstm", "model_weights/tiberius_weights_lstm/"
     ]
     
     # Monkeypatch sys.argv so that main() sees our test arguments.

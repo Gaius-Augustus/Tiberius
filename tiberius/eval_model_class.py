@@ -953,21 +953,7 @@ class PredictionGTF:
 
 
     def make_default_hmm(self, inp_size=5):
-        if inp_size == 5:
-            em_kernel = make_5_class_emission_kernel(smoothing=1e-6)
-        elif inp_size == 15:
-            em_kernel = make_15_class_emission_kernel(smoothing=1e-6)
         self.gene_pred_hmm_layer = GenePredHMMLayer(
-                emitter_init=ConstantInitializer(em_kernel),
-                initial_exon_len=200,
-                initial_intron_len=4500,
-                initial_ir_len=10000,
-                start_codons=[("ATG", 1.)],
-                stop_codons=[("TAG", .34), ("TAA", 0.33), ("TGA", 0.33)],
-                intron_begin_pattern=[("NGT", 0.99), ("NGC", 0.01)],
-                intron_end_pattern=[("AGN", 1.)],
-                starting_distribution_init="zeros",
-                trainable_nucleotides_at_exons=False,
                 parallel_factor=self.parallel_factor
         )
         self.gene_pred_hmm_layer.build([self.adapted_batch_size, self.seq_len, inp_size])

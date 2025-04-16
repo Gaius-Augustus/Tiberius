@@ -58,6 +58,18 @@ class GenePredHMMLayer(HmmLayer):
                 trainable_nucleotides_at_exons=False,
                 share_intron_parameters=False,
                 parallel_factor=1,
+
+                # tmp sink for old parameters
+                emit_embeddings=None,
+                embedding_dim=None,
+                full_covariance=None,
+                embedding_kernel_init=None,
+                initial_variance=None,
+                temperature=None,
+                simple=None,
+                variance_l2_lambda=None,
+                use_border_hints=None,
+
                 **kwargs):
         self.num_models = num_models
         self.num_copies = num_copies
@@ -139,7 +151,7 @@ class GenePredHMMLayer(HmmLayer):
 
 
 
-    def call(self, inputs, nucleotides=None, training=False, use_loglik=True):
+    def call(self, inputs, nucleotides=None, embeddings=None, training=False, use_loglik=True):
         """ 
         Computes the state posterior log-probabilities.
         Args: 

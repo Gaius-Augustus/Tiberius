@@ -1,0 +1,11 @@
+chr1	Tiberius	gene	251	268	.	-	.	g2
+chr1	Tiberius	transcript	251	268	.	-	.	g2.t1
+chr1	Tiberius	CDS	251	256	.	-	1	transcript_id "g2.t1"; gene_id "g2"; cds_type=terminal;
+chr1	Tiberius	exon	251	256	.	-	1	transcript_id "g2.t1"; gene_id "g2"; cds_type=terminal;
+chr1	Tiberius	intron	257	260	.	-	0	transcript_id "g2.t1"; gene_id "g2";
+chr1	Tiberius	CDS	261	268	.	-	0	transcript_id "g2.t1"; gene_id "g2"; cds_type=initial;
+chr1	Tiberius	exon	261	268	.	-	0	transcript_id "g2.t1"; gene_id "g2"; cds_type=initial;
+chr2	Tiberius	gene	14	19	.	-	.	g1
+chr2	Tiberius	transcript	14	19	.	-	.	g1.t1
+chr2	Tiberius	CDS	14	19	.	-	0	transcript_id "g1.t1"; gene_id "g1"; cds_type=single;
+chr2	Tiberius	exon	14	19	.	-	0	transcript_id "g1.t1"; gene_id "g1"; cds_type=single;

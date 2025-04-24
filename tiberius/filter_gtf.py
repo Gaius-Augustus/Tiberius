@@ -10,8 +10,7 @@ import sys, os, re, json, sys, csv
 from Bio import SeqIO
 from Bio.Seq import Seq
 from BCBio import GFF
-from genome_anno import Anno
-import re
+from tiberius.genome_anno import Anno
 import argparse
 
 # Function to assemble transcript taking strand into account

@@ -142,10 +142,13 @@ def load_genome(genome_path):
             genome = SeqIO.to_dict(SeqIO.parse(file, "fasta"))
     return genome
 
-def main():    
-    args = parseCmd()
 
-    import tensorflow as tf
+def run_tiberius(args):
+    if 'tensorflow' in sys.modules:
+        tf = sys.modules['tensorflow']
+    else:
+        import tensorflow as tf
+
 
     start_time = time.time()
     if check_tf_version(tf.__version__):
@@ -416,6 +419,10 @@ def parseCmd():
         help='Minimum length of input sequences used for predictions.', default=0)
         
     return parser.parse_args()
+
+def main():    
+    args = parseCmd()
+    run_tiberius(args)
 
 if __name__ == '__main__':
     main()

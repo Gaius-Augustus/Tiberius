@@ -12,24 +12,21 @@ from tiberius import (GenePredHMMLayer, make_5_class_emission_kernel,
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
 from learnMSA.msa_hmm.Training import Identity
 
-
-
-
 class Cast(tf.keras.layers.Layer):
     def call(self, x):
         return tf.cast(x[0][..., :5] if isinstance(x, list) else x[..., :5], tf.float32)
     
-
-
 class EpochSave(tf.keras.callbacks.Callback):
     def __init__(self, model_save_dir):
         super(EpochSave, self).__init__()
         self.model_save_dir = model_save_dir
+        self.tf_old = tf.__version__ < "2.12.0"
 
     def on_epoch_end(self, epoch, logs=None):
-        self.model.save(f"{self.model_save_dir}/epoch_{epoch:02d}", save_traces=False)
-
-
+        if self.tf_old:
+            self.model.save(f"{self.model_save_dir}/epoch_{epoch:02d}", save_traces=False)
+        else:
+            self.model.save(f"{self.model_save_dir}/epoch_{epoch:02d}.keras")
 
 class BatchLearningRateScheduler(tf.keras.callbacks.Callback):
     def __init__(self, peak=0.1, warmup=0, min_lr=0.0001):
@@ -47,8 +44,6 @@ class BatchLearningRateScheduler(tf.keras.callbacks.Callback):
             new_lr = (self.total_batches-self.warmup)**(-1/2) * self.peak
         if new_lr > self.min_lr:            
             tf.keras.backend.set_value(self.model.optimizer.lr, new_lr)
-
-
 
 class ValidationCallback(tf.keras.callbacks.Callback):
     def __init__(self, val_gen, save_path):
@@ -70,21 +65,21 @@ class ValidationCallback(tf.keras.callbacks.Callback):
                 self.model.save(self.save_path, save_traces=False)
                 #self.model.save_weights(self.save_path)
                 
-
-
 class BatchSave(tf.keras.callbacks.Callback):
     def __init__(self, save_path, batch_number):
         super(BatchSave, self).__init__()
         self.save_path = save_path
         self.batch_number = batch_number
-        self.prev_batch_numb = 0
+        self.prev_batch_numb = 0        
+        self.tf_old = tf.__version__ < "2.12.0"
 
     def on_train_batch_end(self, batch, logs=None):
         if (batch + 1) % self.batch_number == 0:   
-            self.prev_batch_numb += batch           
-            self.model.save(self.save_path.format(self.prev_batch_numb), save_traces=False)
-
-
+            self.prev_batch_numb += batch
+            if self.tf_old:
+                self.model.save(self.save_path.format(self.prev_batch_numb), save_traces=False)
+            else:
+                self.model.save(self.save_path.format(self.prev_batch_numb) +".keras")
 
 def custom_cce_f1_loss(f1_factor, batch_size, 
                     include_reading_frame=True, use_cce=True, from_logits=False):

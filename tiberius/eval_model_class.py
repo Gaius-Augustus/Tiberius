@@ -18,9 +18,6 @@ from tiberius import (GenePredHMMLayer,
                     GenomeSequences,
                     GeneStructure, Anno,
                     custom_cce_f1_loss, lstm_model, Cast)
-from learnMSA.msa_hmm.Initializers import ConstantInitializer
-from tensorflow.keras.layers import (Conv1D, SimpleRNN, Conv1DTranspose, LSTM, GRU, Dense, Bidirectional, Dropout, Activation, Input, BatchNormalization, LSTM, Reshape, Embedding, Add, LayerNormalization,
-                                    AveragePooling1D)
 
 class PredictionGTF:
     """Class for generating GTF predictions based on a model's output.
@@ -161,7 +158,10 @@ class PredictionGTF:
                                 inputs=self.model.input, 
                                 outputs=lstm_output
                                 )
-                self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
+                try:
+                    self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
+                except ValueError as e:
+                    self.gene_pred_hmm_layer = self.model.layers[-1]
                 # self.make_default_hmm(inp_size=self.lstm_model.output.shape[-1])
                 if self.parallel_factor is not None:
                     self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor

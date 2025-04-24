@@ -3,15 +3,15 @@ import numpy as np
 
 
 def test_reduce_labels() -> None:
-    state_list = [0,0,0,7,5,6,4,5,6,4,9,3,3,3,3,11,5,6,4,5,14,0]
-    state_reduced_list = [0,0,0,2,2,2,2,2,2,2,2,1,1,1,1,2,2,2,2,2,2,0]
+    state_list = [0,0,0,7,5,6,4,5,6,4,8,1,1,1,1,11,4,5,6,4,5,14,0]
+    state_reduced_list = [0,0,0,2,2,2,2,2,2,2,2,1,1,1,1,2,2,2,2,2,2,2,0]
 
     dummy_predictionGTF = tiberius.PredictionGTF()
     np.testing.assert_array_equal(dummy_predictionGTF.reduce_label(state_list, num_hmm=1), state_reduced_list)
 
 
 def test_get_ranges() -> None:
-    encoded_labels = [0,0,0,7,5,6,4,5,6,4,9,3,3,3,3,11,5,6,4,5,14,0]
+    encoded_labels = [0,0,0,7,5,6,4,5,6,4,8,1,1,1,1,11,4,5,6,4,5,14,0]
     
     # Expected output is derived as follows:
     # - Indices 0 to 2: label 0 → "intergenic" → [0, 2]
@@ -23,8 +23,8 @@ def test_get_ranges() -> None:
         ["intergenic", 35, 37],
         ["CDS", 38, 45],
         ["intron", 46, 49],
-        ["CDS", 50, 55],
-        ["intergenic", 56, 56]
+        ["CDS", 50, 56],
+        ["intergenic", 57, 57]
     ]
     
     # Create an instance of your PredictionGTF class.
@@ -105,11 +105,11 @@ def test_merge_multiple_transcripts() -> None:
 
 
 def test_create_gtf() -> None:
-    hmm_label = np.array([[0,0,0,7,5,6,4,5,6,4,9,3,3,3,3,11,5,6,4,5,14,0],
-                 [0,0,0,7,5,6,4,5,14,0,0,0,0,0,0,0,0,7,5,6,4,5]])
-    coords = [["chr1", '+', 250, 271], ["chr2", '+', 1, 22]]
+    hmm_label = np.array([[0,0,0,7,5,6,4,5,6,4,8,1,1,1,1,11,4,5,6,4,5,14,0],
+                 [0,0,0,7,5,6,4,5,14,0,0,0,0,0,0,0,0,0,7,5,6,4,5]])
+    coords = [["chr1", '+', 250, 272], ["chr2", '+', 1, 22]]
     dummy_nuc = np.zeros((2,22,6))    
-    cds_coords_out = [[[253, 260], [265, 270]], [[4, 9]]]
+    cds_coords_out = [[[253, 260], [265, 271]], [[4, 9]]]
 
     dummy_predictionGTF = tiberius.PredictionGTF()
     anno, tx_id = dummy_predictionGTF.create_gtf(y_label=hmm_label, 
@@ -122,11 +122,11 @@ def test_create_gtf() -> None:
     assert txs == cds_coords_out
 
 def test_create_gtf_rev() -> None:
-    hmm_label = np.array([[0,0,0,7,5,6,4,5,6,4,9,3,3,3,3,11,5,6,4,5,14,0],
-                 [0,0,0,7,5,6,4,5,14,0,0,0,0,0,0,0,0,7,5,6,4,5]])
-    coords = [["chr1", '-', 250, 271], ["chr2", '-', 1, 22]]
+    hmm_label = np.array([[0,0,0,7,5,6,4,5,6,4,8,1,1,1,1,11,4,5,6,4,5,14,0],
+                 [0,0,0,7,5,6,4,5,14,0,0,0,0,0,0,0,0,0,7,5,6,4,5]])
+    coords = [["chr1", '+', 250, 272], ["chr2", '+', 1, 22]]
     dummy_nuc = np.zeros((2,22,6))    
-    cds_coords_out = [[[14, 19]], [[251, 256], [261, 268]]]
+    cds_coords_out = [[[15, 20]],  [[251, 257], [262, 269]]]
 
     dummy_predictionGTF = tiberius.PredictionGTF()
     anno, tx_id = dummy_predictionGTF.create_gtf(y_label=hmm_label, 

@@ -7,7 +7,7 @@
 
 import os, sys, json, argparse
 import numpy as np
-from data_generator import DataGenerator
+from tiberius.data_generator import DataGenerator
 import tensorflow as tf
 
 def read_species(file_name):

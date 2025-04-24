@@ -9,23 +9,18 @@
 # tensorflow_probability 0.18.0
 # ==============================================================
 
-import parse_args
+import tiberius.parse_args as parse_args
 args = parse_args.parseCmd()
 import sys, os, re, json, sys, csv
-
-sys.path.insert(0, args.learnMSA)
-if args.LRU:
-    sys.path.insert(0, args.LRU)
-sys.path.append("/home/gabriell/conda/envs/tf_py310/lib/python3.10/site-packages")
 import tensorflow as tf
 import numpy as np
 from tensorflow.keras.callbacks import ModelCheckpoint
-from data_generator import DataGenerator
+from tiberius import DataGenerator
 from tensorflow.keras.optimizers import Adam, SGD
 import tensorflow.keras as keras
 from tensorflow.keras.callbacks import CSVLogger
-import models
-from models import (weighted_categorical_crossentropy, custom_cce_f1_loss, BatchLearningRateScheduler, 
+import tiberius.models as models
+from tiberius.models import (weighted_categorical_crossentropy, custom_cce_f1_loss, BatchLearningRateScheduler, 
                     add_hmm_only, add_hmm_layer, ValidationCallback, 
                     BatchSave, EpochSave, lstm_model, add_constant_hmm, 
                     make_weighted_cce_loss,)
@@ -57,12 +52,13 @@ def train_hmm_model(generator, model_save_dir, config, val_data=None,
         - trainable (bool): Flag indicating whether the LSTM model's layers are trainable. 
         - constant_hmm (bool): Flag to add a constant HMM layer to the model. 
     """
-
-    model_save = model_save_dir + "/weights.{epoch:02d}"
+    suffix =  "keras" if tf.__version__ > '2.12' else "h5"
+            
+    model_save = model_save_dir + "/weights.{epoch:02d}." + suffix
     checkpoint = ModelCheckpoint(model_save, monitor='loss', verbose=1, 
                         save_best_only=False, save_weights_only=False, mode='auto')
 
-    batch_callback = BatchSave(model_save_dir + "/weights_batch.{}", batch_save_numb)
+    batch_callback = BatchSave(model_save_dir + "/weights_batch.{}." + suffix, batch_save_numb)
     epoch_callback = EpochSave(model_save_dir)
 
     csv_logger = CSVLogger(f'{model_save_dir}/training.log', 
@@ -100,7 +96,6 @@ def train_hmm_model(generator, model_save_dir, config, val_data=None,
                 gene_pred_layer = None
             model = add_hmm_layer(model, 
                                     gene_pred_layer,
-                                    dense_size=config['hmm_dense'], 
                                     output_size=config['output_size'], 
                                     num_hmm=config['num_hmm_layers'],
                                     hmm_factor=config['hmm_factor'], 
@@ -135,10 +130,8 @@ def train_hmm_model(generator, model_save_dir, config, val_data=None,
             loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"], from_logits=True)
         model.compile(loss=loss, optimizer=adam, metrics=['accuracy'], loss_weights=loss_weights)     
         model.summary()
-        b_lr_sched = BatchLearningRateScheduler(peak=config["lr"], warmup=config["warmup"],
-                                        min_lr=config["min_lr"])
         model.save(model_save_dir+"/untrained.keras")
-        model.fit(generator, epochs=500, validation_data=val_data,
+        model.fit(generator, epochs=config["num_epochs"], validation_data=val_data,
                 steps_per_epoch=1000,
                 validation_batch_size=config['batch_size'],
                 callbacks=[epoch_callback, csv_logger])
@@ -231,7 +224,7 @@ def train_clamsa(generator, model_save_dir, config, val_data=None, model_load=No
                 metrics=['accuracy'])        
         model.summary()
 
-        model.fit(generator, epochs=500, 
+        model.fit(generator, epochs=config["num_epochs"], 
                 steps_per_epoch=1000,
                 callbacks=[epoch_callback, csv_logger])
     
@@ -249,12 +242,13 @@ def train_lstm_model(generator, model_save_dir, config, val_data=None, model_loa
         - model_load (optional): Path to a directory from which 
                                  to load a preexisting model that will be trained
     """
-    
-    model_save = model_save_dir + "/weights.{epoch:02d}.h5"
+    suffix =  "keras" if tf.__version__ > '2.12' else "h5"
+            
+    model_save = model_save_dir + "/weights.{epoch:02d}." + suffix
     checkpoint = ModelCheckpoint(model_save, monitor='loss', verbose=1, 
                         save_best_only=False, save_weights_only=False, mode='auto')
 
-    batch_callback = BatchSave(model_save_dir + "/weights_batch.{}.h5", batch_save_numb)
+    batch_callback = BatchSave(model_save_dir + "/weights_batch.{}." + suffix, batch_save_numb)
     epoch_callback = EpochSave(model_save_dir)
     
     if config['sgd']:
@@ -296,7 +290,7 @@ def train_lstm_model(generator, model_save_dir, config, val_data=None, model_loa
                 metrics=['accuracy'])        
         model.summary()
 
-        model.fit(generator, epochs=2000, validation_data=val_data,
+        model.fit(generator, epochs=config["num_epochs"], validation_data=val_data,
                 steps_per_epoch=1000,
                 callbacks=[epoch_callback, csv_logger])
 
@@ -402,8 +396,6 @@ def main():
             # number of adjacent nucleotides that are one position for the LSTM
             "pool_size": 9,
             "lr": 1e-4,
-            "warmup": 1, # currently not used
-            "min_lr": 1e-4, # currently not used
             "batch_size": batch_size,
             "w_size": w_size, # sequence length
             "filter": False, # if True, filters all training examples out that are IR-only

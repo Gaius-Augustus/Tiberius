@@ -1,6 +1,6 @@
 import os, csv , sys, argparse
 import numpy as np
-from wig_class import Wig_util
+from tiberius.wig_class import Wig_util
 
 def main():
     args = parseCmd()

@@ -21,18 +21,16 @@ from tiberius import (GenePredHMMLayer,
 
 class PredictionGTF:
     """Class for generating GTF predictions based on a model's output.
-    """
-    """
+
         Attributes:
             model_path (str): Path to the pre-trained model.
             seq_len (int): Length of the sequences to process.
             batch_size (int): Batch size for prediction.        
             hmm (bool): Flag to indicate whether to use HMM for prediction.
             model (keras.Model): Loaded Keras model for predictions.
-            model_path_lstm (str): Path to the LSTM model if HMM is used.
-        """
+    """
     def __init__(self, model_path='', seq_len=500004, batch_size=200, 
-                 hmm=False, model_path_lstm='', model_path_hmm='', 
+                 hmm=False,  model_path_hmm='', 
                  temp_dir='', num_hmm=1,
                  hmm_factor=None, 
                  annot_path='', genome_path='', genome=None, softmask=True,
@@ -44,7 +42,6 @@ class PredictionGTF:
             - seq_len (int): The sequence length to be used for prediction.
             - batch_size (int): The size of the batches to be used.
             - hmm (bool): A flag to indicate whether Hidden Markov Models (HMM) should be used. Defaults to False.
-            - model_path_lstm (str): Path to the LSTM model file. A default HMM will then be used except when model_path_hmm is provided.
             - model_path_hmm (str): Path to the HMM model file.
             - temp_dir (str): Temporary directory path for intermediate files. 
             - num_hmm (int): Number of HMMs to be used.
@@ -71,7 +68,6 @@ class PredictionGTF:
         self.strand=strand
         # self.transformer = transformer
         self.model = None
-        self.model_path_lstm = model_path_lstm
         self.model_path_hmm = model_path_hmm
         self.fasta_seq_lens = {}
         self.num_hmm = num_hmm
@@ -105,73 +101,56 @@ class PredictionGTF:
         Args:
             summary (bool, optional): If True, prints the model summary. Defaults to True.
         """
-        if self.hmm and self.model_path_lstm:
+        try:
             if self.lstm_cfg:
-                 with open(self.lstm_cfg, 'r') as f:
+                with open(self.lstm_cfg, 'r') as f:
                     config = json.load(f)
-                 relevant_keys = ['units', 'filter_size', 'kernel_size', 
-                     'numb_conv', 'numb_lstm', 'dropout_rate', 
-                     'pool_size', 'stride', 'lstm_mask', 'clamsa',
-                     'output_size', 'residual_conv', 'softmasking',
-                    'clamsa_kernel', 'lru_layer']
-                 relevant_args = {key: config[key] for key in relevant_keys if key in config}
-                 self.lstm_model = lstm_model(**relevant_args)
-                 self.lstm_model.load_weights(self.model_path_lstm + '/variables/variables')
             else:
-                self.lstm_model = keras.models.load_model(self.model_path_lstm, 
-                        custom_objects={
-                        'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
-                        'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
-                        "Cast": Cast},
-                        compile=False #prevent a warning
-                        )
-            if self.model_path_hmm:
-                model_hmm = keras.models.load_model(self.model_path_hmm, 
-                                                    custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
-                                                            'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
-                self.gene_pred_hmm_layer = model_hmm.get_layer('gene_pred_hmm_layer')
-                self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
-                self.gene_pred_hmm_layer.cell.recurrent_init() 
-            else:
-                self.make_default_hmm(inp_size=self.lstm_model.output.shape[-1])
-                # self.make_default_hmm()
-            if summary:
-                self.lstm_model.summary()
-        elif self.model_path_lstm:
-            self.lstm_model = keras.models.load_model(self.model_path_lstm, 
-                                                        custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
-                                                         'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})          
-        elif self.model_path:            
-            self.model = keras.models.load_model(self.model_path, 
-                                    custom_objects={
-                                        'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
-                                        'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
-                                        "Cast": Cast},
-                                        compile=False #prevent a warning
-                                        )            
-            if self.hmm:
-                try:
-                    lstm_output=self.model.get_layer('out').output
-                except ValueError as e:
-                    lstm_output=self.model.get_layer('lstm_out').output
-                self.lstm_model = Model(
-                                inputs=self.model.input, 
-                                outputs=lstm_output
-                                )
-                try:
-                    self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
-                except ValueError as e:
-                    self.gene_pred_hmm_layer = self.model.layers[-1]
-                # self.make_default_hmm(inp_size=self.lstm_model.output.shape[-1])
-                if self.parallel_factor is not None:
-                    self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
-                # print(f"Running gene pred hmm layer with parallel factor {self.gene_pred_hmm_layer.parallel_factor}")
+                with open(f"{self.model_path}/model_config.json", 'r') as f:
+                    config = json.load(f)
+        except Exception as e:
+            print(f"Error could not find config of the model. It should be located at {self.model_path}/model_config.json: {e}")
+            sys.exit(1)
+        relevant_keys = ['units', 'filter_size', 'kernel_size', 
+            'numb_conv', 'numb_lstm', 'dropout_rate', 
+            'pool_size', 'stride', 'lstm_mask', 'clamsa',
+            'output_size', 'residual_conv', 'softmasking',
+            'clamsa_kernel', 'lru_layer']
+        relevant_args = {key: config[key] for key in relevant_keys if key in config}
+        self.lstm_model = lstm_model(**relevant_args)
+        # with open(f"{self.model_path}/model_layers.json", 'r') as f:
+        #     cfg = f.read()
+        # self.lstm_model = tf.keras.models.model_from_json(cfg)
+        self.lstm_model.summary()
+        self.lstm_model.load_weights(f"{self.model_path}/weights.h5")
 
-                self.gene_pred_hmm_layer.cell.recurrent_init()
-            if summary:
-                self.lstm_model.summary()
-        else: 
-            self.make_default_hmm()
+        if self.model_path_hmm:
+            model_hmm = keras.models.load_model(self.model_path_hmm, 
+                                                custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
+                                                        'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
+            self.gene_pred_hmm_layer = model_hmm.get_layer('gene_pred_hmm_layer')
+            self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
+            self.gene_pred_hmm_layer.cell.recurrent_init() 
+        elif config["hmm"]:
+            try:
+                self.gene_pred_hmm_layer = self.lstm_model.get_layer('gene_pred_hmm_layer')
+            except ValueError as e:
+                self.gene_pred_hmm_layer = self.lstm_model.layers[-1]
+            try:
+                lstm_output=self.lstm_model.get_layer('out').output
+            except ValueError as e:
+                lstm_output=self.lstm_model.get_layer('lstm_out').output
+            self.lstm_model = Model(
+                            inputs=self.lstm_model.input, 
+                            outputs=lstm_output
+                            )
+        else:
+            print(self.lstm_model.output_shape)
+            self.make_default_hmm(inp_size=self.lstm_model.output_shape[-1])
+            # self.make_default_hmm()
+        if summary:
+            self.lstm_model.summary()
+        
     
     def adapt_batch_size(self, adapted_chunksize):
         """Adapts the batch size based on the chunk size.

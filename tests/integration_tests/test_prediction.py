@@ -112,8 +112,7 @@ def test_full_workflow(tmp_path, monkeypatch) -> None:
         "--seq_len", "259992",
         "--batch_size", "8",
         "--strand", "+",
-        "--id_prefix", "integration_",
-       # "--model_lstm", "model_weights/tiberius_weights_lstm/"
+        "--id_prefix", "integration_"
     ]
     
     # Monkeypatch sys.argv so that main() sees our test arguments.

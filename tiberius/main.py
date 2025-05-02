@@ -176,7 +176,6 @@ def run_tiberius(args):
     if model_path_hmm:
         check_file_exists(model_path_hmm)
         logging.info(f'Model HMM path: {model_path_hmm}')
-
             
     gtf_out = os.path.abspath(args.out)
     logging.info(f'Output file: {gtf_out}')

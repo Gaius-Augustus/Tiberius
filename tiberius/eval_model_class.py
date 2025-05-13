@@ -958,11 +958,7 @@ class PredictionGTF:
 
 
     def make_default_hmm(self, inp_size=5):
-<<<<<<< HEAD
-        self.gene_pred_hmm_layer = GenePredHMMLayer()
-=======
         self.gene_pred_hmm_layer = GenePredHMMLayer(
-                parallel_factor=self.parallel_factor
+            parallel_factor=self.parallel_factor
         )
->>>>>>> 81efb439164e5075ddf2ed65e5ad129ef03d32a6
         self.gene_pred_hmm_layer.build([self.adapted_batch_size, self.seq_len, inp_size])

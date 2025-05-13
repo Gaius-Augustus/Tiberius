@@ -22,8 +22,8 @@ def check_tf_version(tf_version):
     if tf_version > MAX_TF_VERSION:
         print(f"WARNING: You are using TensorFlow version {tf_version}, "
                       f"which is newer than the recommended maximum version {MAX_TF_VERSION}. "
-                      "It will produce an error if you use a sequence length > 260.000 during inference!")
-        return False 
+                      "It will produce an error if you use a sequence length > 259,992 during inference!")
+        return False
     return True
 
 def check_seq_len(seq_len):
@@ -109,7 +109,8 @@ def group_sequences(seq_names, seq_lens, t=50000400, chunk_size=500004):
     return groups
 
 def download_weigths(url, file_path):    
-    if file_path.endswith(".tgz") and os.path.exists(file_path[:-4]) and not os.path.getsize(file_path[:-4]) == 0:
+    if (file_path.endswith(".tgz") or file_path.endswith(".tar.gz")) \
+        and os.path.exists(file_path[:-4]) and not os.path.getsize(file_path[:-4]) == 0:
         file_path = file_path[:-4]
         logging.info(f"Warning: No model weights provided. Using existing file at {file_path}.")
     elif os.path.exists(file_path) and not os.path.getsize(file_path) == 0:
@@ -142,28 +143,24 @@ def load_genome(genome_path):
             genome = SeqIO.to_dict(SeqIO.parse(file, "fasta"))
     return genome
 
-def main():    
-    args = parseCmd()
 
-    import tensorflow as tf
+def run_tiberius(args):
+    if 'tensorflow' in sys.modules:
+        tf = sys.modules['tensorflow']
+    else:
+        import tensorflow as tf
+
 
     start_time = time.time()
-    if check_tf_version(tf.__version__):
-        url_weights = {
-            'Tiberius_default': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_weights.tgz',
-            'Tiberius_nosm': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_nosm_weights.tgz',
-            'Tiberius_denovo': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models//tiberius_denovo_weights.tgz'
-        }
-    else:
-        url_weights = {
-            'Tiberius_default': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_weights_tf2_17.keras',
-            'Tiberius_nosm': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_nosm_weights_tf2_17.keras',
-            'Tiberius_denovo': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights_tf2_17.keras'
-        }
-        if args.seq_len > 259992:
-            logging.error(f"Error: The sequence length {args.seq_len} is too long for TensorFlow version {tf.__version__}. "
-                          "Please use a sequence length <= 259992 (--seq_len).")
-            sys.exit(1)
+    url_weights = {
+        'Tiberius_default': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_weights_v2.tar.gz',
+        'Tiberius_nosm': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_nosm_weights_v2.tar.gz',
+        'Tiberius_denovo': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models//tiberius_denovo_weights_v2.tar.gz'
+    }
+    if check_tf_version(tf.__version__) and args.seq_len > 259992:
+        logging.error(f"Error: The sequence length {args.seq_len} is too long for TensorFlow version {tf.__version__}. "
+                        "Please use a sequence length <= 259992 (--seq_len).")
+        sys.exit(1)
     
     if args.learnMSA:
         sys.path.insert(0, args.learnMSA)  
@@ -175,16 +172,10 @@ def main():
         check_file_exists(model_path)
         logging.info(f'Model path: {model_path}')
         
-    model_path_lstm = os.path.abspath(args.model_lstm) if args.model_lstm else None
-    if model_path_lstm:
-        check_file_exists(model_path_lstm)
-        logging.info(f'Model LSTM path: {model_path_lstm}')
-        
     model_path_hmm = os.path.abspath(args.model_hmm) if args.model_hmm else None
     if model_path_hmm:
         check_file_exists(model_path_hmm)
         logging.info(f'Model HMM path: {model_path_hmm}')
-
             
     gtf_out = os.path.abspath(args.out)
     logging.info(f'Output file: {gtf_out}')
@@ -215,7 +206,7 @@ def main():
     
     clamsa_prefix = args.clamsa
     
-    if not model_path and not model_path_lstm:
+    if not model_path:
         model_weights_dir = f'{script_dir}/../model_weights'        
         if not os.path.exists(model_weights_dir):
             os.makedirs(model_weights_dir)
@@ -230,25 +221,19 @@ def main():
                 logging.error(f'ERROR: Clamsa input requires softmasking.')
                 sys.exit(1)
             model_file_name = url_weights["Tiberius_denovo"].split('/')[-1]       
-            model_path_lstm = download_weigths(url_weights["Tiberius_denovo"], f'{model_weights_dir}/{model_file_name}')  
+            model_path = download_weigths(url_weights["Tiberius_denovo"], f'{model_weights_dir}/{model_file_name}')  
         elif not softmasking:
             model_file_name = url_weights["Tiberius_nosm"].split('/')[-1]          
-            model_path_lstm = download_weigths(url_weights["Tiberius_nosm"], f'{model_weights_dir}/{model_file_name}')  
+            model_path = download_weigths(url_weights["Tiberius_nosm"], f'{model_weights_dir}/{model_file_name}')  
         else:
             model_file_name = url_weights["Tiberius_default"].split('/')[-1]
             model_path = download_weigths(url_weights["Tiberius_default"], f'{model_weights_dir}/{model_file_name}')
-        if model_path and model_path[-3:] == 'tgz':
+        if model_path and model_path[-3:] in ['tgz', ".gz"]:
             logging.info(f'Extracting weights to {model_weights_dir}')
             extract_tar_gz(f'{model_path}', f'{model_weights_dir}')
-            model_path = model_path[:-4]
-        if model_path_lstm and model_path_lstm[-3:] == 'tgz':
-            logging.info(f'Extracting weights to {model_weights_dir}')
-            extract_tar_gz(f'{model_path_lstm}', f'{model_weights_dir}')
-            model_path_lstm = model_path_lstm[:-4]
-        #model_path = f'{model_weights_dir}/{model_file_name}'
+            model_path = model_path[:-4] if model_path.endswith(".tgz") else model_path[:-7]
         
-        if (model_path and not os.path.exists(model_path)) or \
-                (model_path_lstm and not os.path.exists(model_path_lstm)):
+        if (model_path and not os.path.exists(model_path)):
             logging.error(f'Error: The model weights could not be downloaded. Please download the model weights manually (see README.md) and specify them with --model!')
             sys.exit(1)
 
@@ -263,7 +248,6 @@ def main():
     for j, s_ in enumerate(strand):
         pred_gtf = PredictionGTF( 
             model_path=model_path,
-            model_path_lstm=model_path_lstm,
             model_path_hmm=model_path_hmm,
             seq_len=seq_len, 
             batch_size=batch_size, 
@@ -377,12 +361,16 @@ def parseCmd():
         Use Tiberius with softmasking disabled:
         tiberius.py --genome genome.fa --model model_keras_save --out tiberius.gtf --no_softmasking
     """)
-    parser.add_argument('--model_lstm', type=str, default='',
-        help='LSTM model file that can be used with --model_hmm to add a custom HMM layer, otherwise a default HMM layer is added.')
+    # parser.add_argument('--model_lstm', type=str, default='',
+    #     help='LSTM model file that can be used with --model_hmm to add a custom HMM layer, otherwise a default HMM layer is added.')
     parser.add_argument('--model_hmm', type=str, default='',
-        help='HMM layer file that can be used with --model_lstm.')
+        help='HMM layer file that can be used instead of the default HMM.')
     parser.add_argument('--model', type=str,
-        help='LSTM model file with HMM Layer.', default='')
+        help='Tiberius model with weight file (.h5) without the HMM layer.', default='')
+    parser.add_argument('--model_lstm_old', type=str, default='',
+        help=argparse.SUPPRESS)
+    parser.add_argument('--model_old', type=str,
+        help=argparse.SUPPRESS, default='')
     parser.add_argument('--out', type=str,
         help='Output GTF file with Tiberius gene prediction.', default='tiberius.gtf')
     parser.add_argument('--genome',  type=str, required=True,
@@ -400,10 +388,6 @@ def parseCmd():
         help='Ouputs the coding sequences of all predicted genes as a FASTA file.')
     parser.add_argument('--protseq', type=str, default='',
         help='Ouputs the amino acid sequences of all predicted genes as a FASTA file.')
-    # parser.add_argument('--temp_dir', type=str, default='',
-    #     help='')
-    parser.add_argument('--emb', action='store_true',
-        help='Indicates if the HMM layer uses embedding input. Currently not supported')
     parser.add_argument('--strand', type=str,
         help='Either "+" or "-" or "+,-".', default='+,-')
     parser.add_argument('--seq_len', type=int,
@@ -416,6 +400,10 @@ def parseCmd():
         help='Minimum length of input sequences used for predictions.', default=0)
         
     return parser.parse_args()
+
+def main():    
+    args = parseCmd()
+    run_tiberius(args)
 
 if __name__ == '__main__':
     main()

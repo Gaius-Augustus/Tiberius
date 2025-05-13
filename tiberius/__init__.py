@@ -12,7 +12,8 @@ __all__ = [
     "annotation_gtf",
     "genome_anno",
     "main",
-    "models"
+    "data_generator",
+    "models",
 ]
 from . import kmer
 from .gene_pred_hmm import (GenePredHMMLayer, 
@@ -28,5 +29,6 @@ from .genome_fasta import GenomeSequences
 from .annotation_gtf import GeneStructure
 from .genome_anno import Anno
 from .models import (make_weighted_cce_loss, custom_cce_f1_loss, lstm_model, Cast)
+from .data_generator import DataGenerator
 from .eval_model_class import PredictionGTF
-from .main import (assemble_transcript, group_sequences, main)
+from .main import (assemble_transcript, group_sequences, main, parseCmd, run_tiberius)

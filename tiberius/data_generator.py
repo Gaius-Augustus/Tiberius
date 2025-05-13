@@ -1,10 +1,8 @@
 # ==============================================================
 # Authors: Lars Gabriel
 #
-# Class loading tfrecords so that they fit different traing 
+# Class loading tfrecords so that they fit different training 
 # scenarios
-# 
-# Transformers 4.31.0
 # ==============================================================
 
 import sys
@@ -22,8 +20,6 @@ class DataGenerator:
         shuffle (bool): Whether to shuffle the data.
         repeat (bool): Whether to repeat the data set.
         output_size (int): Number of class labels in traings examples.
-        trans (bool): Whether the data should fit the transformer only model. (deprecated!!)
-        trans_lstm (bool): Whether the data should fit the transformer-LSTM hybrid model. (deprecated!!)
         seq_weights (int): Weight of positons around exon borders. They aren't used if 0.
         softmasking (bool): Whether softmasking track should be added to input.
         clamsa (bool): Whether Clamsa track should be prepared as additional input,
@@ -36,7 +32,6 @@ class DataGenerator:
                  filter=False,
                  output_size=5,
                 hmm_factor=None,
-                # trans=False, trans_lstm=False, 
                  seq_weights=0, softmasking=True,
                 clamsa=False,
                 oracle=False):
@@ -48,8 +43,6 @@ class DataGenerator:
         self.seq_weights = seq_weights
         self.output_size = output_size
         self.hmm_factor = hmm_factor
-        # self.trans=trans
-        # self.trans_lstm=trans_lstm
         self.softmasking=softmasking
         self.clamsa = clamsa
         self.oracle = oracle
@@ -217,7 +210,7 @@ class DataGenerator:
             x_batch, y_batch = next(self.iterator)
         x_batch = np.array(x_batch)
         y_batch = np.array(y_batch)
-         
+        
         if not self.softmasking:
             # remove softmasking track
             x_batch = x_batch[:,:,:5]

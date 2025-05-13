@@ -1,6 +1,6 @@
 import argparse
 import sys
-from data_generator import DataGenerator
+from tiberius import DataGenerator
 
 
 def check_tfrecord_sequence_length(tfrecord_path, expected_length):

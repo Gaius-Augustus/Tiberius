@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 import sys, json, os, re, sys, csv, argparse
-from genome_fasta import GenomeSequences
-from annotation_gtf import GeneStructure
+from tiberius.genome_fasta import GenomeSequences
+from tiberius.annotation_gtf import GeneStructure
 import subprocess as sp
 import numpy as np
 import tensorflow as tf
 import numpy as np
 import sys
-from wig_class import Wig_util
+from tiberius.wig_class import Wig_util
 import h5py
 
 def get_clamsa_track(file_path, seq_len=500004, prefix=''):

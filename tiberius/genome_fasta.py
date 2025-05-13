@@ -159,6 +159,7 @@ class GenomeSequences:
         chunks_one_hot = np.array(chunks_one_hot)
         if strand == '-':
             chunks_one_hot = chunks_one_hot[::-1, ::-1, [3, 2, 1, 0, 4, 5]]
-            chunk_coords.reverse()
+            if chunk_coords:
+                chunk_coords.reverse()
 
         return chunks_one_hot, chunk_coords, chunksize

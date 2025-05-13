@@ -5,7 +5,8 @@ import sys
 sys.path.append("/home/gabriell/Tiberius/bin/")   
 from gene_pred_hmm import GenePredHMMLayer
 from models import custom_cce_f1_loss, Cast
-import tensorflow as tf
+from pathlib import Path
+import json, tensorflow as tf
 from tensorflow.keras.models import Model
 
 def remove_last_layer(model):
@@ -36,6 +37,10 @@ def main():
         "--output_model", type=str, required=True,
         help="Path to save the modified TensorFlow model."
     )
+    parser.add_argument(
+        "--config", type=str, required=True,
+        help="Training config path"
+    )
     args = parser.parse_args()
 
     # Load the model from the input path
@@ -65,13 +70,41 @@ def main():
     print("\nModified model summary:")
     new_model.summary()
 
+    model_config = {
+            "units": 200,
+            "filter_size": 64,
+            "kernel_size": 9,
+            "numb_conv": 2,
+            "numb_lstm": 3,
+            "dropout_rate": 0.0,
+            "pool_size": 10,
+            "stride": 0,
+            "lstm_mask": False,
+            "output_size": 7,
+            "multi_loss": False,
+            "residual_conv": False,
+            "clamsa": False,
+            "clamsa_kernel": 6,
+            "softmasking": True,
+            "lru_layer": False,
+            "hmm": False
+        }
+
+    with Path(args.config).open("r", encoding="utf-8") as f:
+        train_config = json.load(f)
+
+    for k in model_config:
+        if k in train_config:
+            model_config[k] = train_config[k]
+
     # Save the modified model to the output path
-    try:
-        new_model.save(args.output_model)
-        print(f"\nModified model successfully saved to {args.output_model}")
-    except Exception as e:
-        print(f"Error saving the modified model to {args.output_model}: {e}")
-        sys.exit(1)
+
+    new_model.save_weights(args.output_model + "/weights.h5")
+    print(f"\nModified model successfully saved to {args.output_model}")
+    Path(args.output_model + "/model_layers.json").write_text(new_model.to_json())
+    with Path(args.output_model + "/model_config.json").open("w", encoding="utf-8") as f:
+        json.dump(model_config, f, indent=2)
+
 
 if __name__ == "__main__":
     main()

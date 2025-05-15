@@ -49,15 +49,6 @@ The following Python libraries are required and installed with Tiberius:
 Make sure TensorFlow is installed with GPU support. Tiberius was built on TensorFlow 2.10 and runs best with that version. If you are using conda, you can install Tensorflow 2.10 with these [instructions](docs/install_tensorflow.md).
 
 Tiberius does also work with TensorFlow >2.10, however, **it will produce an error if you use a `--seq_len` parameter > 259.992 during inference!**  
-You can install the current TensorFlow version with 
-```shell
-python3 -m pip install tensorflow[and-cuda]
-```
-
-If you want to use GPUs, verify that TensorFlow is installed correctly with GPU support:
-```shell
-python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
-```
 
 ## Running Tiberius for Gene Prediction
 

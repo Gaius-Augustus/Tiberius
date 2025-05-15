@@ -6,7 +6,7 @@
 # Running Tiberius for single genome prediction
 # ==============================================================
 
-import sys, os, sys, argparse, requests, time, logging, math, gzip, bz2
+import sys, os, sys, argparse, requests, time, logging, math, gzip, bz2, yaml
 script_dir = os.path.dirname(os.path.realpath(__file__))
 import subprocess as sp
 from Bio import SeqIO
@@ -16,6 +16,46 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 MAX_TF_VERSION = '2.12'
 seqgroup_size = 50000400
+
+class MissingConfigFieldError(RuntimeError):
+    """Raised when the model-config file lacks one or more required fields."""
+
+class InvalidArgumentCombinationError(RuntimeError):
+    """
+    Raised when the user supplies an illegal or inconsistent combination of
+    command-line arguments (e.g. --model-config together with --nosm).
+    """
+
+def load_model_config(
+    filepath,
+    required = ("weights_url", "softmasking", "clamsa"),
+):
+    """
+    Read a YAML model-config file and return its contents as a dict.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to the YAML file.
+    required : Sequence[str], optional
+        Keys that *must* be present (and non-null) in the YAML.
+
+    Returns
+    -------
+    dict
+        Parsed YAML contents.
+    """
+    with open(filepath, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+
+    # Treat absent keys *or* keys explicitly set to null/None as missing
+    missing = [k for k in required if data.get(k) is None]
+    if missing:
+        raise MissingConfigFieldError(
+            f"{filepath} is missing required field(s): {', '.join(missing)}"
+        )
+
+    return data
 
 # Function to compare TensorFlow version
 def check_tf_version(tf_version):
@@ -150,24 +190,33 @@ def run_tiberius(args):
     else:
         import tensorflow as tf
 
-
-    start_time = time.time()
-    url_weights = {
-        'Tiberius_default': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_weights_v2.tar.gz',
-        'Tiberius_nosm': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_nosm_weights_v2.tar.gz',
-        'Tiberius_denovo': 'https://bioinf.uni-greifswald.de/bioinf/tiberius/models//tiberius_denovo_weights_v2.tar.gz'
-    }
     if check_tf_version(tf.__version__) and args.seq_len > 259992:
         logging.error(f"Error: The sequence length {args.seq_len} is too long for TensorFlow version {tf.__version__}. "
                         "Please use a sequence length <= 259992 (--seq_len).")
         sys.exit(1)
-    
+
     if args.learnMSA:
         sys.path.insert(0, args.learnMSA)  
         
     from tiberius import Anno, make_weighted_cce_loss, PredictionGTF
+
+    start_time = time.time()
+    config = None
+    model_path = None
+    if args.model_cfg:
+        config = load_model_config(args.model_cfg)
+    elif args.model:
+        model_path = os.path.abspath(args.model)
+    else:
+        if args.clamsa and args.no_softmasking:
+            raise InvalidArgumentCombinationError("Use either --clamsa or --no_softmasking with the default mammalian models!")
+        elif args.clamsa:
+            config = load_model_config(f"{script_dir}/../model_cfg/mammalia_clamsa_v2.yaml")
+        elif args.no_softmasking:
+            config = load_model_config(f"{script_dir}/../model_cfg/mammalia_nosoftmasking_v2.yaml")
+        else:
+            config = load_model_config(f"{script_dir}/../model_cfg/mammalia_softmasking_v2.yaml")
     
-    model_path = os.path.abspath(args.model) if args.model else None
     if model_path:        
         check_file_exists(model_path)
         logging.info(f'Model path: {model_path}')
@@ -197,16 +246,16 @@ def run_tiberius(args):
     parallel_factor = compute_parallel_factor(seq_len) if args.parallel_factor == 0 else args.parallel_factor
     logging.info(f'HMM parallel factor: {parallel_factor}')    
 
-    softmasking = False if args.no_softmasking else True
+    softmasking = not args.no_softmasking if not config else config["softmasking"]
     logging.info(f'Softmasking: {softmasking}')    
     
     genome_path = os.path.abspath(args.genome)
     check_file_exists(genome_path)
     logging.info(f'Genome sequence path: {genome_path}')    
     
-    clamsa_prefix = args.clamsa
+    clamsa_prefix = args.clamsa if not config else config["clamsa"]
     
-    if not model_path:
+    if config:
         model_weights_dir = f'{script_dir}/../model_weights'        
         if not os.path.exists(model_weights_dir):
             os.makedirs(model_weights_dir)
@@ -215,27 +264,15 @@ def run_tiberius(args):
         if not is_writable(model_weights_dir):
             logging.error(f'No model weights provided, and candidate directorys for download are not writeable. Please download the model weigths manually (see README.md) and specify them with --model!')
             sys.exit(1)
-        
-        if clamsa_prefix:
-            if not softmasking:
-                logging.error(f'ERROR: Clamsa input requires softmasking.')
-                sys.exit(1)
-            model_file_name = url_weights["Tiberius_denovo"].split('/')[-1]       
-            model_path = download_weigths(url_weights["Tiberius_denovo"], f'{model_weights_dir}/{model_file_name}')  
-        elif not softmasking:
-            model_file_name = url_weights["Tiberius_nosm"].split('/')[-1]          
-            model_path = download_weigths(url_weights["Tiberius_nosm"], f'{model_weights_dir}/{model_file_name}')  
-        else:
-            model_file_name = url_weights["Tiberius_default"].split('/')[-1]
-            model_path = download_weigths(url_weights["Tiberius_default"], f'{model_weights_dir}/{model_file_name}')
+        model_file_name = config["weights_url"].split('/')[-1]
+        model_path = download_weigths(config["weights_url"], f'{model_weights_dir}/{model_file_name}') 
         if model_path and model_path[-3:] in ['tgz', ".gz"]:
             logging.info(f'Extracting weights to {model_weights_dir}')
             extract_tar_gz(f'{model_path}', f'{model_weights_dir}')
             model_path = model_path[:-4] if model_path.endswith(".tgz") else model_path[:-7]
-        
-        if (model_path and not os.path.exists(model_path)):
-            logging.error(f'Error: The model weights could not be downloaded. Please download the model weights manually (see README.md) and specify them with --model!')
-            sys.exit(1)
+    if (model_path and not os.path.exists(model_path)):
+        logging.error(f'Error: The model weights could not be downloaded. Please download the model weights manually (see README.md) and specify them with --model!')
+        sys.exit(1)
 
     anno = Anno(gtf_out, f'anno')     
     tx_id=0
@@ -344,29 +381,28 @@ def parseCmd():
         
         description="""Tiberius predicts gene structures from a nucleotide sequences that can have repeat softmasking.
 
-    There are flexible configuration to load the model, including options to:
-    - Load a complete LSTM+HMM model
-    - Load only the LSTM model and use a default HMM layer
+    There are flexible configuration to load the model:
+    - Automatic detection of correct model for mammalian species (if no model is specified)
+    - Download model using a model config file that includes URL of the model (see model_cfg/README.md for requirements)
+    - Use a local model file (use --model /path/to/model/directory)
 
     Example usage:
-        Load LSTM+HMM model:
-        tiberius.py --genome genome.fa --model model_keras_save --out tiberius.gtf
+        Automatic model detection:
+        tiberius.py --genome genome.fa --out tiberius.gtf
 
-        Load only LSTM model:
-        tiberius.py --genome genome.fa --model_lstm lstm_keras_save
-
-        Load LSTM model and custom HMM Layer:
-        tiberius.py --genome genome.fa --model_lstm lstm_keras_save --model_hmm hmm_layer_keras_save
-
-        Use Tiberius with softmasking disabled:
-        tiberius.py --genome genome.fa --model model_keras_save --out tiberius.gtf --no_softmasking
+        Download specific model model:
+        tiberius.py --genome genome.fa --model_cfg model_cfg/mammalia_nosofttmasking_v2.yaml --out tiberius.gtf        
     """)
     # parser.add_argument('--model_lstm', type=str, default='',
     #     help='LSTM model file that can be used with --model_hmm to add a custom HMM layer, otherwise a default HMM layer is added.')
+    grp = parser.add_mutually_exclusive_group(required=False)
+    grp.add_argument('--model', type=str,    
+        help='Tiberius model with weight file (.h5) without the HMM layer.', default='')
+    grp.add_argument('--model_cfg', type=str, default='',
+        help='Yaml file with model infomation, including URL for download. Can be used instead of --mode to specify a model.')
+
     parser.add_argument('--model_hmm', type=str, default='',
         help='HMM layer file that can be used instead of the default HMM.')
-    parser.add_argument('--model', type=str,
-        help='Tiberius model with weight file (.h5) without the HMM layer.', default='')
     parser.add_argument('--model_lstm_old', type=str, default='',
         help=argparse.SUPPRESS)
     parser.add_argument('--model_old', type=str,

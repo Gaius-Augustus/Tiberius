@@ -197,10 +197,14 @@ class PredictionGTF:
 
                     self.gene_pred_hmm_layer.cell.recurrent_init()
             if True:
-                self.model = keras.models.load_model(self.model_path, 
-                                        custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
+                custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
                                             'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
-                                            "Cast": Cast})
+                                            "Cast": Cast}
+                if self.lru:
+                    import LRU_tf as lru
+                    custom_objects['LRU_Block'] = lru.LRU_Block
+                self.model = keras.models.load_model(self.model_path, 
+                                        custom_objects)
                 
                 if self.hmm:
                     try:

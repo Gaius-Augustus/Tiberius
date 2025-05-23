@@ -16,6 +16,7 @@ import sys, os, re, json, sys, csv
 sys.path.insert(0, args.learnMSA)
 if args.LRU:
     sys.path.insert(0, args.LRU)
+    import LRU_tf as lru
 sys.path.append("/home/gabriell/conda/envs/tf_py310/lib/python3.10/site-packages")
 import tensorflow as tf
 import numpy as np
@@ -78,17 +79,26 @@ def train_hmm_model(generator, model_save_dir, config, val_data=None,
             oracle_inputs = tf.keras.layers.Input(shape=(None, config['output_size']), name='oracle_input')
             model = tf.keras.Model(inputs=[inputs, oracle_inputs], outputs=oracle_inputs) 
         elif model_load_lstm:
-            model = keras.models.load_model(model_load_lstm, 
-                                                custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
-                                                        'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size'])}) 
+            custom_objects ={'custom_cce_f1_loss': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
+                                                        'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size'])}
+            if args.LRU:
+                custom_objects['LRU_Block'] = lru.LRU_Block
+                print(custom_objects)
+            model = keras.models.load_model(model_load_lstm, custom_objects=custom_objects) 
         else:
             relevant_keys = ['units', 'filter_size', 'kernel_size', 
                             'numb_conv', 'numb_lstm', 'dropout_rate', 
                             'pool_size', 'stride', 'lstm_mask', 'co',
                             'output_size', 'residual_conv', 'softmasking',
-                            'clamsa_kernel', 'lru_layer', 'clamsa', 'clamsa_kernel']
+                            'clamsa_kernel', 'clamsa', 'clamsa_kernel', 
+                            'lru_layer', 'lru_hidden_state_dim', 
+                            'lru_max_tree_depth', 'lru_init_bounds', 
+                            'lru_scan_use_tf_while_loop', 'lru_scan_base_case_n']
             relevant_args = {key: config[key] for key in relevant_keys if key in config}
             model = lstm_model(**relevant_args)
+        #if model_load_lstm:
+        #    print("load weights")
+        #    model.load_weights(model_load_lstm + '/variables/variables').expect_partial()
         for layer in model.layers:
             layer.trainable = trainable
         if constant_hmm:
@@ -148,11 +158,12 @@ def train_hmm_model(generator, model_save_dir, config, val_data=None,
         model.summary()
         b_lr_sched = BatchLearningRateScheduler(peak=config["lr"], warmup=config["warmup"],
                                         min_lr=config["min_lr"])
-        model.save(model_save_dir+"/untrained.keras")
+        model.save(model_save_dir+"/untrained", save_traces=False) #.keras")
         model.fit(generator, epochs=500, validation_data=val_data,
                 steps_per_epoch=1000,
                 validation_batch_size=config['batch_size'],
-                callbacks=[epoch_callback, csv_logger])
+                callbacks=[epoch_callback, csv_logger],
+                verbose=2)
 
 def read_species(file_name):
     """Reads a list of species from a given file, filtering out empty lines and comments.

@@ -376,7 +376,7 @@ def add_hmm_layer(model, gene_pred_layer=None, dense_size=128, pool_size=9,
     else:
         emb = None
     
-    x = model.output    
+    x = model.output
     x = x[0] if isinstance(x, list) else x
     
     if x.shape[-1] > output_size:

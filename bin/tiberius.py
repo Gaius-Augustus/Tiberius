@@ -169,6 +169,8 @@ def main():
         sys.path.insert(0, args.learnMSA) 
     if args.LRU:
         lru = args.LRU
+    else:
+        lru = None
        
     from eval_model_class import PredictionGTF
     from models import make_weighted_cce_loss        

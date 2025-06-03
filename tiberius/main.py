@@ -190,7 +190,7 @@ def run_tiberius(args):
     else:
         import tensorflow as tf
 
-    if check_tf_version(tf.__version__) and args.seq_len > 259992:
+    if not check_tf_version(tf.__version__) and args.seq_len > 259992:
         logging.error(f"Error: The sequence length {args.seq_len} is too long for TensorFlow version {tf.__version__}. "
                         "Please use a sequence length <= 259992 (--seq_len).")
         sys.exit(1)
@@ -203,28 +203,30 @@ def run_tiberius(args):
     start_time = time.time()
     config = None
     model_path = None
-    if args.model_cfg:
-        config = load_model_config(args.model_cfg)
-    elif args.model:
-        model_path = os.path.abspath(args.model)
-    else:
-        if args.clamsa and args.no_softmasking:
-            raise InvalidArgumentCombinationError("Use either --clamsa or --no_softmasking with the default mammalian models!")
-        elif args.clamsa:
-            config = load_model_config(f"{script_dir}/../model_cfg/mammalia_clamsa_v2.yaml")
-        elif args.no_softmasking:
-            config = load_model_config(f"{script_dir}/../model_cfg/mammalia_nosoftmasking_v2.yaml")
+    model_path_hmm = None
+    if not args.model_old and not args.model_lstm_old:
+        if args.model_cfg:
+            config = load_model_config(args.model_cfg)
+        elif args.model:
+            model_path = os.path.abspath(args.model)
         else:
-            config = load_model_config(f"{script_dir}/../model_cfg/mammalia_softmasking_v2.yaml")
-    
-    if model_path:        
-        check_file_exists(model_path)
-        logging.info(f'Model path: {model_path}')
+            if args.clamsa and args.no_softmasking:
+                raise InvalidArgumentCombinationError("Use either --clamsa or --no_softmasking with the default mammalian models!")
+            elif args.clamsa:
+                config = load_model_config(f"{script_dir}/../model_cfg/mammalia_clamsa_v2.yaml")
+            elif args.no_softmasking:
+                config = load_model_config(f"{script_dir}/../model_cfg/mammalia_nosoftmasking_v2.yaml")
+            else:
+                config = load_model_config(f"{script_dir}/../model_cfg/mammalia_softmasking_v2.yaml")
         
-    model_path_hmm = os.path.abspath(args.model_hmm) if args.model_hmm else None
-    if model_path_hmm:
-        check_file_exists(model_path_hmm)
-        logging.info(f'Model HMM path: {model_path_hmm}')
+        if model_path:        
+            check_file_exists(model_path)
+            logging.info(f'Model path: {model_path}')
+            
+        model_path_hmm = os.path.abspath(args.model_hmm) if args.model_hmm else None
+        if model_path_hmm:
+            check_file_exists(model_path_hmm)
+            logging.info(f'Model HMM path: {model_path_hmm}')
             
     gtf_out = os.path.abspath(args.out)
     logging.info(f'Output file: {gtf_out}')
@@ -284,6 +286,8 @@ def run_tiberius(args):
 
     for j, s_ in enumerate(strand):
         pred_gtf = PredictionGTF( 
+            model_path_lstm_old=args.model_lstm_old,
+            model_path_old=args.model_old,
             model_path=model_path,
             model_path_hmm=model_path_hmm,
             seq_len=seq_len, 

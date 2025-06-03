@@ -132,7 +132,7 @@ def train_hmm_model(generator, model_save_dir, config, val_data=None,
         model.summary()
         model.save(model_save_dir+"/untrained.keras")
         model.fit(generator, epochs=config["num_epochs"], validation_data=val_data,
-                steps_per_epoch=1000,
+                steps_per_epoch=5000,
                 validation_batch_size=config['batch_size'],
                 callbacks=[epoch_callback, csv_logger])
 
@@ -291,7 +291,7 @@ def train_lstm_model(generator, model_save_dir, config, val_data=None, model_loa
         model.summary()
 
         model.fit(generator, epochs=config["num_epochs"], validation_data=val_data,
-                steps_per_epoch=1000,
+                steps_per_epoch=5000,
                 callbacks=[epoch_callback, csv_logger])
 
 def load_val_data(file, hmm_factor=1, output_size=7, clamsa=False, softmasking=True, oracle=False):
@@ -443,7 +443,7 @@ def main():
             os.mkdir(d)
 
     # get paths of tfrecord files
-    species_file = f'{args.data}/{args.train_species_file}'
+    species_file = f'{args.train_species_file}'
     species = read_species(species_file)
     file_paths = [f'{data_path}/{s}_{i}.tfrecords' for s in species for i in range(99)]
 

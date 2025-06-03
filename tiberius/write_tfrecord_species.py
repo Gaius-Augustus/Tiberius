@@ -48,9 +48,12 @@ def get_species_data_hmm(genome_path='', annot_path='', species='',
             overlap=overlap_size)
     fasta.encode_sequences() 
     seq_names = [seq_n for seq, seq_n in zip(fasta.sequences, fasta.sequence_names) \
-                    if len(seq)>seq_len]
+                    if len(seq)>500000]
     seqs = [len(seq) for seq in fasta.sequences \
-                    if len(seq)>seq_len]
+                    if len(seq)>500000]
+    print(len(seqs), len(seq_names))
+    print(seq_names)
+    print(seqs)
     f_chunk, _, _ = fasta.get_flat_chunks(strand='+', pad=False, sequence_names=seq_names)
     del fasta
     full_f_chunks = np.concatenate((f_chunk[::-1,::-1, [3,2,1,0,4,5]], 
@@ -90,7 +93,7 @@ def write_h5(fasta, ref, out, ref_phase=None, split=100,
             f.create_dataset('input', data=fasta[indices[k::split]], compression='gzip', compression_opts=9)  # Maximum compression
             f.create_dataset('output', data=ref[indices[k::split]], compression='gzip', compression_opts=9)
 
-def write_numpy(fasta, ref, out, ref_phase=None, split=100, trans=False, clamsa=np.array([])):
+def write_numpy(fasta, ref, out, ref_phase=None, split=1, trans=False, clamsa=np.array([])):
     fasta = fasta.astype(np.int32)          
     ref = ref.astype(np.int32)
 

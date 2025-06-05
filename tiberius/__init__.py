@@ -31,4 +31,5 @@ from .genome_anno import Anno
 from .models import (make_weighted_cce_loss, custom_cce_f1_loss, lstm_model, Cast)
 from .data_generator import DataGenerator
 from .eval_model_class import PredictionGTF
-from .main import (assemble_transcript, group_sequences, main, parseCmd, run_tiberius)
+from .tiberius_args import parseCmd
+from .main import (assemble_transcript, group_sequences, main, run_tiberius)

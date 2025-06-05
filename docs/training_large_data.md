@@ -4,10 +4,10 @@ For trainign Tiberius with a large dataset we recommend generating tfRecords fil
 
 For following instructions, we will assume that the files are named after the species as `${SPECIES}.fa` and `${SPECIES}.gtf`. And that [learnMSA](https://github.com/Gaius-Augustus/learnMSA) is installed at `$leanMSA`:
 
-1. Remove alternative transcripts from each GTF file. This is necessary because Tiberius does not support alternative splicing. A common way to do this would be to choose the alternative with the longest codeing sequence, you can use for example [`get_longest_isoform.py`](https://github.com/Gaius-Augustus/TSEBRA/blob/main/bin/get_longest_isoform.py) for this:
+1. Remove alternative transcripts from each GTF file. This is necessary because Tiberius does not support alternative splicing. A common way to do this would be to choose the alternative with the longest codeing sequence, you can use for example [`select_single_isoform.py`] for this:
 
     ```shell
-    python tiberius/get_longest_isoform.py --gtf ${SPECIES}.gtf --out ${SPECIES}.longest.gtf
+    python tiberius/select_single_isoform.py  ${SPECIES}.gtf > ${SPECIES}.longest.gtf
     ```
 
 2. Create tfrecords files for each species. This will create 100 tfrecords files for each genome in the directory `$tfrecords`. The tfrecords files will contain the genomic sequences and the gene annotations, split into trainings examples with a sequence length of `${seq_size}`, in the format that is required for training. For training with the mammalian genomes, we used a `${seq_size}` of `9999`, which has proven to be a reasonable choice.

@@ -5,7 +5,16 @@ Each file is read at runtime by Tiberius and therefore must follow the schema be
 
 ---
 
-## 1  File naming convention
+## 1  List of model weigths
+
+| Model name | Target species | Softmasking required | ClaMSA input required| 
+| ----------------|------------------|-------------------|------------------|
+| mammalia_softmasking_v2 | Mammalia | :white_check_mark: |  :x:| 
+| mammalia_nosofttmasking_v2 | Mammalia | :x: |  :x:| 
+| mammalia_clamsa_v2 | Mammalia | :white_check_mark: |  :white_check_mark:| 
+
+
+## 2  File naming convention
 
 ```
 <target_species|clade>_<identifying_attribute>_<version>.yaml
@@ -18,7 +27,7 @@ Example:  `mammalia_nosoftmasking_v2.yaml`
 
 ---
 
-## 2  Required keys
+## 3  Required keys
 
 | Key                                | Type               | Constraints & semantics                                                                                                                                                                                       |
 | ---------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -27,7 +36,7 @@ Example:  `mammalia_nosoftmasking_v2.yaml`
 | `weights_url`                      | *string*           | Fully‑qualified URL (HTTP\[S], S3, or `file://`) that points to the model weights archive. Make sure the link is public and can be accessed with `wget` or `curl`. |
 | `softmasking`                      | *boolean*          | `true` → model uses softmasing track as input,                                                                                                                    `false` → model does not use softmasking. |
 | `clamsa`                           | *boolean*          | `true` if the model was pre‑trained with the CLAMSA track, `false` otherwise.                                                                                                                       |
-| `tiberius_version`                 | *semver string*    | **Minimum** Tiberius release at training time that can load the weights (e.g. `1.1.5`). |
+| `tiberius_version`                 | *semver string*    | Tiberius version at training time that can load the weights (e.g. `1.1.5`). |
 | `date`                             | *string*           | Date the weights were finalised **in ISO‑8601 format `YYYY-MM-DD`**.                                                                                                                               |
 | `comment`                          | *multiline string* | Free text for provenance & citation. Begin the first line with author.                                                  |
 | `training_species`                 | *YAML sequence*    | Ordered list of Latin binomials (one per line) included in the training set.                                                                                         |

@@ -32,14 +32,14 @@ strategy = tf.distribute.MirroredStrategy()
 
 batch_save_numb = 1000
 
-def train_hmm_model(generator, model_save_dir, config, val_data=None,
+def train_hmm_model(dataset, model_save_dir, config, val_data=None,
                   model_load=None, model_load_lstm=None, model_load_hmm=None, trainable=True, constant_hmm=False
                  ):  
-    """Trains a hybrid HMM-LSTM model with trainings example from a generator 
+    """Trains a hybrid HMM-LSTM model with trainings example from a tf.dataset 
     and configuration, model and weights a re saved to model_save_dir.
 
     Parameters:
-        - generator (DataGenerator): A data generator for training data.
+        - dataset (tf.data.dataset): A dataset for training data.
         - model_save_dir (str): Directory path to save model weights and logs.
         - config (dict): Configuration dictionary specifying model 
                          parameters and training settings.
@@ -52,13 +52,6 @@ def train_hmm_model(generator, model_save_dir, config, val_data=None,
         - trainable (bool): Flag indicating whether the LSTM model's layers are trainable. 
         - constant_hmm (bool): Flag to add a constant HMM layer to the model. 
     """
-    suffix =  "keras" if tf.__version__ > '2.12' else "h5"
-            
-    model_save = model_save_dir + "/weights.{epoch:02d}." + suffix
-    checkpoint = ModelCheckpoint(model_save, monitor='loss', verbose=1, 
-                        save_best_only=False, save_weights_only=False, mode='auto')
-
-    batch_callback = BatchSave(model_save_dir + "/weights_batch.{}." + suffix, batch_save_numb)
     epoch_callback = EpochSave(model_save_dir)
 
     csv_logger = CSVLogger(f'{model_save_dir}/training.log', 
@@ -131,8 +124,8 @@ def train_hmm_model(generator, model_save_dir, config, val_data=None,
         model.compile(loss=loss, optimizer=adam, metrics=['accuracy'], loss_weights=loss_weights)     
         model.summary()
         model.save(model_save_dir+"/untrained.keras")
-        model.fit(generator, epochs=config["num_epochs"], validation_data=val_data,
-                steps_per_epoch=5000,
+        model.fit(dataset, epochs=config["num_epochs"], validation_data=val_data,
+                steps_per_epoch=config["steps_per_epoch"],
                 validation_batch_size=config['batch_size'],
                 callbacks=[epoch_callback, csv_logger])
 
@@ -150,11 +143,11 @@ def read_species(file_name):
         species = f_h.read().strip().split('\n')
     return [s for s in species if s and s[0] != '#']
 
-def train_clamsa(generator, model_save_dir, config, val_data=None, model_load=None, model_load_lstm=None):
+def train_clamsa(dataset, model_save_dir, config, val_data=None, model_load=None, model_load_lstm=None):
     """Train simple CNN model that uses only CLAMSA as input.
 
     Parameters:
-        - generator (DataGenerator): A data generator for training data.
+        - dataset (tf.data.dataset): A dataset for training data.
         - model_save_dir (str): Directory path to save model weights and logs.
         - config (dict): Configuration dictionary specifying model 
                          parameters and training settings.
@@ -164,29 +157,24 @@ def train_clamsa(generator, model_save_dir, config, val_data=None, model_load=No
         - model_load_lstm (optional): Path to a pre-trained LSTM model to be loaded.
     """
     
-    model_save = model_save_dir + "/weights.{epoch:02d}.h5"
-    checkpoint = ModelCheckpoint(model_save, monitor='loss', verbose=1, 
-                        save_best_only=False, save_weights_only=False, mode='auto')
-
-    batch_callback = BatchSave(model_save_dir + "/weights_batch.{}.h5", batch_save_numb)
     epoch_callback = EpochSave(model_save_dir)
 
     adam = Adam(learning_rate=config['lr'])
-
-    cce_loss = tf.keras.losses.CategoricalCrossentropy()
-    custom_objects = {}
-    if config["loss_f1_factor"]:
-        cce_loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
-        custom_objects['custom_cce_f1_loss'] = cce_loss
-        custom_objects['loss_'] = cce_loss
-    else:
-        cce_loss = tf.keras.losses.CategoricalCrossentropy()
-    if config["output_size"] == 1:
-        cce_loss = tf.keras.losses.BinaryCrossentropy()
     
-    csv_logger = CSVLogger(f'{model_save_dir}/training.log', 
-                append=True, separator=';')
     with strategy.scope():
+        cce_loss = tf.keras.losses.CategoricalCrossentropy()
+        custom_objects = {}
+        if config["loss_f1_factor"]:
+            cce_loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
+            custom_objects['custom_cce_f1_loss'] = cce_loss
+            custom_objects['loss_'] = cce_loss
+        else:
+            cce_loss = tf.keras.losses.CategoricalCrossentropy()
+        if config["output_size"] == 1:
+            cce_loss = tf.keras.losses.BinaryCrossentropy()
+        
+        csv_logger = CSVLogger(f'{model_save_dir}/training.log', 
+                    append=True, separator=';')
         if model_load:
             model = keras.models.load_model(model_load, custom_objects=custom_objects)
         else:
@@ -224,17 +212,17 @@ def train_clamsa(generator, model_save_dir, config, val_data=None, model_load=No
                 metrics=['accuracy'])        
         model.summary()
 
-        model.fit(generator, epochs=config["num_epochs"], 
-                steps_per_epoch=1000,
+        model.fit(dataset, epochs=config["num_epochs"], 
+                steps_per_epoch=config["steps_per_epoch"],
                 callbacks=[epoch_callback, csv_logger])
     
-def train_lstm_model(generator, model_save_dir, config, val_data=None, model_load=None):  
-    """Trains the LSTM model using data provided by a generator, while saving the 
+def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=None):  
+    """Trains the LSTM model using data provided by a tf.dataset, while saving the 
     training checkpoints and logging progress. The model can be trained from scratch or from a 
     pre-loaded state.
 
     Parameters:
-        - generator (DataGenerator): A data generator for training data.
+        - dataset (tf.data.dataset): A dataset for training data.
         - model_save_dir (str): Directory path to save model weights and logs.
         - config (dict): Configuration dictionary specifying model 
                          parameters and training settings.
@@ -242,40 +230,33 @@ def train_lstm_model(generator, model_save_dir, config, val_data=None, model_loa
         - model_load (optional): Path to a directory from which 
                                  to load a preexisting model that will be trained
     """
-    suffix =  "keras" if tf.__version__ > '2.12' else "h5"
-            
-    model_save = model_save_dir + "/weights.{epoch:02d}." + suffix
-    checkpoint = ModelCheckpoint(model_save, monitor='loss', verbose=1, 
-                        save_best_only=False, save_weights_only=False, mode='auto')
 
-    batch_callback = BatchSave(model_save_dir + "/weights_batch.{}." + suffix, batch_save_numb)
     epoch_callback = EpochSave(model_save_dir)
-    
-    if config['sgd']:
-        optimizer = SGD(learning_rate=config['lr'])
-    else:
-        optimizer = Adam(learning_rate=config['lr'])
+    csv_logger = CSVLogger(f'{model_save_dir}/training.log', append=True, separator=';')
     
     
-    custom_objects = {}
-    if config["loss_f1_factor"]:
-        cce_loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
-        custom_objects['loss_'] = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
-    else:
-        cce_loss = tf.keras.losses.CategoricalCrossentropy()
-    
-    if config["output_size"] == 1:
-        cce_loss = tf.keras.losses.BinaryCrossentropy()
-    
-    csv_logger = CSVLogger(f'{model_save_dir}/training.log', 
-                append=True, separator=';')
-    with strategy.scope():
+    with strategy.scope():        
+        if config['sgd']:
+            optimizer = SGD(learning_rate=config['lr'])
+        else:
+            optimizer = Adam(learning_rate=config['lr'])
+
+        custom_objects = {}
+        if config["loss_f1_factor"]:
+            cce_loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
+            custom_objects['loss_'] = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
+        else:
+            cce_loss = tf.keras.losses.CategoricalCrossentropy() 
+
+        if config["output_size"] == 1:
+            cce_loss = tf.keras.losses.BinaryCrossentropy()
         
         relevant_keys = ['units', 'filter_size', 'kernel_size', 
                          'numb_conv', 'numb_lstm', 'dropout_rate', 
                          'pool_size', 'stride', 'lstm_mask', 'clamsa',
                          'output_size', 'residual_conv', 'softmasking',
                         'clamsa_kernel', 'lru_layer']
+
         relevant_args = {key: config[key] for key in relevant_keys if key in config}
         model = lstm_model(**relevant_args)
         if model_load:
@@ -290,9 +271,10 @@ def train_lstm_model(generator, model_save_dir, config, val_data=None, model_loa
                 metrics=['accuracy'])        
         model.summary()
 
-        model.fit(generator, epochs=config["num_epochs"], validation_data=val_data,
-                steps_per_epoch=5000,
+        model.fit(dataset, epochs=config["num_epochs"], validation_data=val_data,
+                steps_per_epoch=config["steps_per_epoch"],
                 callbacks=[epoch_callback, csv_logger])
+
 
 def load_val_data(file, hmm_factor=1, output_size=7, clamsa=False, softmasking=True, oracle=False):
     """
@@ -378,6 +360,8 @@ def main():
     else:
         config_dict = {
             "num_epochs": 2000,
+            "steps_per_epoch": 5000,
+            "threads": 96,
             'use_hmm': args.hmm,
             "loss_weights": False,
             #[1,1,1e3,1e3,1e3],
@@ -458,10 +442,12 @@ def main():
           seq_weights=config_dict["seq_weights"], 
           softmasking=config_dict["softmasking"],
           clamsa=False if not "clamsa" in config_dict else config_dict["clamsa"],
-          # trans_lstm = config_dict['nuc_trans'],
-          oracle=False if 'oracle' not in config_dict else config_dict['oracle']
+          oracle=False if 'oracle' not in config_dict else config_dict['oracle'],
+          threads=config["threads"],
       )
-        
+    
+    dataset = generator.get_dataset()
+
     if args.val_data:
         val_data = load_val_data(args.val_data, 
                     hmm_factor=0, 
@@ -473,7 +459,7 @@ def main():
         val_data = None
         
     if args.hmm:
-        train_hmm_model(generator=generator, val_data=val_data,
+        train_hmm_model(dataset=dataset, val_data=val_data,
             model_save_dir=config_dict["model_save_dir"], config=config_dict,
             model_load_lstm=config_dict["model_load_lstm"],
             model_load_hmm=config_dict["model_load_hmm"],
@@ -482,13 +468,13 @@ def main():
                       constant_hmm=config_dict["constant_hmm"]
         )
     elif args.clamsa:
-        train_clamsa(generator=generator,
+        train_clamsa(dataset=dataset,
                     model_save_dir=config_dict["model_save_dir"], 
                     config=config_dict, 
                     model_load=config_dict["model_load"], 
                     model_load_lstm=config_dict["model_load_lstm"])
     else:
-        train_lstm_model(generator=generator, val_data=val_data,
+        train_lstm_model(dataset=dataset, val_data=val_data,
             model_save_dir=config_dict["model_save_dir"], config=config_dict,
             model_load=config_dict["model_load"]
         )

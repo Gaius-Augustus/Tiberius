@@ -15,7 +15,7 @@ from learnMSA.msa_hmm.Training import Identity
 class Cast(tf.keras.layers.Layer):
     def call(self, x):
         return tf.cast(x[0][..., :5] if isinstance(x, list) else x[..., :5], tf.float32)
-    
+
 class EpochSave(tf.keras.callbacks.Callback):
     def __init__(self, model_save_dir):
         super(EpochSave, self).__init__()
@@ -35,14 +35,14 @@ class BatchLearningRateScheduler(tf.keras.callbacks.Callback):
         self.warmup = warmup
         self.total_batches = 0
         self.min_lr = min_lr
-        
+
     def on_batch_end(self, batch, logs=None):
         self.total_batches += 1
         if self.total_batches <= self.warmup:
             new_lr = self.total_batches * self.peak / self.warmup
         if self.total_batches > self.warmup:
             new_lr = (self.total_batches-self.warmup)**(-1/2) * self.peak
-        if new_lr > self.min_lr:            
+        if new_lr > self.min_lr:
             tf.keras.backend.set_value(self.model.optimizer.lr, new_lr)
 
 class ValidationCallback(tf.keras.callbacks.Callback):
@@ -53,7 +53,7 @@ class ValidationCallback(tf.keras.callbacks.Callback):
         self.val_gen = val_gen
 
     def on_train_batch_end(self, batch, logs=None):
-        if (batch + 1) % 3000 == 0:  
+        if (batch + 1) % 3000 == 0:
             #val_loss, loss1, loss2, acc1, acc2 = self.model.evaluate(self.val_gen, verbose=1)
             loss, acc = self.model.evaluate(self.val_gen, verbose=1)
             print(loss, acc)
@@ -70,11 +70,11 @@ class BatchSave(tf.keras.callbacks.Callback):
         super(BatchSave, self).__init__()
         self.save_path = save_path
         self.batch_number = batch_number
-        self.prev_batch_numb = 0        
+        self.prev_batch_numb = 0
         self.tf_old = tf.__version__ < "2.12.0"
 
     def on_train_batch_end(self, batch, logs=None):
-        if (batch + 1) % self.batch_number == 0:   
+        if (batch + 1) % self.batch_number == 0:
             self.prev_batch_numb += batch
             if self.tf_old:
                 self.model.save(self.save_path.format(self.prev_batch_numb), save_traces=False)
@@ -131,9 +131,7 @@ def custom_cce_f1_loss(f1_factor, batch_size,
         # Combine CCE loss and F1 score
         combined_loss = cce_loss + f1_factor * (f1_loss + fpr)
         return combined_loss
-    return loss_
-
-       
+    return loss_       
        
 def lstm_model(units=200, filter_size=64, 
               kernel_size=9, numb_conv=2, 
@@ -180,7 +178,7 @@ def lstm_model(units=200, filter_size=64,
         inp_size=5
     
     input_shape = (None, inp_size)    
-    main_input = Input(shape=input_shape, name='main_input')
+    main_input = Input(shape=input_shape)
     if clamsa:
         inp_clamsa = Input(shape=(None, 4), name='clamsa_input')
         inp = [main_input, inp_clamsa]
@@ -324,16 +322,16 @@ def reduce_lstm_output_5(x, new_size=3):
         raise ValueError("Invalid new_size")
     return x_out
 
-def add_hmm_layer(model, 
-                  gene_pred_layer=None, 
-                  output_size=5, 
-                  num_hmm=1, 
-                  num_copy=1, 
-                  hmm_factor=9, 
-                  share_intron_parameters=True, 
-                  trainable_nucleotides_at_exons = False, 
+def add_hmm_layer(model,
+                  gene_pred_layer=None,
+                  output_size=5,
+                  num_hmm=1,
+                  num_copy=1,
+                  hmm_factor=9,
+                  share_intron_parameters=True,
+                  trainable_nucleotides_at_exons = False,
                   trainable_emissions = True,
-                  trainable_transitions = True, 
+                  trainable_transitions = True,
                   trainable_starting_distribution=True,
                   include_lstm_in_output=False,
                   emission_noise_strength=0.001):
@@ -360,10 +358,9 @@ def add_hmm_layer(model,
         tf.keras.Model: The enhanced model with an added Dense layer and a custom Gene Prediction HMM layer.
     """
     inputs = model.input
-    
-    x = model.output    
+    x = model.output
     x = x[0] if isinstance(x, list) else x
-    
+
     if x.shape[-1] > output_size:
         if x.shape[-1] == 7:
             x = reduce_lstm_output_7(x, new_size=output_size)
@@ -374,7 +371,7 @@ def add_hmm_layer(model,
             raise ValueError(f"Invalid combination of loaded output size ({x.shape[-1]}) and requested output size ({output_size}).")
     x = Identity(name='lstm_out')(x)
     nuc = Cast()(inputs)
-    
+
     if output_size == 5:
         emitter_init = make_5_class_emission_kernel(smoothing=1e-6, introns_shared=share_intron_parameters, 
                                                     num_copies=num_copy, noise_strength=emission_noise_strength)
@@ -405,10 +402,10 @@ def add_hmm_layer(model,
     if output_size < 15:
         y = ReduceOutputSize(output_size, num_copies=num_copy, name='hmm_out')(y_hmm)
     else:
-        y = Reshape((-1, output_size) if num_hmm == 1 else (-1, num_hmm, output_size), 
+        y = Reshape((-1, output_size) if num_hmm == 1 else (-1, num_hmm, output_size),
                     name='hmm_out')(y_hmm) #make sure the last dimension is not None
         
-    model_hmm = Model(inputs=inputs, 
+    model_hmm = Model(inputs=inputs,
                     outputs=[x, y] if include_lstm_in_output else y)
     
     return model_hmm
@@ -429,20 +426,20 @@ def add_constant_hmm(model, seq_len=9999, batch_size=450, output_size=3):
     - model_hmm (tf.keras.Model): The new model with the added GenePredHMMLayer with constant emissions.
     """
     inputs = model.input
-    
+
     emb = model.layers[-1].output
     emb = tf.concat([
-                    emb[:,:,0:1], 
+                    emb[:,:,0:1],
                     tf.reduce_sum(emb[:, :, 1:4], axis=-1, keepdims=True, name='reduce_inp_introns'), 
                     emb[:,:,4:]
-                    ], 
+                    ],
                     axis=-1, name='concat_inps')
     
     nuc = tf.cast(inputs[:,:,:5], tf.float32, name='cast_inp')
     
     gene_pred_layer = GenePredHMMLayer(
                         emitter_init=ConstantInitializer(make_5_class_emission_kernel(smoothing=0.01)),
-                        initial_exon_len=150, 
+                        initial_exon_len=150,
                         initial_intron_len=4000,
                         initial_ir_len=100000,
                         start_codons=[("ATG", 1.)],
@@ -458,13 +455,13 @@ def add_constant_hmm(model, seq_len=9999, batch_size=450, output_size=3):
     y = Activation('softmax', name='out_hmm')(x)
     #y.trainable = False
     if output_size == 3:
-        y = tf.concat([y[:,:,0:1], 
+        y = tf.concat([y[:,:,0:1],
                 tf.reduce_sum(y[:,:,1:4], axis=-1, keepdims=True, name='reduce_output_introns'), 
                 tf.reduce_sum(y[:,:,4:], axis=-1, keepdims=True, name='reduce_output_exons')], 
               axis=-1, name='concat_output')
     elif output_size == 5:
         y = tf.concat([
-                y[:,:,0:1], 
+                y[:,:,0:1],
                 tf.reduce_sum(y[:, :, 1:4], axis=-1, keepdims=True, name='reduce_inp_introns'), 
                 tf.reduce_sum(tf.gather(y, [4, 7, 10, 12], axis=-1, name='gather_inp_e0'),
                               axis=-1, keepdims=True, name='reduce_inp_e0'),
@@ -472,7 +469,7 @@ def add_constant_hmm(model, seq_len=9999, batch_size=450, output_size=3):
                               axis=-1, keepdims=True, name='reduce_inp_e1'),
                 tf.reduce_sum(tf.gather(y, [6, 9, 11, 14], axis=-1, name='gather_inp_e2'),
                               axis=-1, keepdims=True, name='reduce_inp_e2'),
-                ], 
+                ],
                 axis=-1, name='concat_inps')
     
     model_hmm = Model(inputs=inputs, outputs=y)

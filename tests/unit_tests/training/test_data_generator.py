@@ -60,14 +60,15 @@ def test_parse_and_next(tmp_path):
         clamsa=False,
         oracle=False
     )
+    dataset_iter = iter(dg.get_dataset())
     # __next__ should return (X, Y)
-    X, Y = next(dg)
+    X, Y = next(dataset_iter)
     # X should equal x with batch dim
     np.testing.assert_array_equal(X, x.numpy()[np.newaxis, 0,...])
     # Y should equal y with batch dim
     np.testing.assert_array_equal(Y, y.numpy()[np.newaxis,0, ...])
 
-    X, Y = next(dg)
+    X, Y = next(dataset_iter)
     # X should equal x with batch dim
     np.testing.assert_array_equal(X, x.numpy()[np.newaxis,1, ...])
     # Y should equal y with batch dim

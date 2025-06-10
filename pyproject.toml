@@ -26,10 +26,6 @@ dependencies = [
   "numpy",
   "tensorflow[and-cuda]<2.18",  
   "biopython",
-  "bcbio",
-  "requests",
-  "gzip",
-  "bz2"
 ]
 
 [project.optional-dependencies]

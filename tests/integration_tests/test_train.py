@@ -49,6 +49,8 @@ def minimal_config(tmp_path):
     d = {
         "lr": 0.01,
         "batch_size": 1,
+        "steps_per_epoch": 10,
+        "threads": 10,
         "loss_f1_factor": 0.0,
         "units": 20,
         "filter_size": 20,
@@ -110,7 +112,7 @@ def test_train_hmm_model_invokes_fit(minimal_config):
     dummy_ds = tf.data.Dataset.from_tensors((x, y)).repeat()
     # call train_hmm_model
     train_module.train_hmm_model(
-        generator=dummy_ds,
+        dataset=dummy_ds,
         model_save_dir=minimal_config["model_save_dir"],
         config=minimal_config,
         val_data=None,
@@ -155,7 +157,7 @@ def test_train_lstm_model_invokes_fit(minimal_config):
     dummy_ds = tf.data.Dataset.from_tensors((x, y)).repeat()
     # call train_lstm_model
     train_module.train_lstm_model(
-        generator=dummy_ds,
+        dataset=dummy_ds,
         model_save_dir=minimal_config["model_save_dir"],
         config=minimal_config,
         val_data=None,

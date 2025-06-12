@@ -443,7 +443,7 @@ def main():
           softmasking=config_dict["softmasking"],
           clamsa=False if not "clamsa" in config_dict else config_dict["clamsa"],
           oracle=False if 'oracle' not in config_dict else config_dict['oracle'],
-          threads=config["threads"],
+          threads=config_dict["threads"],
       )
     
     dataset = generator.get_dataset()

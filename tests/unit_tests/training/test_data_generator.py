@@ -3,7 +3,6 @@ import tempfile
 import numpy as np
 import tensorflow as tf
 import pytest
-
 from tiberius.data_generator import DataGenerator
 
 def _write_tfrecord(path, records):
@@ -73,4 +72,3 @@ def test_parse_and_next(tmp_path):
     np.testing.assert_array_equal(X, x.numpy()[np.newaxis,1, ...])
     # Y should equal y with batch dim
     np.testing.assert_array_equal(Y, y.numpy()[np.newaxis, 1,...])
-

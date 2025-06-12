@@ -25,7 +25,6 @@ def remove_last_layer(model):
     return new_model
 
 def main():
-    # Set up command-line argument parsing
     parser = argparse.ArgumentParser(
         description="Load a TensorFlow model, remove the last layer, and save the modified model."
     )

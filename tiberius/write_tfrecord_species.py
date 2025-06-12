@@ -42,18 +42,17 @@ def load_clamsa_data(clamsa_prefix, seq_names, seq_len=None):
         return np.concatenate([clamsa_chunks[::-1,::-1, [1,0,3,2]], clamsa_chunks], axis=0)
 
 def get_species_data_hmm(genome_path='', annot_path='', species='', 
-            seq_len=500004, overlap_size=0, transition=False):
+            seq_len=500004, overlap_size=0, transition=False,
+            min_seq_len=500000):
     fasta = GenomeSequences(fasta_file=genome_path,
             chunksize=seq_len,
             overlap=overlap_size)
     fasta.encode_sequences() 
     seq_names = [seq_n for seq, seq_n in zip(fasta.sequences, fasta.sequence_names) \
-                    if len(seq)>500000]
+                    if len(seq)>min_seq_len]
     seqs = [len(seq) for seq in fasta.sequences \
-                    if len(seq)>500000]
-    print(len(seqs), len(seq_names))
-    print(seq_names)
-    print(seqs)
+                    if len(seq)>min_seq_len]
+
     f_chunk, _, _ = fasta.get_flat_chunks(strand='+', pad=False, sequence_names=seq_names)
     del fasta
     full_f_chunks = np.concatenate((f_chunk[::-1,::-1, [3,2,1,0,4,5]], 
@@ -83,7 +82,6 @@ def write_h5(fasta, ref, out, ref_phase=None, split=100,
     file_size = fasta.shape[0] // split
     indices = np.arange(fasta.shape[0])
     np.random.shuffle(indices)
-    print(clamsa.shape, fasta.shape, trans)
     if ref_phase:
         ref_phase = ref_phase.astype(np.int32)
     for k in range(split):
@@ -181,8 +179,9 @@ def main():
     args = parseCmd()
     
     fasta, ref = get_species_data_hmm(genome_path=args.fasta, annot_path=args.gtf, 
-                                      species=args.species, seq_len=args.wsize,
-            overlap_size=0, transition=True)
+                species=args.species, seq_len=args.wsize,
+                overlap_size=0, transition=True,
+                min_seq_len=args.min_seq_len)
     
     print('Loaded FASTA and GTF', fasta.shape, ref.shape)
     if args.clamsa:
@@ -221,6 +220,8 @@ def parseCmd():
         help='Prefix of output files')
     parser.add_argument('--wsize', type=int,
         help='', required=True)
+    parser.add_argument('--min_seq_len', type=int,
+        help='Minimum length of input sequences used for training', required=True)
     parser.add_argument('--clamsa',  type=str, default='',
         help='')
     parser.add_argument('--seq_names',  type=str, default='',

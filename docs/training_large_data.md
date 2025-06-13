@@ -4,23 +4,23 @@ For trainign Tiberius with a large dataset we recommend generating tfRecords fil
 
 For following instructions, we will assume that the files are named after the species as `${SPECIES}.fa` and `${SPECIES}.gtf`. And that [learnMSA](https://github.com/Gaius-Augustus/learnMSA) is installed at `$leanMSA`:
 
-1. Remove alternative transcripts from each GTF file. This is necessary because Tiberius does not support alternative splicing. A common way to do this would be to choose the alternative with the longest codeing sequence, you can use for example [`get_longest_isoform.py`](https://github.com/Gaius-Augustus/TSEBRA/blob/main/bin/get_longest_isoform.py) for this:
+1. Remove alternative transcripts from each GTF file. This is necessary because Tiberius does not support alternative splicing. A common way to do this would be to choose the alternative with the longest codeing sequence, you can use for example [`select_single_isoform.py`] for this:
 
     ```shell
-    python bin/get_longest_isoform.py --gtf ${SPECIES}.gtf --out ${SPECIES}.longest.gtf
+    python tiberius/select_single_isoform.py  ${SPECIES}.gtf > ${SPECIES}.longest.gtf
     ```
 
 2. Create tfrecords files for each species. This will create 100 tfrecords files for each genome in the directory `$tfrecords`. The tfrecords files will contain the genomic sequences and the gene annotations, split into trainings examples with a sequence length of `${seq_size}`, in the format that is required for training. For training with the mammalian genomes, we used a `${seq_size}` of `9999`, which has proven to be a reasonable choice.
 
     ```shell
-    python bin/write_tfrecord_species.py --fasta ${SPECIES}.fa --gtf ${SPECIES}.longest.gtf --out $tfrecords/${SPECIES} --wsize ${seq_size}
+    python tiberius/write_tfrecord_species.py --fasta ${SPECIES}.fa --gtf ${SPECIES}.longest.gtf --out $tfrecords/${SPECIES} --wsize ${seq_size}
     ```
 
     If you want to train in *de novo* mode, you have to generate ClaMSA data for each species. See [docs/clamsa_data.md](docs/clamsa_data.md) for instructions on how to generate the data. Afterwards, you should have a directory with files named `$clamsa/{prefix}{seq_name}.npz` for each sequence of your FASTA file and a file with the list of sequence names (`$seq_names`). 
     You can create tfrecords files with the ClaMSA data with the following command:
 
     ```shell
-    python bin/write_tfrecord_species.py --fasta ${SPECIES}.fa --gtf ${SPECIES}.longest.gtf --out $tfrecords/${SPECIES} --clamsa $clamsa/{prefix} --seq_names $seq_names  --wsize ${seq_size}
+    python tiberius/write_tfrecord_species.py --fasta ${SPECIES}.fa --gtf ${SPECIES}.longest.gtf --out $tfrecords/${SPECIES} --clamsa $clamsa/{prefix} --seq_names $seq_names  --wsize ${seq_size}
     
     ```
 
@@ -32,10 +32,10 @@ For following instructions, we will assume that the files are named after the sp
     Enhydra_lutris
     ```
 
-4. Create a config file that contains the parameters for training, a config file with default parameter is located at `docs/config.json`. You can find descriptions of key parametes in `bin/train.py`. Start training:
+4. Create a config file that contains the parameters for training, a config file with default parameter is located at `docs/config.json`. You can find descriptions of key parametes in `tiberius/train.py`. Start training:
     
     ```shell
-    python bin/train.py --data $tfrecords/ --learnMSA $leanMSA  --cfg config.json --train_species_file species.txt
+    python tiberius/train.py --data $tfrecords/ --learnMSA $leanMSA  --cfg config.json --train_species_file species.txt
     ```
 
     If you want to train with the HMM layer, you can use the '--hmm' argument. This will however require more memory and slow training down.

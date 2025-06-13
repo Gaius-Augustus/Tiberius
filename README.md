@@ -8,6 +8,10 @@ For more information, see the [Tiberius paper](https://academic.oup.com/bioinfor
 Tiberius is a deep learning-based *ab initio* gene structure prediction tool that end-to-end integrates convolutional
 and long short-term memory layers with a differentiable HMM layer. It can be used to predict gene structures from **genomic sequences only**, while matching the accuracy of tool that use extrinsic evidence.
 
+![Accuracy comparison for the human genome](figures/acc_hsap.png)
+
+
+
 Currently, we provide only model weights for mammalian species and Tiberius does not predict alternative splicing variants. 
 
 
@@ -27,21 +31,18 @@ Run Tiberius with the Singularity container (use `-nv` for GPU support):
 ```
 
 ### Installation from Source
-#### Git Repositories
 
-Clone the repository:
+Install Tiberius and its dependencies:
 ```
 git clone https://github.com/Gaius-Augustus/Tiberius
-```
-Install [learnMSA](https://github.com/Gaius-Augustus/learnMSA) either from GitHub or with `pip`
-```
-pip install learnMSA
+cd Tiberius
+pip install .
 ```
 
 #### Python Libraries
 
-The following Python libraries are required:
-- tensorflow==2.10.*
+The following Python libraries are required and installed with Tiberius:
+- tensorflow
 - pyBigWig
 - biopython 
 - bcbio-gff
@@ -49,69 +50,53 @@ The following Python libraries are required:
 - gzip
 - bz2
 
-They can be installed with:
-```
-pip install pyBigWig bio scikit-learn biopython bcbio-gff requests gzip bz2
-```
-Tensorflow should be installed with GPU support. If you are using conda, you can install Tensorflow 2.10 with these [instructions](docs/install_tensorflow.md).
+Make sure TensorFlow is installed with GPU support. Tiberius was built on TensorFlow 2.10 and runs best with that version. If you are using conda, you can install Tensorflow 2.10 with these [instructions](docs/install_tensorflow.md).
 
 Tiberius does also work with TensorFlow >2.10, however, **it will produce an error if you use a `--seq_len` parameter > 259.992 during inference!**  
-You can install the current TensorFlow version with 
-```shell
-python3 -m pip install tensorflow[and-cuda]
-```
-
-If you want to use GPUs, verify that TensorFlow is installed correctly with GPU support:
-```shell
-python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
-```
 
 ## Running Tiberius for Gene Prediction
 
-To run Tiberius with `bin/tiberius.py`, you need to provide a FASTA file containing the genomic sequences. The sequence can either include repeat softmasking (recommended) or be run without softmasking. See [softmasking_workflow](docs/softmasking_workflow.md) for recommandations on how to mask repeats for Tiberius. Currently, we only provide weights for mammalian species, they will be downloaded automatically.
+To run Tiberius with `tiberius.py`, you need to provide a FASTA file containing the genomic sequences. The sequence can either include repeat softmasking (recommended) or be run without softmasking. See [softmasking_workflow](docs/softmasking_workflow.md) for recommandations on how to mask repeats for Tiberius. Currently, we only provide weights for mammalian species, they can be downloaded automatically by Tiberius if no model_cfg is provided.
+
+### Choosing the model weights
+
+There are three ways in providing the model weights to Tiberius:
+1. **Automatic download**: Tiberius will automatically download the model weights from the Tiberius server if you do note provide model weights.
+2. **Model config**: You can provide a model config file with the `--model_cfg` argument. The model config file is a YAML file that contains the model weights URL and other information about the model. See [model_cfg](model_cfg/README.md) for more information on how to create a model config file and available model configurations.
+3. **Local model weights**: You can provide the path to the model weights with the `--model` argument. 
 
 ### Running Tiberius with softmasked genome
 If you want to run Tiberius with softmasking, model weights will be downloaded from https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_weights.tgz into `model_weights`.
 
 ```shell
 # Run Tiberius with softmasking
-python bin/tiberius.py --genome input.fasta --out output.gtf
+python tiberius.py --genome input.fasta --out output.gtf 
+```
+
+Or you can specify the model configuration file with:
+```shell
+# Run Tiberius with softmasking
+python tiberius.py --genome input.fasta --out output.gtf --model_cfg model_cfg/mammalia_softmasking_v2.yaml
 ```
 
 You can also manually download the weights and provide the path to the weights with the `--model` argument.
 ```shell
-wget https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_weights.tgz
-tar -xzvf tiberius_weights.tgz
-python bin/tiberius.py --genome input.fasta --out output.gtf --model path/to/tiberius_weights
+wget https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_weights_v2.tar.gz
+python tiberius.py --genome input.fasta --out output.gtf --model tiberius_weights_v2.tar.gz
 ```
 
 ### Running Tiberius without softmasked genome
-If you want to run Tiberius without softmasking, you can use the `--no_softmasking` argument. Tiberius will download the weights for the non-softmasking model automatically from https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_nosm_weights.tgz into `model_weights`.
+If you want to run Tiberius without softmasking, you can use the `--no_softmasking` argument. Tiberius will download the weights for the non-softmasking model automatically from https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_nosm_weights.tgz into `model_weights`. Or you can provide Tiberius with the model configuration file `model_cfg/mammalia_nosofttmasking_v2.yaml`
 ```shell
 # Run Tiberius without softmasking
-python bin/tiberius.py --genome input.fasta --out output.gtf --no_softmasking
-```
-
-You can also manually download the weights and provide the path to the weights with the `--model` argument. Note that in this case you have to provide the weights with `--model_lstm` to Tiberius.
-
-```shell
-wget https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_nosm_weights.tgz
-tar -xzvf tiberius_nosm_weights.tgz
-python bin/tiberius.py --genome input.fasta --out output.gtf --model_lstm path/to/tiberius_nosm_weights
+python tiberius.py --genome input.fasta --out output.gtf --no_softmasking
 ```
 
 ### Running Tiberius with evolutionary information
-To run Tiberius in *de novo* mode, evolutionary information data has to be generated with ClaMSA. See [docs/clamsa_data.md](docs/clamsa_data.md) for instructions on how to generate the data. Afterwards, you should have a directory with files named `$clamsa/{prefix}{seq_name}.npz` for each sequence of your FASTA file. You can then run Tiberius with the `--clamsa` argument. Note that your genome has to be softmasked for this mode and that you have to use different training weights than in *ab initio* mode. If not provided, they will automatically downloaded from https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights.tgz into `model_weights`.
+To run Tiberius in *de novo* mode, evolutionary information data has to be generated with ClaMSA. See [docs/clamsa_data.md](docs/clamsa_data.md) for instructions on how to generate the data. Afterwards, you should have a directory with files named `$clamsa/{prefix}{seq_name}.npz` for each sequence of your FASTA file. You can then run Tiberius with the `--clamsa` argument. Note that your genome has to be softmasked for this mode and that you have to use different training weights than in *ab initio* mode. If not provided, they will automatically downloaded from https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights.tgz into `model_weights`. Or you can provide Tiberius with the model configuration file `model_cfg/mammalia_clamsa_v2.yaml`
 ```shell
 # Run Tiberius with softmasking
-python bin/tiberius.py --genome input.fasta --clamsa $clamsa/{prefix} --out output.gtf
-```
-You can also manually download the weights and provide the path to the weights with the `--model` argument. 
-
-```shell
-wget https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights.tgz
-tar -xzvf tiberius_denovo_weights.tgz
-python bin/tiberius.py --genome input.fasta --out output.gtf --model_lstm path/to/tiberius_denovo_weights
+python tiberius.py --genome input.fasta --clamsa $clamsa/{prefix} --out output.gtf
 ```
 
 ### Running Tiberius on Differnet GPUs
@@ -132,7 +117,7 @@ Currently, we provide only model weights for mammalian species. If you want to t
 1. Training Tiberius with a large dataset that does not fit into memory. See [training_large_data.md](docs/training_large_data.md) for documentation on how to prepare a dataset and train Tiberius with it.
 2. Training Tiberius with a small dataset that fits into memory. See [example_train_full.ipynb](test_data/Panthera_pardus/example_train_full.ipynb) for an example on how to load data and train Tiberius on a single genome. This can easily be adapted to train Tiberius on several genomes by first loading the data for all genome and then training the model. See [training_large_data.md](docs/training_large_data-md) (Step 1) and [softmasking_workflow.md](docs/softmasking_workflow.md) for the preparation of the genome and annotation files.
 
-## Tiberius Model and Accuracies
+## Tiberius Model and Accuracies on non Mammalian species
 
 Tiberius' model consists of a model that consist of CNN, biLSTM, and a differentiable HMM layer. 
   

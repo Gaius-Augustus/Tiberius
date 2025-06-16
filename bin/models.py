@@ -136,7 +136,8 @@ def lstm_model(units=200, filter_size=64,
                multi_loss=False, residual_conv=False,
                clamsa=False, clamsa_kernel=6, softmasking=True, lru_layer=False,
                lru_hidden_state_dim=200, lru_max_tree_depth=17, lru_init_bounds='',
-               lru_scan_use_tf_while_loop=False, lru_scan_base_case_n=None
+               lru_scan_use_tf_while_loop=False, lru_scan_base_case_n=None,
+               use_optimized_scan=False
               ):
     """
     Constructs a hybrid model that combines CNNs and bLSTM layers for gene prediction.
@@ -239,7 +240,8 @@ def lstm_model(units=200, filter_size=64,
                   use_batch_norm=True, 
                   init_bounds=lru_init_bounds[i],
                   scan_use_tf_while_loop=lru_scan_use_tf_while_loop, 
-                  scan_base_case_n=lru_scan_base_case_n)
+                  scan_base_case_n=lru_scan_base_case_n,
+                  use_optimized_scan=use_optimized_scan)
             # lru_block.build(input_shape=x.shape)
             x_next = lru_block(x)
             x = x_next   # no additional dropout for lru layer

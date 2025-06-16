@@ -33,16 +33,24 @@ from models import (weighted_categorical_crossentropy, custom_cce_f1_loss, Batch
                     make_weighted_cce_loss,)
 from tensorflow.keras.callbacks import LearningRateScheduler
 
-from gradient_accumulator import GradientAccumulateOptimizer   # CHANGED: for gradiant accumulation... need to try
+#from gradient_accumulator import GradientAccumulateOptimizer   # CHANGED: for gradiant accumulation... need to try
+from track_gpu_callback import GPUMemoryCallback
+gpu_callback_step_size = 50
 
 gpus = tf.config.list_physical_devices('GPU')
+print("CUDA_VISIBLE_DEVICES:", os.environ.get("CUDA_VISIBLE_DEVICES"))
+print("TF sieht:", tf.config.list_physical_devices('GPU'))
+
+import wandb
+from wandb.integration.keras import WandbCallback
 
 strategy = tf.distribute.MirroredStrategy()
 
 batch_save_numb = 1000
 
 def train_hmm_model(generator, model_save_dir, config, val_data=None,
-                  model_load=None, model_load_lstm=None, model_load_hmm=None, trainable=True, constant_hmm=False
+                  model_load=None, model_load_lstm=None, model_load_hmm=None, 
+                  trainable=True, constant_hmm=False, epochs=500
                  ):  
     """Trains a hybrid HMM-LSTM model with trainings example from a generator 
     and configuration, model and weights a re saved to model_save_dir.
@@ -62,7 +70,7 @@ def train_hmm_model(generator, model_save_dir, config, val_data=None,
         - constant_hmm (bool): Flag to add a constant HMM layer to the model. 
     """
 
-    model_save = model_save_dir + "/weights.{epoch:02d}"
+    model_save = model_save_dir + "/weights.{epoch:02d}.h5"
     checkpoint = ModelCheckpoint(model_save, monitor='loss', verbose=1, 
                         save_best_only=False, save_weights_only=False, mode='auto')
 
@@ -71,6 +79,8 @@ def train_hmm_model(generator, model_save_dir, config, val_data=None,
 
     csv_logger = CSVLogger(f'{model_save_dir}/training.log', 
                 append=True, separator=';')
+
+    gpu_callback = GPUMemoryCallback(step_size=gpu_callback_step_size, file_path=model_save_dir + "/gpu_ram_usage.json")
 
     adam = Adam(learning_rate=config['lr'])
     with strategy.scope():
@@ -93,7 +103,8 @@ def train_hmm_model(generator, model_save_dir, config, val_data=None,
                             'clamsa_kernel', 'clamsa', 'clamsa_kernel', 
                             'lru_layer', 'lru_hidden_state_dim', 
                             'lru_max_tree_depth', 'lru_init_bounds', 
-                            'lru_scan_use_tf_while_loop', 'lru_scan_base_case_n']
+                            'lru_scan_use_tf_while_loop', 'lru_scan_base_case_n',
+                            'use_optimized_scan']
             relevant_args = {key: config[key] for key in relevant_keys if key in config}
             model = lstm_model(**relevant_args)
         #if model_load_lstm:
@@ -158,11 +169,11 @@ def train_hmm_model(generator, model_save_dir, config, val_data=None,
         model.summary()
         b_lr_sched = BatchLearningRateScheduler(peak=config["lr"], warmup=config["warmup"],
                                         min_lr=config["min_lr"])
-        model.save(model_save_dir+"/untrained", save_traces=False) #.keras")
-        model.fit(generator, epochs=500, validation_data=val_data,
+        #model.save(model_save_dir+"/untrained", save_traces=False) #.keras")
+        model.fit(generator, epochs=epochs, validation_data=val_data,
                 steps_per_epoch=1000,
                 validation_batch_size=config['batch_size'],
-                callbacks=[epoch_callback, csv_logger],
+                callbacks=[epoch_callback, csv_logger, gpu_callback, WandbCallback(save_model=False)],
                 verbose=2)
 
 def read_species(file_name):
@@ -179,7 +190,8 @@ def read_species(file_name):
         species = f_h.read().strip().split('\n')
     return [s for s in species if s and s[0] != '#']
 
-def train_clamsa(generator, model_save_dir, config, val_data=None, model_load=None, model_load_lstm=None):
+def train_clamsa(generator, model_save_dir, config, val_data=None, model_load=None, 
+                 model_load_lstm=None, epochs=500):
     """Train simple CNN model that uses only CLAMSA as input.
 
     Parameters:
@@ -199,6 +211,7 @@ def train_clamsa(generator, model_save_dir, config, val_data=None, model_load=No
 
     batch_callback = BatchSave(model_save_dir + "/weights_batch.{}.h5", batch_save_numb)
     epoch_callback = EpochSave(model_save_dir)
+    gpu_callback = GPUMemoryCallback(step_size=gpu_callback_step_size, file_path=model_save_dir + "/gpu_ram_usage.json")
 
     adam = Adam(learning_rate=config['lr'])
 
@@ -253,9 +266,9 @@ def train_clamsa(generator, model_save_dir, config, val_data=None, model_load=No
                 metrics=['accuracy'])        
         model.summary()
 
-        model.fit(generator, epochs=500, 
+        model.fit(generator, epochs=epochs, 
                 steps_per_epoch=1000,
-                callbacks=[epoch_callback, csv_logger])
+                callbacks=[epoch_callback, csv_logger, gpu_callback, WandbCallback(save_model=False)])
     
 def train_lstm_model(generator, model_save_dir, config, val_data=None, model_load=None, epochs=2000):  
     """Trains the LSTM model using data provided by a generator, while saving the 
@@ -278,6 +291,7 @@ def train_lstm_model(generator, model_save_dir, config, val_data=None, model_loa
 
     batch_callback = BatchSave(model_save_dir + "/weights_batch.{}.h5", batch_save_numb)
     epoch_callback = EpochSave(model_save_dir)
+    gpu_callback = GPUMemoryCallback(step_size=gpu_callback_step_size, file_path=model_save_dir + "/gpu_ram_usage.json")
     
     if config['sgd']:
         optimizer = SGD(learning_rate=config['lr'])
@@ -305,7 +319,7 @@ def train_lstm_model(generator, model_save_dir, config, val_data=None, model_loa
                          'output_size', 'residual_conv', 'softmasking',
                         'clamsa_kernel', 'lru_layer', 'lru_hidden_state_dim', 
                         'lru_max_tree_depth', 'lru_init_bounds', 'lru_scan_use_tf_while_loop',
-                        'lru_scan_base_case_n']
+                        'lru_scan_base_case_n', 'use_optimized_scan']
         relevant_args = {key: config[key] for key in relevant_keys if key in config}
         model = lstm_model(**relevant_args)
         if model_load:
@@ -323,7 +337,7 @@ def train_lstm_model(generator, model_save_dir, config, val_data=None, model_loa
 
         model.fit(generator, epochs=epochs, validation_data=val_data,
                 steps_per_epoch=1000,
-                callbacks=[epoch_callback, csv_logger],
+                callbacks=[epoch_callback, csv_logger, gpu_callback, WandbCallback(save_model=False)],
                 verbose=2)
 
 def load_val_data(file, hmm_factor=1, output_size=7, clamsa=False, softmasking=True, oracle=False):
@@ -481,6 +495,8 @@ def main():
     for d in [config_dict["model_save_dir"], data_path]:
         if not os.path.exists(d):
             os.mkdir(d)
+        
+    wandb.init(project="Tiberius", config=config_dict)
 
     # get paths of tfrecord files
     species_file = f'{args.data}/{args.train_species_file}'
@@ -519,14 +535,17 @@ def main():
             model_load_hmm=config_dict["model_load_hmm"],
             model_load=config_dict["model_load"],
             trainable=config_dict["trainable_lstm"], 
-                      constant_hmm=config_dict["constant_hmm"]
+            constant_hmm=config_dict["constant_hmm"],
+            epochs=config_dict["num_epochs"]
         )
     elif args.clamsa:
         train_clamsa(generator=generator,
                     model_save_dir=config_dict["model_save_dir"], 
                     config=config_dict, 
                     model_load=config_dict["model_load"], 
-                    model_load_lstm=config_dict["model_load_lstm"])
+                    model_load_lstm=config_dict["model_load_lstm"],
+                    epochs=config_dict["num_epochs"]
+        )
     else:
         train_lstm_model(generator=generator, val_data=val_data,
             model_save_dir=config_dict["model_save_dir"], config=config_dict,

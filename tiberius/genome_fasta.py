@@ -1,6 +1,21 @@
 import numpy as np
 import gzip, bz2
 import math
+import time, sys
+
+one_hot_table = np.zeros((256, 6), dtype=np.int32)
+one_hot_table[:, 4] = 1
+
+# Set specific labels for A, C, G, T
+one_hot_table[ord('A'), :] = [1, 0, 0, 0, 0, 0]
+one_hot_table[ord('C'), :] = [0, 1, 0, 0, 0, 0]
+one_hot_table[ord('G'), :] = [0, 0, 1, 0, 0, 0]
+one_hot_table[ord('T'), :] = [0, 0, 0, 1, 0, 0]
+# Set labels for a, c, g, t with softmasking indicator
+one_hot_table[ord('a'), :] = [1, 0, 0, 0, 0, 1]
+one_hot_table[ord('c'), :] = [0, 1, 0, 0, 0, 1]
+one_hot_table[ord('g'), :] = [0, 0, 1, 0, 0, 1]
+one_hot_table[ord('t'), :] = [0, 0, 0, 1, 0, 1]
 
 class GenomeSequences:
     def __init__(self, fasta_file='', genome=None, np_file='', 
@@ -76,7 +91,7 @@ class GenomeSequences:
         for s in seq:       
             sequence = self.sequences[self.sequence_names.index(s)]
             # Create combined lookup table
-            table = np.zeros((256, 6), dtype=np.uint8)
+            table = np.zeros((256, 6), dtype=np.int32)
             table[:, 4] = 1
             
             # Set specific labels for A, C, G, T
@@ -94,6 +109,57 @@ class GenomeSequences:
             int_seq = np.frombuffer(sequence.encode('ascii'), dtype=np.uint8)
             # Perform one-hot encoding
             self.one_hot_encoded[s] = table[int_seq]
+    
+    def prep_seq_chunks(self, min_seq_len=0,):
+        seq_names = [seq_n for seq, seq_n in zip(self.sequences, self.sequence_names) \
+                    if len(seq)>min_seq_len]
+        seqs_lens = [len(seq) for seq in self.sequences \
+                        if len(seq)>min_seq_len]
+        chunks_seq_plus = []
+        chunk_seq_minus = []
+        for s in self.sequences:
+            if len(s) < min_seq_len:
+                continue
+            num_chunks = len(s) // self.chunksize
+            chunks = [s[i * self.chunksize: \
+                        (i+1) * self.chunksize] \
+                        for i in range(num_chunks)]
+            chunks_seq_plus.extend(chunks)
+            # get reverse complement of the chunks
+            chunk_seq_minus.extend([self.reverse_complement(chunk) for chunk in chunks])
+        self.chunks_seq = chunk_seq_minus + chunks_seq_plus        
+    
+    def get_onehot(self, i):
+        """Get the one-hot encoded representation of a sequence by index.
+
+        Arguments:
+            i (int): Index of the sequence to retrieve.
+        
+        Returns:
+            np.array: One-hot encoded representation of the sequence.
+        """
+        
+        # one hot encode the i-th element of self.chunks_seq
+        # Create combined lookup table
+        
+        # Convert the sequence to integer sequence
+        int_seq = np.frombuffer(self.chunks_seq[i].encode('ascii'), dtype=np.uint8)
+        # Perform one-hot encoding
+        return one_hot_table[int_seq]
+    
+    def reverse_complement(self, sequence):
+        """Get the reverse complement of a DNA sequence.
+
+        Arguments:
+            sequence (str): The DNA sequence to reverse complement.
+        
+        Returns:
+            str: The reverse complement of the input sequence.
+        """
+        complement = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C',
+                      'a': 't', 't': 'a', 'c': 'g', 'g': 'c',
+                      'N': 'N', 'n': 'n'}
+        return ''.join(complement.get(base, base) for base in reversed(sequence))
 
     def get_flat_chunks(self, sequence_names=None, strand='+', coords=False, pad=True,
                         adapt_chunksize=False, parallel_factor=None):

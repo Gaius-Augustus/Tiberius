@@ -26,7 +26,7 @@ from .gene_pred_hmm_transitioner import (GenePredHMMTransitioner,
                                          GenePredMultiHMMTransitioner,
                                          SimpleGenePredHMMTransitioner)
 from .genome_fasta import GenomeSequences
-from .annotation_gtf import GeneStructure
+from .annotation_gtf import GeneStructure, Annotation
 from .genome_anno import Anno
 from .models import (make_weighted_cce_loss, custom_cce_f1_loss, lstm_model, Cast)
 from .data_generator import DataGenerator

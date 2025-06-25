@@ -2,7 +2,7 @@
 
 import sys, json, os, re, sys, csv, argparse
 from tiberius.genome_fasta import GenomeSequences
-from tiberius.annotation_gtf import GeneStructure
+from tiberius.annotation_gtf import Annotation
 import subprocess as sp
 import numpy as np
 import tensorflow as tf
@@ -10,6 +10,9 @@ import numpy as np
 import sys
 from tiberius.wig_class import Wig_util
 import h5py
+import gc
+import time
+
 
 def get_clamsa_track(file_path, seq_len=500004, prefix=''):
     wig = Wig_util()
@@ -44,35 +47,25 @@ def load_clamsa_data(clamsa_prefix, seq_names, seq_len=None):
 def get_species_data_hmm(genome_path='', annot_path='', species='', 
             seq_len=500004, overlap_size=0, transition=False,
             min_seq_len=500000):
+
     fasta = GenomeSequences(fasta_file=genome_path,
             chunksize=seq_len,
             overlap=overlap_size)
-    fasta.encode_sequences() 
+    fasta.encode_sequences()
     seq_names = [seq_n for seq, seq_n in zip(fasta.sequences, fasta.sequence_names) \
                     if len(seq)>min_seq_len]
     seqs = [len(seq) for seq in fasta.sequences \
                     if len(seq)>min_seq_len]
 
-    f_chunk, _, _ = fasta.get_flat_chunks(strand='+', pad=False, sequence_names=seq_names)
-    del fasta
-    full_f_chunks = np.concatenate((f_chunk[::-1,::-1, [3,2,1,0,4,5]], 
-                                    f_chunk), axis=0)
-    
-    del f_chunk
-    ref_anno = GeneStructure(annot_path, 
-                        chunksize=seq_len, 
-                        overlap=overlap_size)    
-        
-    ref_anno.translate_to_one_hot_hmm(seq_names, 
-                            seqs, transition=transition)
-    del ref_anno.gene_structures
+    fasta.prep_seq_chunks(min_seq_len=min_seq_len,)
+    gc.collect()
 
-    full_r_chunks = np.concatenate((ref_anno.get_flat_chunks_hmm(seq_names, strand='-'), 
-                                    ref_anno.get_flat_chunks_hmm(seq_names, strand='+')), 
-                                   axis=0)
-    del ref_anno    
-    
-    return full_f_chunks, full_r_chunks
+    ref_anno = Annotation(annot_path,
+                seq_names, seqs, seq_len, )
+    ref_anno.read_inputfile()
+
+
+    return fasta, ref_anno
 
 def write_h5(fasta, ref, out, ref_phase=None, split=100, 
                     trans=False, clamsa=np.array([])):
@@ -91,14 +84,12 @@ def write_h5(fasta, ref, out, ref_phase=None, split=100,
             f.create_dataset('input', data=fasta[indices[k::split]], compression='gzip', compression_opts=9)  # Maximum compression
             f.create_dataset('output', data=ref[indices[k::split]], compression='gzip', compression_opts=9)
 
-def write_numpy(fasta, ref, out, ref_phase=None, split=1, trans=False, clamsa=np.array([])):
+def write_numpy(fasta, ref, out, ref_phase=None, split=100, trans=False, clamsa=np.array([])):
     fasta = fasta.astype(np.int32)          
-    ref = ref.astype(np.int32)
 
     file_size = fasta.shape[0] // split
     indices = np.arange(fasta.shape[0])
     np.random.shuffle(indices)
-    print(clamsa.shape, fasta.shape, trans)
     if ref_phase:
         ref_phase = ref_phase.astype(np.int32)
     for k in range(split):
@@ -107,25 +98,25 @@ def write_numpy(fasta, ref, out, ref_phase=None, split=1, trans=False, clamsa=np
             np.savez(f'{out}_{k}.npz', array1=fasta[indices[k::split],:,:], 
                      array2=ref[indices[k::split],:,:], array3=clamsa[indices[k::split],:,:] )
         else:
+            ref_arr = []
+            for i in indices[k::split]:                
+                ref_arr.append(ref.get_onehot(i))
+
             np.savez(f'{out}_{k}.npz', array1=fasta[indices[k::split],:,:], 
-                     array2=ref[indices[k::split],:,:], )
-    
+                     array2=np.array(ref_arr), )
+
+
 def write_tf_record(fasta, ref, out, ref_phase=None, split=100, trans=False, clamsa=np.array([])):
-    fasta = fasta.astype(np.int32)          
-    ref = ref.astype(np.int32)
-
-    file_size = fasta.shape[0] // split
-    indices = np.arange(fasta.shape[0])
+    print(f'Writing TFRecords to {out} with split {split}', file=sys.stderr)
+    indices = np.arange(len(fasta.chunks_seq))
     np.random.shuffle(indices)
-    print(clamsa.shape, fasta.shape, trans)
     if ref_phase:
-        ref_phase = ref_phase.astype(np.int32)
-    for k in range(split):
-        print(f'Writing split {k+1}/{split}')        
+        ref_phase = ref_phase.astype(np.int32)  
 
+    
     def create_example(i):
-        feature_bytes_x = tf.io.serialize_tensor(fasta[i,:,:]).numpy()
-        feature_bytes_y = tf.io.serialize_tensor(ref[i,:,:]).numpy()
+        feature_bytes_x = tf.io.serialize_tensor(fasta.get_onehot(i)).numpy()
+        feature_bytes_y = tf.io.serialize_tensor(ref.get_onehot(i)).numpy()
         if ref_phase is not None:
             feature_bytes_y_phase = tf.io.serialize_tensor(ref_phase[i,:,:]).numpy()                
             example = tf.train.Example(features=tf.train.Features(feature={
@@ -164,26 +155,30 @@ def write_tf_record(fasta, ref, out, ref_phase=None, split=100, trans=False, cla
                 'output': tf.train.Feature(
                     bytes_list=tf.train.BytesList(value=[feature_bytes_y]))
             }))
-        return example.SerializeToString()
-
-    for k in range(split):
-        print(f'Writing split {k+1}/{split}')
-        with tf.io.TFRecordWriter(f'{out}_{k}.tfrecords', options=tf.io.TFRecordOptions(compression_type='GZIP')) as writer:
+        serialized_example = example.SerializeToString()
+        del example, feature_bytes_x, feature_bytes_y
+        return serialized_example    
+    
+    def write_split(k):
+        with tf.io.TFRecordWriter(f'{out}_{k}.tfrecords', 
+            options=tf.io.TFRecordOptions(compression_type='GZIP')) as writer:
             for i in indices[k::split]:
                 serialized_example = create_example(i)
                 writer.write(serialized_example)
+
+    for k in range(split):
+        write_split(k)
 
     print('Writing complete.')
 
 def main():
     args = parseCmd()
-    
     fasta, ref = get_species_data_hmm(genome_path=args.fasta, annot_path=args.gtf, 
                 species=args.species, seq_len=args.wsize,
                 overlap_size=0, transition=True,
                 min_seq_len=args.min_seq_len)
-    
-    print('Loaded FASTA and GTF', fasta.shape, ref.shape)
+
+    # print('Loaded FASTA and GTF', fasta.shape, ref.shape)
     if args.clamsa:
         # clamsa = get_clamsa_track('/home/gabriell/deepl_data/clamsa/wig/', seq_len=args.wsize, prefix=args.species)
         clamsa = load_clamsa_data(args.clamsa, seq_names=args.seq_names, seq_len=args.wsize)
@@ -221,7 +216,7 @@ def parseCmd():
     parser.add_argument('--wsize', type=int,
         help='', required=True)
     parser.add_argument('--min_seq_len', type=int,
-        help='Minimum length of input sequences used for training', required=True)
+        help='Minimum length of input sequences used for training', default=500004)
     parser.add_argument('--clamsa',  type=str, default='',
         help='')
     parser.add_argument('--seq_names',  type=str, default='',

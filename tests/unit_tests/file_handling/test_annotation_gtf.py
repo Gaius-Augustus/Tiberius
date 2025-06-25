@@ -22,7 +22,7 @@ def test_read_gtf(tmp_path):
     transcripts_result = {'txA': [[50, 60, 'CDS', '-', 0]], 
         'txB': [[10, 20, 'CDS', '+', 0], [21, 39, 'intron', '+', 1], [40, 54, 'CDS', '+', 1]]}
     seq2_chunk_pos_result = {'-': {'chr1': 0, 'chr2': 7}, '+': {'chr1': 13, 'chr2': 20}}
-    chunk2transcripts_result = {12: [0], 13: [0], 14: [1], 18: [1]}
+    chunk2transcripts_result = {12: [0], 13: [0], 14: [1], 15: [1], 16: [1], 17: [1], 18: [1]}
 
     for tx in gs.transcripts:
         transcripts.update({tx.id : []})

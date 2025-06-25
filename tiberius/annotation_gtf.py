@@ -300,7 +300,7 @@ class Annotation:
         Fetch the integer-label chunk (from memory or disk) and convert to one-hot.
         """
         labels: np.ndarray = self.get_chunk_labels(chunk_idx)
-        return np.eye(15, dtype=np.uint16)[labels]
+        return np.eye(15, dtype=np.int32)[labels]
 
 
 class GeneStructure: # deprecated for now

@@ -214,10 +214,7 @@ class Annotation:
         start_chunk = self.seq2chunk_pos[strand][seq_name] + start // self.chunk_len
         end_chunk = self.seq2chunk_pos[strand][seq_name] + (end) // self.chunk_len
         
-        if start_chunk == end_chunk:
-            return [start_chunk]
-        else:
-            return [start_chunk, end_chunk]
+        return [start_chunk, end_chunk]
 
 
     def read_inputfile(self) -> None:
@@ -259,11 +256,10 @@ class Annotation:
                 self.transcripts[-1].end,
                 self.transcripts[-1].strand
             )
-            for c in chunk_numb:
+            for c in range(chunk_numb[0], chunk_numb[1] + 1):
                 if c not in self.chunk2transcripts:
                     self.chunk2transcripts[c] = []
                 self.chunk2transcripts[c].append(k)
-
     
     def get_chunk_labels(self, chunk_idx: int) -> np.ndarray:
         """
@@ -273,7 +269,7 @@ class Annotation:
         labels: np.ndarray = np.zeros(self.chunk_len, dtype=np.int32)   
         if chunk_idx not in self.chunk2transcripts:
             return labels
-        for tx_num in self.chunk2transcripts[chunk_idx]:
+        for tx_num in self.chunk2transcripts[chunk_idx]:            
             tx = self.transcripts[tx_num]
             strand = tx.strand
             tx_label = tx.to_class_labels()

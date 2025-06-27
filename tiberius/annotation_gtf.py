@@ -229,6 +229,8 @@ class Annotation:
                 parts = line.strip().split('\t')
                 chromosome, source, feature, start, end, score, strand, phase, attributes = parts
                 # Extract transcript_id from attributes
+                if chromosome not in self.seq2chunk_pos["+"]:
+                    continue
                 if feature not in ["intron", "CDS"]:
                     continue
                 transcript_id = None

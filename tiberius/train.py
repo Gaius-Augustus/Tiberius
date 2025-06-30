@@ -433,7 +433,7 @@ def main():
     # get paths of tfrecord files
     species_file = f'{args.train_species_file}'
     species = read_species(species_file)
-    file_paths = [f'{data_path}/{s}_{i}.tfrecords' for s in species for i in range(99)]
+    file_paths = [f'{data_path}/{s}_{i}.tfrecords' for s in species for i in range(100)]
 
     # init tfrecord generator
     generator = DataGenerator(file_path=file_paths, 

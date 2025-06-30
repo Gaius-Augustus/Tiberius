@@ -145,8 +145,12 @@ class Transcript:
         for k, i in enumerate(indices):
             feat = self.features[i]
             if feat.type == 'intron':
-                # calculate phase based on previous feature
-                feat.phase = self.features[list(indices)[k+1]].phase
+                # calculate phase based on previous feature                
+                try:
+                    feat.phase = self.features[list(indices)[k+1]].phase                                      
+                except IndexError:
+                    print(f"Warning: Intron feature {feat.start}-{feat.end} in transcript {self.id} has no next CDS feature. Setting phase to 0.")
+                
 
     def to_class_labels(self) -> np.ndarray:
         """Assemble a full integer-label sequence for the transcript.

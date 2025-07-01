@@ -31,11 +31,24 @@ For following instructions, we will assume that the files are named after the sp
     Dipodomys_ordii
     Enhydra_lutris
     ```
+4. (Optional) Prepare validation data. To monitor validation loss and accuracy during training, you can prepare validation examples by repeating steps 1–3 for a validation dataset. Assume you have:
+
+-  A directory containing validation TFRecord files: `val_tfrecords_dir/`
+- A list of validation species: `val_species.txt`
+
+You can then generate a `.npz` file containing a fixed number of validation examples (e.g., `num_val` = 500) using the following command:
+```bash
+python3 tiberius/validation_from_tfrecords \
+        --tfrec_dir val_tfrecords_dir/ \
+       --species val_species.txt \
+       --tfrec_per_species 100 \
+       --out val.npz --val_size num_val
+```
 
 4. Create a config file that contains the parameters for training, a config file with default parameter is located at `docs/config.json`. You can find descriptions of key parametes in `tiberius/train.py`. Start training:
     
     ```shell
-    python tiberius/train.py --data $tfrecords/ --learnMSA $leanMSA  --cfg config.json --train_species_file species.txt
+    python tiberius/train.py --data $tfrecords/ --learnMSA $leanMSA  --cfg config.json --train_species_file species.txt --val_data val.npz
     ```
 
     If you want to train with the HMM layer, you can use the '--hmm' argument. This will however require more memory and slow training down.

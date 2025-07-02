@@ -117,7 +117,6 @@ class DataGenerator:
             deterministic=False
         )
         options = tf.data.Options()
-        options.experimental_deterministic = False    
         options.threading.private_threadpool_size = self.threads
         
         dataset = dataset.with_options(options)
@@ -135,12 +134,14 @@ class DataGenerator:
         
         if self.shuffle:
             dataset = dataset.shuffle(buffer_size=50)
+            options.experimental_deterministic = False 
+        else: 
+            options.experimental_deterministic = True
 
         if repeat:
             dataset = dataset.repeat()
 
-        def preprocess(x, y, t=tf.constant([], dtype=tf.string)):
-            # return x,y,t
+        def preprocess(x, y, t=tf.constant([], dtype=tf.string)):            
             tf.debugging.assert_rank(y, 2, message="y must be [seq_len, output_size]")
             x = tf.reshape(x, [-1, tf.shape(x)[-1]]) 
             y = tf.reshape(y, [-1, self.output_size])
@@ -148,7 +149,7 @@ class DataGenerator:
                 t = tf.reshape(t, [-1, 3])
             if not self.softmasking:
                 x = x[:, :, :5]
-
+            
             if y.shape[-1] != self.output_size:
                 y = self._reformat_labels(y)
 
@@ -168,7 +169,6 @@ class DataGenerator:
             else:
                 X = x
                 Y = y
-
             def with_tx():
                 seq_len = tf.shape(y)[0]
                 w = self.get_seq_mask(seq_len,
@@ -181,8 +181,8 @@ class DataGenerator:
             def without_tx():
                 default_w = tf.ones([tf.shape(y)[0]], dtype=tf.float32) 
                 return X, Y, default_w
-
-            mask = tf.logical_and(tf.size(t) > 0, tf.size(t) > 0)
+            
+            mask = tf.logical_and(tf.size(t) > 0, tf.size(t) > 0)            
             return tf.cond(mask, with_tx, without_tx)
 
         dataset = dataset.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)

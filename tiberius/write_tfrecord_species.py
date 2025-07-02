@@ -110,7 +110,7 @@ def write_tf_record(fasta, ref, out, split=100, clamsa=np.array([]),
                     store_txs=False):
     print(f'Writing TFRecords to {out} with split {split}', file=sys.stderr)
     indices = np.arange(len(fasta.chunks_seq))
-    # np.random.shuffle(indices)     
+    np.random.shuffle(indices)
     def create_example(i):
         feature_bytes_x = tf.io.serialize_tensor(fasta.get_onehot(i)).numpy()
         if store_txs:
@@ -186,7 +186,9 @@ def main():
         elif args.np:
             write_numpy(fasta, ref, args.out)
         else:
-            write_tf_record(fasta, ref, args.out, store_txs=args.add_tx_ids,)
+            add_tx_ids = not args.no_tx_ids
+            write_tf_record(fasta, ref, args.out, store_txs=add_tx_ids,
+                        split=args.numb_split)
 
 def parseCmd():
     """Parse command line arguments
@@ -208,6 +210,8 @@ def parseCmd():
         help='Prefix of output files')
     parser.add_argument('--wsize', type=int,
         help='', required=True)
+    parser.add_argument('--numb_split', type=int,
+        help='', default=100)
     parser.add_argument('--min_seq_len', type=int,
         help='Minimum length of input sequences used for training', default=500004)
     parser.add_argument('--clamsa',  type=str, default='',
@@ -218,8 +222,8 @@ def parseCmd():
         help='') 
     parser.add_argument('--np', action='store_true',
         help='')
-    parser.add_argument('--add_tx_ids', action='store_true',
-        help='Stores for each trainings example the transcript IDs and the overlap range with the trainings example.')
+    parser.add_argument('--no_tx_ids', action='store_true',
+        help='Dont store transcript IDs and the overlap range for each trainings example.')
     
     
     return parser.parse_args()

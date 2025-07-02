@@ -174,7 +174,8 @@ class DataGenerator:
                 w = self.get_seq_mask(seq_len,
                                     transcripts=t,
                                     tx_filter=self.tx_filter,
-                                    r=self.tx_filter_region)
+                                    r_u=self.tx_filter_region,
+                                    r_f=self.tx_filter_region//2)
                 return X, Y, w
 
             def without_tx():
@@ -275,62 +276,120 @@ class DataGenerator:
 
         return y_new
 
-    def get_seq_mask(self, seq_len, transcripts, tx_filter, r):
-        # transcripts: [num_tx,3] int32
-        # tx_filter: list[int] or tf.Tensor([k],int32)
-        # r: int32 scalar
-        # seq_len: int
+    def get_seq_mask(
+        self,
+        seq_len,
+        transcripts,
+        tx_filter,
+        r_f,
+        r_u
+    ) :
+        """
+        Build a position-wise mask of shape [seq_len], dtype float32, where:
+        • Any base in the exact filtered transcripts (no radius) is 0.0 always.
+        • Flanks around filtered transcripts (radius r_f) are 0.0, unless protected by a keep-flank.
+        • Flanks around unfiltered transcripts (radius r_u) are 1.0, overriding filtered flanks.
+        • All other positions are 1.0.
 
-        # 1) split out columns
-        tx_ids  = transcripts[:, 0]
+        | Region                    | hit_core | hit_u | hit_f | final_mask |
+        | ------------------------- | :-------: | :----: | :----: | :---------: |
+        | inside filtered (core)    |   True    |   —    |   —    |    0.0     |
+        | keep-flank ∩ filter-flank |   False   |  True  |  True  |    1.0     |
+        | filter-flank only         |   False   |  False |  True  |    0.0     |
+        | keep-flank only           |   False   |  True  |  False |    1.0     |
+        | outside everything        |   False   |  False |  False |    1.0     |
+
+        Args:
+            seq_len:     int, total sequence length.
+            transcripts: tf.Tensor [num_tx,3], rows = [tx_id, start, end] (strings).
+            tx_filter:   list of IDs to filter (mask) or tf.Tensor of shape [k].
+            r_f:         int, radius around filtered transcripts to mask.
+            r_u:         int, radius around unfiltered transcripts to protect.
+        Returns:
+            tf.Tensor [seq_len], float32 mask.
+        """
+        # parse out fields
+        tx_ids = transcripts[:, 0]
         starts = tf.strings.to_number(transcripts[:, 1], out_type=tf.int32)
         ends   = tf.strings.to_number(transcripts[:, 2], out_type=tf.int32)
 
-        # 2) make your filter-ID tensor (dtype string)
+        # build filter-ID tensor
         if not isinstance(tx_filter, tf.Tensor):
             filter_ids = tf.constant(tx_filter, dtype=tf.string)
         else:
             filter_ids = tf.cast(tx_filter, tf.string)
 
-        # 3) find which transcripts to zero out
-        #    compare every tx_id against every filter_id
-        is_filtered = tf.reduce_any(
+        # boolean mask of filtered transcripts
+        is_f = tf.reduce_any(
             tf.equal(
-                tf.expand_dims(tx_ids, 1),   # [num_tx,1]
-                tf.expand_dims(filter_ids, 0) # [1,num_filters]
+                tf.expand_dims(tx_ids, 1),    # [num_tx,1]
+                tf.expand_dims(filter_ids, 0)  # [1, n_filters]
             ),
-            axis=1                        # reduce over filters → [num_tx]
-        )  # bool mask: True for intervals to remove
-        is_filtered = tf.ensure_shape(is_filtered, [None])
+            axis=1                           # [num_tx]
+        )
+        is_f = tf.ensure_shape(is_f, [None])
 
-        # 4) grab only the starts/ends of the filtered ones
-        ft_starts = tf.boolean_mask(starts, is_filtered)  # [n_bad]
-        ft_ends   = tf.boolean_mask(ends,   is_filtered)  # [n_bad]
+        # split filtered vs unfiltered intervals
+        st_f = tf.boolean_mask(starts, is_f)   # filtered starts
+        en_f = tf.boolean_mask(ends, is_f)   # filtered ends
+        st_u = tf.boolean_mask(starts, ~is_f)     # keep starts
+        en_u = tf.boolean_mask(ends, ~is_f)     # keep ends
 
-        # 5) apply your radius and clip to [0, seq_len]
-        r = tf.convert_to_tensor(r, dtype=tf.int32)
-        st = tf.clip_by_value(ft_starts - r, 0, seq_len)
-        en = tf.clip_by_value(ft_ends   + r, 0, seq_len)
+        # apply radii and clip to [0, seq_len]
+        r_f = tf.convert_to_tensor(r_f, tf.int32)
+        r_u = tf.convert_to_tensor(r_u, tf.int32)
+        st_f_exp = tf.clip_by_value(st_f - r_f, 0, seq_len)
+        en_f_exp = tf.clip_by_value(en_f + r_f, 0, seq_len)
+        st_u_exp = tf.clip_by_value(st_u - r_u, 0, seq_len)
+        en_u_exp = tf.clip_by_value(en_u + r_u, 0, seq_len)
 
-        # 6) build a [seq_len] vector of positions
-        pos = tf.range(seq_len, dtype=tf.int32)[:, None]  # [seq_len,1]
+        # position vector [seq_len,1]
+        pos = tf.range(seq_len, dtype=tf.int32)[:, None]
 
-        # 7) test membership in each “bad” interval
-        inside = tf.logical_and(
-            pos >= tf.expand_dims(st, 0),  # [1,n_bad] → broadcast
-            pos <  tf.expand_dims(en, 0)
-        )  # bool [seq_len, n_bad]
+        # hits in filtered+r and unfiltered+r intervals
+        hit_f = tf.reduce_any(
+            tf.logical_and(
+                pos >= tf.expand_dims(st_f_exp, 0),
+                pos <  tf.expand_dims(en_f_exp, 0)
+            ),
+            axis=1
+        )  # [seq_len]
+        hit_u = tf.reduce_any(
+            tf.logical_and(
+                pos >= tf.expand_dims(st_u_exp, 0),
+                pos <  tf.expand_dims(en_u_exp, 0)
+            ),
+            axis=1
+        )  # [seq_len]
 
-        hit_any = tf.reduce_any(inside, axis=1)  # [seq_len], True if in any bad interval
+        # core-hit: exact filtered intervals (no radius)
+        hit_core = tf.reduce_any(
+            tf.logical_and(
+                pos >= tf.expand_dims(st_f, 0),
+                pos <  tf.expand_dims(en_f, 0)
+            ),
+            axis=1
+        )  # [seq_len]
 
-        # 8) invert into floats: 0.0 for hits, 1.0 elsewhere
-        mask = tf.where(
-            hit_any,
-            tf.zeros_like(hit_any, dtype=tf.float32),
-            tf.ones_like(hit_any, dtype=tf.float32)
+        # build the dual-radius “unfiltered wins” mask
+        mask_dual = tf.where(
+            hit_u,
+            tf.ones_like(hit_u, dtype=tf.float32),
+            tf.where(
+                hit_f,
+                tf.zeros_like(hit_f, dtype=tf.float32),
+                tf.ones_like(hit_f, dtype=tf.float32)
+            )
         )
 
-        return mask  # shape [seq_len], dtype float32
+        # override cores to zero
+        final_mask = tf.where(
+            hit_core,
+            tf.zeros_like(hit_core, dtype=tf.float32),
+            mask_dual
+        )
+
+        return final_mask
 
 
     def _get_seq_weights(self, y, r=250, w=100):

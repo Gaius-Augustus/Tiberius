@@ -21,7 +21,7 @@ import tensorflow.keras as keras
 from tensorflow.keras.callbacks import CSVLogger
 import tiberius.models as models
 from tiberius.models import (weighted_categorical_crossentropy, custom_cce_f1_loss, BatchLearningRateScheduler, 
-                    add_hmm_only, add_hmm_layer, ValidationCallback, 
+                    add_hmm_only, add_hmm_layer, ValidationCallback,
                     BatchSave, EpochSave, lstm_model, add_constant_hmm, 
                     make_weighted_cce_loss,)
 from tensorflow.keras.callbacks import LearningRateScheduler
@@ -56,6 +56,22 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
 
     csv_logger = CSVLogger(f'{model_save_dir}/training.log', 
                 append=True, separator=';')
+     # add learning rate scheduler
+    if config['use_lr_scheduler']:
+        warmup_epochs = config['warmup']
+        peak_lr = config['lr']
+        min_lr = config['min_lr']
+        decay_rate = config['lr_decay_rate']
+        def scheduler(epoch, lr):
+            if epoch < warmup_epochs:
+                # linear warm-up: epoch goes 0…warmup_epochs-1, so (epoch+1)/warmup_epochs ∈ (0,1]
+                return peak_lr * (epoch + 1) / warmup_epochs
+            else:
+                # exponential decay off the *previous* lr, but don’t go below min_lr
+                decayed = lr * 0.9
+                return tf.maximum(decayed, min_lr)
+
+        lr_callback = tf.keras.callbacks.LearningRateScheduler(scheduler, verbose=1)
 
     adam = Adam(learning_rate=config['lr'])
     with strategy.scope():
@@ -123,11 +139,13 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
             loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"], from_logits=True)
         model.compile(loss=loss, optimizer=adam, metrics=['accuracy'], loss_weights=loss_weights)     
         model.summary()
+        callbacks = [epoch_callback, csv_logger, lr_callback] \
+            if config['use_lr_scheduler'] else [epoch_callback, csv_logger]
         model.save(model_save_dir+"/untrained.keras")
         model.fit(dataset, epochs=config["num_epochs"], validation_data=val_data,
                 steps_per_epoch=config["steps_per_epoch"],
                 validation_batch_size=config['batch_size'],
-                callbacks=[epoch_callback, csv_logger])
+                callbacks=callbacks)
 
 def read_species(file_name):
     """Reads a list of species from a given file, filtering out empty lines and comments.
@@ -234,13 +252,28 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
     epoch_callback = EpochSave(model_save_dir)
     csv_logger = CSVLogger(f'{model_save_dir}/training.log', append=True, separator=';')
     
+    # add learning rate scheduler
+    if config['use_lr_scheduler']:
+        warmup_epochs = config['warmup']
+        peak_lr = config['lr']
+        min_lr = config['min_lr']
+        decay_rate = config['lr_decay_rate']
+        def scheduler(epoch, lr):
+            if epoch < warmup_epochs:
+                # linear warm-up: epoch goes 0…warmup_epochs-1, so (epoch+1)/warmup_epochs ∈ (0,1]
+                return peak_lr * (epoch + 1) / warmup_epochs
+            else:
+                # exponential decay off the *previous* lr, but don’t go below min_lr
+                decayed = lr * 0.9
+                return tf.maximum(decayed, min_lr)
+
+        lr_callback = tf.keras.callbacks.LearningRateScheduler(scheduler, verbose=1)
     
     with strategy.scope():        
         if config['sgd']:
             optimizer = SGD(learning_rate=config['lr'])
         else:
             optimizer = Adam(learning_rate=config['lr'])
-
         custom_objects = {}
         if config["loss_f1_factor"]:
             cce_loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
@@ -270,10 +303,11 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
             model.compile(loss=cce_loss, optimizer=optimizer, 
                 metrics=['accuracy'])        
         model.summary()
-
+        callbacks = [epoch_callback, csv_logger, lr_callback] \
+            if config['use_lr_scheduler'] else [epoch_callback, csv_logger]
         model.fit(dataset, epochs=config["num_epochs"], validation_data=val_data,
                 steps_per_epoch=config["steps_per_epoch"],
-                callbacks=[epoch_callback, csv_logger])
+                callbacks=callbacks)
 
 
 def load_val_data(file, hmm_factor=1, output_size=7, clamsa=False, softmasking=True, oracle=False):
@@ -379,7 +413,11 @@ def main():
             # pool size is the reduction factor for the sequence before the LSTM,
             # number of adjacent nucleotides that are one position for the LSTM
             "pool_size": 9,
-            "lr": 1e-4,
+            "lr": 1e-4, # starting lr
+            "warmup": 1, # number of trainingssteps to warmup the learning rate
+            "min_lr": 1e-6, # minimum learning rate
+            "lr_decay_rate": 0.9, # decay rate of learning rate
+            "use_lr_scheduler": False, # if True, uses a learning rate scheduler
             "batch_size": batch_size,
             "w_size": w_size, # sequence length
             "filter": False, # if True, filters all training examples out that are IR-only

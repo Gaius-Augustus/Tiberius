@@ -39,6 +39,11 @@ cd Tiberius
 pip install .
 ```
 
+**Note:**  
+If TensorFlow is *not* installed beforehand, `pip install .` installs the latest available TensorFlow version. This version may restrict the usable `--seq_len` to **≤ 259 992**, which can slightly reduce prediction accuracy.
+
+If you want to use a longer sequence length, install **TensorFlow 2.10** manually by following the [instructions](docs/install_tensorflow.md) or use the Singularity container.
+
 #### Python Libraries
 
 The following Python libraries are required and installed with Tiberius:

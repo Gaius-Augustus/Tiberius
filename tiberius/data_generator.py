@@ -9,6 +9,10 @@ import sys
 import tensorflow as tf
 import numpy as np
 
+_empty_serial = tf.io.serialize_tensor(
+    tf.constant([], shape=[0,3], dtype=tf.string)
+).numpy()
+
 class DataGenerator:
     """DataGenerator class for reading and processing TFRecord files 
     so that they can be used for training a deepfinder model.
@@ -23,6 +27,9 @@ class DataGenerator:
         softmasking (bool): Whether softmasking track should be added to input.
         clamsa (bool): Whether Clamsa track should be prepared as additional input,
         oracle (bool): Whether the input data should include the labels.
+        tx_filter (list): List of IDs for transcript which will be removed from
+                         training by setting training weights in their region to 0.
+        tx_filter_region (int): Region around the transcript IDs where the weights are set to 0 as well.
     """
 
     def __init__(self, file_path, 
@@ -34,7 +41,9 @@ class DataGenerator:
                  seq_weights=0, softmasking=True,
                 clamsa=False,
                 oracle=False, 
-                threads=96):
+                threads=96,
+                tx_filter=[],
+                tx_filter_region=1000):
         self.file_path = file_path
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -46,28 +55,28 @@ class DataGenerator:
         self.softmasking=softmasking
         self.clamsa = clamsa
         self.oracle = oracle
-        self.threads=threads
-        
+        self.threads = threads
+        self.tx_filter = tf.constant(tx_filter, dtype=tf.string)
+        self.tx_filter_region = tx_filter_region
+
         self.dataset = self._read_tfrecord_file(repeat=repeat)
         self.iterator = iter(self.dataset)
     
     def _parse_fn(self, example):
-        """Parse function for decoding TFRecord examples.
-
-        Args:
-            example (tf.Tensor): Example in serialized TFRecord format.
-
-        Returns:
-            Tuple[tf.Tensor, tf.Tensor]: Parsed input and output tensors.
-        """
         features = {
-            'input': tf.io.FixedLenFeature([], tf.string),
+            'input':  tf.io.FixedLenFeature([], tf.string),
             'output': tf.io.FixedLenFeature([], tf.string),
+            # Give tx_ids a default of the empty 0×3 serialization:
+            'tx_ids': tf.io.FixedLenFeature([], tf.string,
+                                            default_value=_empty_serial),
         }
-        parsed_features = tf.io.parse_single_example(example, features)
-        x = tf.io.parse_tensor(parsed_features['input'], out_type=tf.int32)
-        y = tf.io.parse_tensor(parsed_features['output'], out_type=tf.int32)
-        return x, y
+        parsed = tf.io.parse_single_example(example, features)
+
+        x = tf.io.parse_tensor(parsed['input'],  out_type=tf.int32)
+        y = tf.io.parse_tensor(parsed['output'], out_type=tf.int32)
+        t = tf.io.parse_tensor(parsed['tx_ids'], out_type=tf.string)
+
+        return x, y, t
     
     def _parse_fn_clamsa(self, example):
         """Parse function for decoding TFRecord examples including clamsa data.
@@ -108,7 +117,6 @@ class DataGenerator:
             deterministic=False
         )
         options = tf.data.Options()
-        options.experimental_deterministic = False    
         options.threading.private_threadpool_size = self.threads
         
         dataset = dataset.with_options(options)
@@ -126,17 +134,22 @@ class DataGenerator:
         
         if self.shuffle:
             dataset = dataset.shuffle(buffer_size=50)
+            options.experimental_deterministic = False 
+        else: 
+            options.experimental_deterministic = True
 
         if repeat:
             dataset = dataset.repeat()
 
-        def preprocess(x, y):
-            x = tf.ensure_shape(x, [None, None]) 
-            y = tf.ensure_shape(y, [None, self.output_size])
-
+        def preprocess(x, y, t=tf.constant([], dtype=tf.string)):            
+            tf.debugging.assert_rank(y, 2, message="y must be [seq_len, output_size]")
+            x = tf.reshape(x, [-1, tf.shape(x)[-1]]) 
+            y = tf.reshape(y, [-1, self.output_size])
+            if tf.greater(tf.size(t), 0):
+                t = tf.reshape(t, [-1, 3])
             if not self.softmasking:
                 x = x[:, :, :5]
-
+            
             if y.shape[-1] != self.output_size:
                 y = self._reformat_labels(y)
 
@@ -156,11 +169,21 @@ class DataGenerator:
             else:
                 X = x
                 Y = y
+            def with_tx():
+                seq_len = tf.shape(y)[0]
+                w = self.get_seq_mask(seq_len,
+                                    transcripts=t,
+                                    tx_filter=self.tx_filter,
+                                    r_u=self.tx_filter_region,
+                                    r_f=self.tx_filter_region//2)
+                return X, Y, w
 
-            if self.seq_weights:
-                weights = self._get_seq_weights(y, r=250, w=100)
-                return X, Y, weights
-            return X, Y
+            def without_tx():
+                default_w = tf.ones([tf.shape(y)[0]], dtype=tf.float32) 
+                return X, Y, default_w
+            
+            mask = tf.logical_and(tf.size(t) > 0, tf.size(t) > 0)            
+            return tf.cond(mask, with_tx, without_tx)
 
         dataset = dataset.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
         dataset = dataset.batch(self.batch_size, drop_remainder=True)
@@ -252,6 +275,122 @@ class DataGenerator:
             y_new = y
 
         return y_new
+
+    def get_seq_mask(
+        self,
+        seq_len,
+        transcripts,
+        tx_filter,
+        r_f,
+        r_u
+    ) :
+        """
+        Build a position-wise mask of shape [seq_len], dtype float32, where:
+        • Any base in the exact filtered transcripts (no radius) is 0.0 always.
+        • Flanks around filtered transcripts (radius r_f) are 0.0, unless protected by a keep-flank.
+        • Flanks around unfiltered transcripts (radius r_u) are 1.0, overriding filtered flanks.
+        • All other positions are 1.0.
+
+        | Region                    | hit_core | hit_u | hit_f | final_mask |
+        | ------------------------- | :-------: | :----: | :----: | :---------: |
+        | inside filtered (core)    |   True    |   —    |   —    |    0.0     |
+        | keep-flank ∩ filter-flank |   False   |  True  |  True  |    1.0     |
+        | filter-flank only         |   False   |  False |  True  |    0.0     |
+        | keep-flank only           |   False   |  True  |  False |    1.0     |
+        | outside everything        |   False   |  False |  False |    1.0     |
+
+        Args:
+            seq_len:     int, total sequence length.
+            transcripts: tf.Tensor [num_tx,3], rows = [tx_id, start, end] (strings).
+            tx_filter:   list of IDs to filter (mask) or tf.Tensor of shape [k].
+            r_f:         int, radius around filtered transcripts to mask.
+            r_u:         int, radius around unfiltered transcripts to protect.
+        Returns:
+            tf.Tensor [seq_len], float32 mask.
+        """
+        # parse out fields
+        tx_ids = transcripts[:, 0]
+        starts = tf.strings.to_number(transcripts[:, 1], out_type=tf.int32)
+        ends   = tf.strings.to_number(transcripts[:, 2], out_type=tf.int32)
+
+        # build filter-ID tensor
+        if not isinstance(tx_filter, tf.Tensor):
+            filter_ids = tf.constant(tx_filter, dtype=tf.string)
+        else:
+            filter_ids = tf.cast(tx_filter, tf.string)
+
+        # boolean mask of filtered transcripts
+        is_f = tf.reduce_any(
+            tf.equal(
+                tf.expand_dims(tx_ids, 1),    # [num_tx,1]
+                tf.expand_dims(filter_ids, 0)  # [1, n_filters]
+            ),
+            axis=1                           # [num_tx]
+        )
+        is_f = tf.ensure_shape(is_f, [None])
+
+        # split filtered vs unfiltered intervals
+        st_f = tf.boolean_mask(starts, is_f)   # filtered starts
+        en_f = tf.boolean_mask(ends, is_f)   # filtered ends
+        st_u = tf.boolean_mask(starts, ~is_f)     # keep starts
+        en_u = tf.boolean_mask(ends, ~is_f)     # keep ends
+
+        # apply radii and clip to [0, seq_len]
+        r_f = tf.convert_to_tensor(r_f, tf.int32)
+        r_u = tf.convert_to_tensor(r_u, tf.int32)
+        st_f_exp = tf.clip_by_value(st_f - r_f, 0, seq_len)
+        en_f_exp = tf.clip_by_value(en_f + r_f, 0, seq_len)
+        st_u_exp = tf.clip_by_value(st_u - r_u, 0, seq_len)
+        en_u_exp = tf.clip_by_value(en_u + r_u, 0, seq_len)
+
+        # position vector [seq_len,1]
+        pos = tf.range(seq_len, dtype=tf.int32)[:, None]
+
+        # hits in filtered+r and unfiltered+r intervals
+        hit_f = tf.reduce_any(
+            tf.logical_and(
+                pos >= tf.expand_dims(st_f_exp, 0),
+                pos <  tf.expand_dims(en_f_exp, 0)
+            ),
+            axis=1
+        )  # [seq_len]
+        hit_u = tf.reduce_any(
+            tf.logical_and(
+                pos >= tf.expand_dims(st_u_exp, 0),
+                pos <  tf.expand_dims(en_u_exp, 0)
+            ),
+            axis=1
+        )  # [seq_len]
+
+        # core-hit: exact filtered intervals (no radius)
+        hit_core = tf.reduce_any(
+            tf.logical_and(
+                pos >= tf.expand_dims(st_f, 0),
+                pos <  tf.expand_dims(en_f, 0)
+            ),
+            axis=1
+        )  # [seq_len]
+
+        # build the dual-radius “unfiltered wins” mask
+        mask_dual = tf.where(
+            hit_u,
+            tf.ones_like(hit_u, dtype=tf.float32),
+            tf.where(
+                hit_f,
+                tf.zeros_like(hit_f, dtype=tf.float32),
+                tf.ones_like(hit_f, dtype=tf.float32)
+            )
+        )
+
+        # override cores to zero
+        final_mask = tf.where(
+            hit_core,
+            tf.zeros_like(hit_core, dtype=tf.float32),
+            mask_dual
+        )
+
+        return final_mask
+
 
     def _get_seq_weights(self, y, r=250, w=100):
         """Get weight matrix where weights are `w` around label transitions from non-coding to coding.

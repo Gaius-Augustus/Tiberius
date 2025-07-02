@@ -106,39 +106,21 @@ def write_numpy(fasta, ref, out, ref_phase=None, split=100, trans=False, clamsa=
                      array2=np.array(ref_arr), )
 
 
-def write_tf_record(fasta, ref, out, ref_phase=None, split=100, trans=False, clamsa=np.array([])):
+def write_tf_record(fasta, ref, out, split=100, clamsa=np.array([]),
+                    store_txs=False):
     print(f'Writing TFRecords to {out} with split {split}', file=sys.stderr)
     indices = np.arange(len(fasta.chunks_seq))
     np.random.shuffle(indices)
-    if ref_phase:
-        ref_phase = ref_phase.astype(np.int32)  
-
-    
     def create_example(i):
         feature_bytes_x = tf.io.serialize_tensor(fasta.get_onehot(i)).numpy()
-        feature_bytes_y = tf.io.serialize_tensor(ref.get_onehot(i)).numpy()
-        if ref_phase is not None:
-            feature_bytes_y_phase = tf.io.serialize_tensor(ref_phase[i,:,:]).numpy()                
-            example = tf.train.Example(features=tf.train.Features(feature={
-                'input': tf.train.Feature(
-                    bytes_list=tf.train.BytesList(value=[feature_bytes_x])),
-                'output': tf.train.Feature(
-                    bytes_list=tf.train.BytesList(value=[feature_bytes_y])),
-                'output_phase': tf.train.Feature(
-                    bytes_list=tf.train.BytesList(value=[feature_bytes_y_phase]))
-            }))
-        elif trans:
-            trans_emb = get_transformer_emb(ref[i,:,:], token_len = fasta.shape[1]//18)
-            feature_bytes_trans = tf.io.serialize_tensor(trans_emb).numpy()
-            example = tf.train.Example(features=tf.train.Features(feature={
-                'input': tf.train.Feature(
-                    bytes_list=tf.train.BytesList(value=[feature_bytes_x])),
-                'output': tf.train.Feature(
-                    bytes_list=tf.train.BytesList(value=[feature_bytes_y])),
-                'trans_emb': tf.train.Feature(
-                    bytes_list=tf.train.BytesList(value=[feature_bytes_trans]))
-            }))
-        elif clamsa.any():
+        if store_txs:
+            y, tx = ref.get_onehot(i, get_tx_ids=True)
+            feature_bytes_y = tf.io.serialize_tensor(y).numpy()
+            tx = tf.constant(tx, shape=[len(tx),3], dtype=tf.string)
+            feature_bytes_tx = tf.io.serialize_tensor(tx).numpy()
+        else:
+            feature_bytes_y = tf.io.serialize_tensor(ref.get_onehot(i)).numpy()
+        if clamsa.any():
             feature_bytes_clamsa = tf.io.serialize_tensor(clamsa[i,:,:]).numpy()
             example = tf.train.Example(features=tf.train.Features(feature={
                 'input': tf.train.Feature(
@@ -148,6 +130,17 @@ def write_tf_record(fasta, ref, out, ref_phase=None, split=100, trans=False, cla
                 'clamsa': tf.train.Feature(
                     bytes_list=tf.train.BytesList(value=[feature_bytes_clamsa]))
             }))
+            del feature_bytes_clamsa
+        elif store_txs:
+            example = tf.train.Example(features=tf.train.Features(feature={
+                'input': tf.train.Feature(
+                    bytes_list=tf.train.BytesList(value=[feature_bytes_x])),
+                'output': tf.train.Feature(
+                    bytes_list=tf.train.BytesList(value=[feature_bytes_y])),
+                'tx_ids': tf.train.Feature(
+                    bytes_list=tf.train.BytesList(value=[feature_bytes_tx]))
+            }))
+            del feature_bytes_tx
         else:
             example = tf.train.Example(features=tf.train.Features(feature={
                 'input': tf.train.Feature(
@@ -193,7 +186,9 @@ def main():
         elif args.np:
             write_numpy(fasta, ref, args.out)
         else:
-            write_tf_record(fasta, ref, args.out)
+            add_tx_ids = not args.no_tx_ids
+            write_tf_record(fasta, ref, args.out, store_txs=add_tx_ids,
+                        split=args.numb_split)
 
 def parseCmd():
     """Parse command line arguments
@@ -215,6 +210,8 @@ def parseCmd():
         help='Prefix of output files')
     parser.add_argument('--wsize', type=int,
         help='', required=True)
+    parser.add_argument('--numb_split', type=int,
+        help='', default=100)
     parser.add_argument('--min_seq_len', type=int,
         help='Minimum length of input sequences used for training', default=500004)
     parser.add_argument('--clamsa',  type=str, default='',
@@ -225,6 +222,8 @@ def parseCmd():
         help='') 
     parser.add_argument('--np', action='store_true',
         help='')
+    parser.add_argument('--no_tx_ids', action='store_true',
+        help='Dont store transcript IDs and the overlap range for each trainings example.')
     
     
     return parser.parse_args()

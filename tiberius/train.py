@@ -415,7 +415,11 @@ def main():
     config_dict['model_save_dir'] = os.path.abspath(args.out)
     config_dict['model_load_lstm'] = os.path.abspath(args.load_lstm) if args.load_lstm else None
     config_dict['model_load_hmm'] = os.path.abspath(args.load_hmm) if args.load_hmm else None
-    
+    config_dict["mask_tx_list_file"] = os.path.abspath(args.mask_tx_list) if args.mask_tx_list else None
+    config_dict["mask_flank"] = args.mask_flank if args.mask_flank else 100 
+
+    mask_tx_list = read_species(config_dict["mask_tx_list_file"]) if config_dict["mask_tx_list_file"] else []
+
     data_path = args.data
                                                  
     # write config file
@@ -429,7 +433,7 @@ def main():
     # get paths of tfrecord files
     species_file = f'{args.train_species_file}'
     species = read_species(species_file)
-    file_paths = [f'{data_path}/{s}_{i}.tfrecords' for s in species for i in range(99)]
+    file_paths = [f'{data_path}/{s}_{i}.tfrecords' for s in species for i in range(100)]
 
     # init tfrecord generator
     generator = DataGenerator(file_path=file_paths, 
@@ -444,6 +448,8 @@ def main():
           clamsa=False if not "clamsa" in config_dict else config_dict["clamsa"],
           oracle=False if 'oracle' not in config_dict else config_dict['oracle'],
           threads=config_dict["threads"],
+          tx_filter=mask_tx_list,
+          tx_filter_region=config_dict["mask_flank"]
       )
     
     dataset = generator.get_dataset()

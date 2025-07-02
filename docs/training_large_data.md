@@ -45,7 +45,7 @@ python3 tiberius/validation_from_tfrecords \
        --out val.npz --val_size num_val
 ```
 
-4. Create a config file that contains the parameters for training, a config file with default parameter is located at `docs/config.json`. You can find descriptions of key parametes in `tiberius/train.py`. Start training:
+5. Create a config file that contains the parameters for training, a config file with default parameter is located at `docs/config.json`. You can find descriptions of key parametes in `tiberius/train.py`. Start training:
     
     ```shell
     python tiberius/train.py --data $tfrecords/ --learnMSA $leanMSA  --cfg config.json --train_species_file species.txt --val_data val.npz
@@ -53,4 +53,11 @@ python3 tiberius/validation_from_tfrecords \
 
     If you want to train with the HMM layer, you can use the '--hmm' argument. This will however require more memory and slow training down.
 
-    You can also start a training from an existing model by providing the path to the model with the `--load` argument. This will continue training from the existing model. 
+    You can also start a training from an existing model by providing the path to the model with the `--load` argument. This will continue training from the existing model.
+
+
+
+
+You can load training save points using tiberius.py by providing the path with the appropriate argument:
+- Use `--model_lstm_old` if the model was trained without the HMM layer.
+- If you trained with the HMM layer (`--hmm`), use `--model_old` instead.

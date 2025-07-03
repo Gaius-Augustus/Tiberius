@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tiberius"
+version = "1.1.5"
+authors = [
+  { name="Lars Gabriel", email="lgabriel23@gmx.de" },
+  { name="Felix Becker", email="beckerfelix94@gmail.com" },
+  { name="Katharina Hoff", email="katharina.hoff@uni-greifswald.de" },
+  { name="Mario Stanke", email="mario.stanke@uni-greifswald.de " },
+  # please add yourself if you are a contributor
+]
+description = "Tiberius is a deep learning gene finder."
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+dependencies = [
+  "learnMSA",
+  "numpy",
+  "tensorflow[and-cuda]<2.18",  
+  "biopython",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.urls]
+Homepage = "https://github.com/Gaius-Augustus/Tiberius"
+Issues = "https://github.com/Gaius-Augustus/Tiberius/issues"

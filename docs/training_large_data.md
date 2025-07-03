@@ -1,6 +1,6 @@
 ### Recommended Workflow for Training Tiberius with a Large Dataset
 
-For trainign Tiberius with a large dataset we recommend generating tfRecords files. This will allow you to train on a large dataset without having to load the entire dataset into memory. The following steps will guide you through the process of generating tfrecords files from the data of several genomes. For each genome, you need a FASTA file with the genomic sequences (ideally softmasked) and a GTF file with the gene annotations.
+For training Tiberius with a large dataset we recommend generating tfRecords files. This will allow you to train on a large dataset without having to load the entire dataset into memory. The following steps will guide you through the process of generating tfrecords files from the data of several genomes. For each genome, you need a FASTA file with the genomic sequences (ideally softmasked) and a GTF file with the gene annotations.
 
 For following instructions, we will assume that the files are named after the species as `${SPECIES}.fa` and `${SPECIES}.gtf`. And that [learnMSA](https://github.com/Gaius-Augustus/learnMSA) is installed at `$leanMSA`:
 
@@ -31,13 +31,33 @@ For following instructions, we will assume that the files are named after the sp
     Dipodomys_ordii
     Enhydra_lutris
     ```
+4. (Optional) Prepare validation data. To monitor validation loss and accuracy during training, you can prepare validation examples by repeating steps 1–3 for a validation dataset. Assume you have:
 
-4. Create a config file that contains the parameters for training, a config file with default parameter is located at `docs/config.json`. You can find descriptions of key parametes in `tiberius/train.py`. Start training:
+-  A directory containing validation TFRecord files: `val_tfrecords_dir/`
+- A list of validation species: `val_species.txt`
+
+You can then generate a `.npz` file containing a fixed number of validation examples (e.g., `num_val` = 500) using the following command:
+```bash
+python3 tiberius/validation_from_tfrecords \
+        --tfrec_dir val_tfrecords_dir/ \
+       --species val_species.txt \
+       --tfrec_per_species 100 \
+       --out val.npz --val_size num_val
+```
+
+5. Create a config file that contains the parameters for training, a config file with default parameter is located at `docs/config.json`. You can find descriptions of key parametes in `tiberius/train.py`. Start training:
     
     ```shell
-    python tiberius/train.py --data $tfrecords/ --learnMSA $leanMSA  --cfg config.json --train_species_file species.txt
+    python tiberius/train.py --data $tfrecords/ --learnMSA $leanMSA  --cfg config.json --train_species_file species.txt --val_data val.npz
     ```
 
     If you want to train with the HMM layer, you can use the '--hmm' argument. This will however require more memory and slow training down.
 
-    You can also start a training from an existing model by providing the path to the model with the `--load` argument. This will continue training from the existing model. 
+    You can also start a training from an existing model by providing the path to the model with the `--load` argument. This will continue training from the existing model.
+
+
+
+
+You can load training save points using tiberius.py by providing the path with the appropriate argument:
+- Use `--model_lstm_old` if the model was trained without the HMM layer.
+- If you trained with the HMM layer (`--hmm`), use `--model_old` instead.

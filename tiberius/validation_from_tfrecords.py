@@ -32,14 +32,14 @@ def main():
     data_y = []
     data_clamsa = []
 
-    generator = DataGenerator(file_path=file_paths, 
+    generator = iter(DataGenerator(file_path=file_paths, 
             batch_size=args.batch_size, 
             shuffle=True, 
             repeat=True,
             filter=False,
             output_size=15,
             hmm_factor=0, clamsa=args.clamsa
-      )
+      ).get_dataset())
     
     for j in range(args.val_size):
         i = np.random.randint(0, args.batch_size)

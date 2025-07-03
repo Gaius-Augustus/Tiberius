@@ -5,10 +5,310 @@
 # ==============================================================
 
 import numpy as np
-import sys 
+import sys
 from collections import defaultdict
+from typing import List, Dict, Optional
+import numpy as np
+import time
 
-class GeneStructure:
+class GeneFeature:
+    """Represents a single feature (exon or intron) in a transcript.
+    """
+    type: str  # 'CDS' or 'intron'
+    start: int
+    end: int
+    strand: str  # '+' or '-'
+    phase: int  # Phase of the exon (0, 1, 2) or previous exon phase for introns
+
+    def __init__(
+        self,
+        feature_type: str,
+        start: int,
+        end: int,
+        strand: str,
+        phase: int, 
+    ) -> None:
+        self.type = feature_type
+        self.start = start
+        self.end = end
+        self.strand = strand
+        self.phase = phase  
+
+    def to_class_labels(self) -> np.ndarray:
+        """Produce a 1D array of integer labels (0-14) for each base in [start, end].
+        All CDS are processed as inner CDS
+        Label mapping follows the HMM scheme.
+        """
+        length: int = self.end - self.start + 1
+        offset: int = (3 - self.phase) % 3
+        if self.type == 'CDS':
+            # Compute reading frame for each base in this exon.
+            labels: int = (np.arange(length, dtype=np.int32) + offset) % 3 + 4 # Exon label start at index 4
+            labels[0] = 11 + (offset +1)%3
+            labels[-1] = 8 + (length-int(self.phase)+1)%3
+            if self.strand == '-':
+                # Reverse the labels for negative strand
+                labels = labels[::-1]
+        elif self.type == 'intron':
+            labels = np.zeros(length) + 1 + (offset +1)%3
+        return labels
+
+    def to_one_hot(self) -> np.ndarray:
+        """Convert the integer labels into a one-hot matrix of shape (length, 15).
+        """
+        labels: np.ndarray = self.to_class_labels()
+        one_hot: np.ndarray = np.eye(15, dtype=np.int32)[labels]
+        return one_hot
+
+class Transcript:
+    """Represents a single transcript, composed of multiple GeneFeatures.
+    """
+    id: str
+    sequence_name: str
+    strand: str
+    features: List[GeneFeature]
+    start: Optional[int]
+    end: Optional[int]
+
+    def __init__(
+        self,
+        tx_id: str
+    ) -> None:
+        self.id = tx_id
+        self.sequence_name = None
+        self.strand = None
+        self.features = []
+        self.start = None
+        self.end = None
+
+    def read_input(self, lines: List[str]) -> None:
+        """Parse GTF/GFF lines for this transcript and populate features.
+        """
+        for line in lines:
+            parts = line.strip().split('\t')
+            chromosome, source, feature, start, end, score, strand, phase, attributes = parts
+            if self.sequence_name and self.sequence_name != chromosome:
+                raise ValueError(
+                    f"Transcript {self.id} spans multiple chromosomes: "
+                    f"{self.sequence_name} and {chromosome}"
+                )
+            self.sequence_name = chromosome
+            if self.strand and self.strand != strand:
+                raise ValueError(
+                    f"Transcript {self.id} has inconsistent strand: "
+                    f"{self.strand} and {strand}"
+                )
+            self.strand = strand
+            self.features.append(
+                GeneFeature(
+                    feature_type=feature,
+                    start=int(start),
+                    end=int(end),
+                    strand=strand,
+                    phase=phase
+                )
+            )
+        # Sort features by start position
+        self.features.sort(key=lambda x: x.start)
+
+        # Set sequence name and strand from the first feature
+        if self.features:            
+            # Set start and end based on features
+            self.start = self.features[0].start
+            self.end = self.features[-1].end
+
+        # check if an intron feature is missing
+        for i in range(len(self.features) - 1):
+            if self.features[i].type == 'CDS' and self.features[i+1].type == 'CDS':
+                # check if an intron feature is missing
+                if self.features[i].end + 1 < self.features[i+1].start:
+                    self.features.insert(i + 1, GeneFeature(
+                        feature_type='intron',
+                        start=self.features[i].end + 1,
+                        end=self.features[i+1].start - 1,
+                        strand=self.strand,
+                        phase=self.features[i].phase if self.strand == '+' \
+                                else self.features[i+1].phase
+                    ))
+
+        # redo phases
+        # interate through features and set phases reverse iteration if strand is '-'
+        indices = range(len(self.features)) if self.strand == '+' \
+                else range(len(self.features) - 1, -1, -1)
+        prev_CDS_phase = 0
+        for i in indices:
+            feat = self.features[i]
+            if feat.type == 'CDS':
+                # calculate phase based on previous feature
+                feat.phase = prev_CDS_phase
+                prev_CDS_phase = (3 - (feat.end - feat.start + 1 - prev_CDS_phase)%3)%3
+        for k, i in enumerate(indices):
+            feat = self.features[i]
+            if feat.type == 'intron':
+                # calculate phase based on previous feature                
+                try:
+                    feat.phase = self.features[list(indices)[k+1]].phase                                      
+                except IndexError:
+                    print(f"Warning: Intron feature {feat.start}-{feat.end} in transcript {self.id} has no next CDS feature. Setting phase to 0.")
+                
+
+    def to_class_labels(self) -> np.ndarray:
+        """Assemble a full integer-label sequence for the transcript.
+        """
+        length: int = self.end - self.start + 1
+        labels: np.ndarray = np.zeros(length)
+        for feat in self.features:
+            rel_start: int = feat.start - self.start
+            rel_end: int = feat.end - self.start 
+            labels[rel_start:rel_end+1] = feat.to_class_labels()
+        labels[0] = 7 if self.strand == '+' else 14
+        labels[-1] = 14 if self.strand == '+' else 7
+        return labels
+
+    def to_one_hot(self) -> np.ndarray:
+        """Convert the transcript's class-label sequence into one-hot of shape (L, 15).
+        """
+        labels: np.ndarray = self.to_class_labels()
+        return np.eye(15, dtype=np.int32)[labels]
+
+class Annotation:
+    """Represents a full GTF/GFF annotation, split into chunks.
+    """
+    file_path: str
+    seqnames: List[str]
+    seq_lens: List[int]
+    chunk_len: int
+    transcripts: Dict[str, Transcript]
+    num_chunks: int
+    chunk2transcripts: Dict[int, List[int]]
+
+    def __init__(
+        self,
+        file_path: str,
+        seqnames: List[str],
+        seq_lens: List[int],
+        chunk_len: int,
+    ) -> None:
+        self.file_path = file_path
+        self.seqnames = seqnames
+        self.seq_lens = seq_lens
+        self.chunk_len = chunk_len
+        self.transcripts = []
+        self.seq2chunk_pos = {"-": {self.seqnames[i] : sum(s // self.chunk_len for s in self.seq_lens[:i]) \
+                    for i in range(len(self.seqnames))}}
+        self.seq2chunk_pos.update({
+            "+":  {self.seqnames[i] : sum(s // self.chunk_len for s in self.seq_lens + self.seq_lens[:i]) \
+                    for i in range(len(self.seqnames))}})
+                    
+        self.chunk2transcripts = {}
+
+    def transcript2chunknumb(self, seq_name: str, start: int, end: int, strand: str) -> List[int]:
+        """Given a sequence name and start-end coordinates, return the chunk indices
+        that this transcript overlaps.
+        """
+        start_chunk = self.seq2chunk_pos[strand][seq_name] + start // self.chunk_len
+        end_chunk = self.seq2chunk_pos[strand][seq_name] + (end) // self.chunk_len
+        
+        return [start_chunk, end_chunk]
+
+
+    def read_inputfile(self) -> None:
+        """Read GTF or GFF file and build Transcript objects.
+        """
+        transcript_lines = {}
+        with open(self.file_path, 'r') as f:
+            for line in f:
+                if line.startswith('#') or line.startswith('track'):
+                    continue
+                parts = line.strip().split('\t')
+                chromosome, source, feature, start, end, score, strand, phase, attributes = parts
+                if chromosome not in self.seq2chunk_pos["+"]:
+                    continue
+                # Extract transcript_id from attributes
+                if chromosome not in self.seq2chunk_pos["+"]:
+                    continue
+                if feature not in ["intron", "CDS"]:
+                    continue
+                transcript_id = None
+                if 'transcript_id' in attributes:
+                    transcript_id = attributes.split('transcript_id "')[1].split('"')[0]
+                elif 'ID' in attributes:
+                    transcript_id = attributes.split('ID=')[1].split(';')[0]
+                else:
+                    # throw an error if no transcript_id is found
+                    raise ValueError(
+                        f"Transcript ID not found in line: {line.strip()}"
+                    )
+                if transcript_id not in transcript_lines:
+                    transcript_lines[transcript_id] = []
+                transcript_lines[transcript_id].append(line.strip())                    
+
+        for k, (tx_id, tx) in enumerate(transcript_lines.items()):
+            # Create a Transcript object for each transcript_id
+            self.transcripts.append(Transcript(tx_id))
+            self.transcripts[-1].read_input(tx)
+
+            chunk_numb = self.transcript2chunknumb(
+                self.transcripts[-1].sequence_name,
+                self.transcripts[-1].start,
+                self.transcripts[-1].end,
+                self.transcripts[-1].strand
+            )
+            for c in range(chunk_numb[0], chunk_numb[1] + 1):
+                if c not in self.chunk2transcripts:
+                    self.chunk2transcripts[c] = []
+                self.chunk2transcripts[c].append(k)
+    
+    def get_chunk_labels(self, chunk_idx: int, get_tx_ids: bool = False) -> np.ndarray:
+        """Return a 1D integer-label array of size chunk_len for the specified chunk.
+        """
+        strand: str = "+"
+        tx_out: [str, str, str] = [] # txID, start pos in chunk, end pos in chunk
+        labels: np.ndarray = np.zeros(self.chunk_len, dtype=np.int32)
+        if chunk_idx not in self.chunk2transcripts:
+            if get_tx_ids:
+                return labels, np.array(tx_out, dtype='<U50')
+            return labels
+        for tx_num in self.chunk2transcripts[chunk_idx]:            
+            tx = self.transcripts[tx_num]
+            strand = tx.strand
+            tx_label = tx.to_class_labels()
+            chunk_start = self.chunk_len * \
+                (chunk_idx - self.seq2chunk_pos[strand][tx.sequence_name])
+            chunk_end = chunk_start + self.chunk_len
+
+            # take the overlap of transcript and chunk
+            overlap_start_chunk = max(0, tx.start - chunk_start - 1)
+            overlap_end_chunk = min(self.chunk_len, tx.end - chunk_start)
+            overlap_start_tx = max(0, chunk_start - tx.start  + 1)
+            overlap_end_tx = min(len(tx_label), len(tx_label) - (tx.end - chunk_end))
+            # fill the labels array with the overlap
+            labels[overlap_start_chunk:overlap_end_chunk] = \
+                tx_label[overlap_start_tx:overlap_end_tx]
+            if get_tx_ids and strand == '+':
+                tx_out.append([tx.id, str(overlap_start_chunk), str(overlap_end_chunk)])
+            elif get_tx_ids and strand == '-':
+                tx_out.append([tx.id, str(self.chunk_len - overlap_end_chunk), 
+                str(self.chunk_len - overlap_start_chunk)])
+        if strand == '-':
+            # reverse the labels for negative strand
+            labels = labels[::-1]
+        if get_tx_ids:
+            return labels, np.array(tx_out, dtype='<U50')
+        return labels
+
+    
+    def get_onehot(self, chunk_idx: int, get_tx_ids: bool = False) -> np.ndarray:
+        """Fetch the integer-label chunk (from memory or disk) and convert to one-hot.
+        """
+        if get_tx_ids:
+            labels, tx_ids = self.get_chunk_labels(chunk_idx, get_tx_ids=True)
+            return np.eye(15, dtype=np.int32)[labels], tx_ids
+        labels: np.ndarray = self.get_chunk_labels(chunk_idx, get_tx_ids=get_tx_ids)
+        return np.eye(15, dtype=np.int32)[labels]
+
+
+class GeneStructure: # deprecated for now
     """Handles gene structure information from a gtf file, 
     prepares one-hot encoded trainings examples"""
 
@@ -204,7 +504,6 @@ class GeneStructure:
                         self.one_hot[strand][chrom][pos_IE, 11 + first_frame] = 1
 
         return self.one_hot
-              
 
     def get_flat_chunks_hmm(self, seq_names, strand='+', coords=False, transcript_ids=False):
         """Get one-hot encoded chunks, chunks smaller than chunksize are removed.
@@ -247,11 +546,10 @@ class GeneStructure:
                                     str(min(tx_end, i * (self.chunksize - self.overlap) + self.chunksize))]
                             chunk_transcripts = ['', '', ''] if not chunk_transcripts else chunk_transcripts
                             transcript_list.append(chunk_transcripts)
-                
 
         self.chunks = np.array(self.chunks)
         if strand == '-':
-            self.chunks = self.chunks[::-1,::-1,:]
+            self.chunks = self.chunks[:,::-1,:]
             chunk_coords.reverse()
         if coords:
             return self.chunks, chunk_coords

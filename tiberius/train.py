@@ -21,7 +21,7 @@ import tensorflow.keras as keras
 from tensorflow.keras.callbacks import CSVLogger
 import tiberius.models as models
 from tiberius.models import (weighted_categorical_crossentropy, custom_cce_f1_loss, BatchLearningRateScheduler, 
-                    add_hmm_only, add_hmm_layer, ValidationCallback, 
+                    add_hmm_only, add_hmm_layer, ValidationCallback,
                     BatchSave, EpochSave, lstm_model, add_constant_hmm, 
                     make_weighted_cce_loss,)
 from tensorflow.keras.callbacks import LearningRateScheduler
@@ -71,6 +71,22 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
 
     csv_logger = CSVLogger(f'{model_save_dir}/training.log', 
                 append=True, separator=';')
+     # add learning rate scheduler
+    if config['use_lr_scheduler']:
+        warmup_epochs = config['warmup']
+        peak_lr = config['lr']
+        min_lr = config['min_lr']
+        decay_rate = config['lr_decay_rate']
+        def scheduler(epoch, lr):
+            if epoch < warmup_epochs:
+                # linear warm-up: epoch goes 0…warmup_epochs-1, so (epoch+1)/warmup_epochs ∈ (0,1]
+                return peak_lr * (epoch + 1) / warmup_epochs
+            else:
+                # exponential decay off the *previous* lr, but don’t go below min_lr
+                decayed = lr * 0.9
+                return tf.maximum(decayed, min_lr)
+
+        lr_callback = tf.keras.callbacks.LearningRateScheduler(scheduler, verbose=1)
 
     gpu_callback = GPUMemoryCallback(step_size=gpu_callback_step_size, file_path=model_save_dir + "/gpu_ram_usage.json")
 
@@ -151,10 +167,12 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
         model.compile(loss=loss, optimizer=adam, metrics=['accuracy'], loss_weights=loss_weights) 
         model.summary()
         #model.save(model_save_dir+"/untrained.keras")  # get error that dataset already exists
+        callbacks = [epoch_callback, csv_logger, lr_callback, gpu_callback, WandbCallback(save_model=False)] \
+            if config['use_lr_scheduler'] else [epoch_callback, csv_logger, gpu_callback, WandbCallback(save_model=False)]
         model.fit(dataset, epochs=config["num_epochs"], validation_data=val_data,
                 steps_per_epoch=config["steps_per_epoch"],
                 validation_batch_size=config['batch_size'],
-                callbacks=[epoch_callback, csv_logger, gpu_callback, WandbCallback(save_model=False)],
+                callbacks=callbacks,
                 verbose=2)
 
 def read_species(file_name):
@@ -269,13 +287,28 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
     else:
         optimizer = Adam(learning_rate=config['lr'])
     
+    # add learning rate scheduler
+    if config['use_lr_scheduler']:
+        warmup_epochs = config['warmup']
+        peak_lr = config['lr']
+        min_lr = config['min_lr']
+        decay_rate = config['lr_decay_rate']
+        def scheduler(epoch, lr):
+            if epoch < warmup_epochs:
+                # linear warm-up: epoch goes 0…warmup_epochs-1, so (epoch+1)/warmup_epochs ∈ (0,1]
+                return peak_lr * (epoch + 1) / warmup_epochs
+            else:
+                # exponential decay off the *previous* lr, but don’t go below min_lr
+                decayed = lr * 0.9
+                return tf.maximum(decayed, min_lr)
+
+        lr_callback = tf.keras.callbacks.LearningRateScheduler(scheduler, verbose=1)
     
     with strategy.scope():        
         if config['sgd']:
             optimizer = SGD(learning_rate=config['lr'])
         else:
             optimizer = Adam(learning_rate=config['lr'])
-
         custom_objects = {}
         if config["loss_f1_factor"]:
             cce_loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
@@ -307,11 +340,13 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
             model.compile(loss=cce_loss, optimizer=optimizer, 
                 metrics=['accuracy']) #, jit_compile=True)       #ATTENTION JIT_COMPILE=TRUE 
         model.summary()
-
+        callbacks = [epoch_callback, csv_logger, lr_callback, gpu_callback, WandbCallback(save_model=False)] \
+            if config['use_lr_scheduler'] else [epoch_callback, csv_logger, gpu_callback, WandbCallback(save_model=False)]
         model.fit(dataset, epochs=config["num_epochs"], validation_data=val_data,
                 steps_per_epoch=config["steps_per_epoch"],
-                callbacks=[epoch_callback, csv_logger, gpu_callback, WandbCallback(save_model=False)],
+                callbacks=callbacks,
                 verbose=2)
+
 
 
 def load_val_data(file, hmm_factor=1, output_size=7, clamsa=False, softmasking=True, oracle=False):
@@ -417,7 +452,11 @@ def main():
             # pool size is the reduction factor for the sequence before the LSTM,
             # number of adjacent nucleotides that are one position for the LSTM
             "pool_size": 9,
-            "lr": 1e-4,
+            "lr": 1e-4, # starting lr
+            "warmup": 1, # number of trainingssteps to warmup the learning rate
+            "min_lr": 1e-6, # minimum learning rate
+            "lr_decay_rate": 0.9, # decay rate of learning rate
+            "use_lr_scheduler": False, # if True, uses a learning rate scheduler
             "batch_size": batch_size,
             "w_size": w_size, # sequence length
             "filter": False, # if True, filters all training examples out that are IR-only
@@ -454,7 +493,11 @@ def main():
     config_dict['model_save_dir'] = os.path.abspath(args.out)
     config_dict['model_load_lstm'] = os.path.abspath(args.load_lstm) if args.load_lstm else None
     config_dict['model_load_hmm'] = os.path.abspath(args.load_hmm) if args.load_hmm else None
-    
+    config_dict["mask_tx_list_file"] = os.path.abspath(args.mask_tx_list) if args.mask_tx_list else None
+    config_dict["mask_flank"] = args.mask_flank if args.mask_flank else 100 
+
+    mask_tx_list = read_species(config_dict["mask_tx_list_file"]) if config_dict["mask_tx_list_file"] else []
+
     data_path = args.data
                                                  
     # write config file
@@ -469,17 +512,8 @@ def main():
 
     # get paths of tfrecord files
     species_file = f'{args.train_species_file}'
-    try:
-        species = read_species(species_file)
-    except FileNotFoundError:
-        #search in the data path/species_file :
-        species_file = f'{data_path}/{args.train_species_file}'
-    try:
-        species = read_species(species_file)
-    except FileNotFoundError:
-        print(f"Species file not found.")
-        
-    file_paths = [f'{data_path}/{s}_{i}.tfrecords' for s in species for i in range(99)]
+    species = read_species(species_file)
+    file_paths = [f'{data_path}/{s}_{i}.tfrecords' for s in species for i in range(100)]
 
     # init tfrecord generator
     generator = DataGenerator(file_path=file_paths, 
@@ -494,6 +528,8 @@ def main():
           clamsa=False if not "clamsa" in config_dict else config_dict["clamsa"],
           oracle=False if 'oracle' not in config_dict else config_dict['oracle'],
           threads=config_dict["threads"],
+          tx_filter=mask_tx_list,
+          tx_filter_region=config_dict["mask_flank"]
       )
     
     dataset = generator.get_dataset()

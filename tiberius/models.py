@@ -44,6 +44,10 @@ class BatchLearningRateScheduler(tf.keras.callbacks.Callback):
             new_lr = (self.total_batches-self.warmup)**(-1/2) * self.peak
         if new_lr > self.min_lr:
             tf.keras.backend.set_value(self.model.optimizer.lr, new_lr)
+        else:
+            tf.keras.backend.set_value(self.model.optimizer.lr, self.min_lr)
+        # tf.print("\n",new_lr, self.min_lr,"\n")
+
 
 class ValidationCallback(tf.keras.callbacks.Callback):
     def __init__(self, val_gen, save_path):

@@ -115,7 +115,7 @@ def main(argv: list[str] | None = None) -> None:
           softmasking=config["softmasking"],
           clamsa=False if not "clamsa" in config else config["clamsa"],
           oracle=False if 'oracle' not in config else config['oracle'],
-          threads=config["threads"],
+          threads=config["threads"] if "threads" in config else 48,
           tx_filter=[]
       ).get_dataset()
 
@@ -136,9 +136,10 @@ def main(argv: list[str] | None = None) -> None:
                     "Cast": Cast}, 
                     compile=False,
                     )
+        use_hmm = any("gene_pred_hmm_layer" in layer.name for layer in model.submodules)
         model.compile(
             optimizer=keras.optimizers.Adam(learning_rate=config["lr"]),
-            loss=custom_cce_f1_loss(2, args.batch_size),
+            loss=custom_cce_f1_loss(2, args.batch_size, from_logits=use_hmm),
             metrics=['accuracy']
         )
         print(f"Evaluating model from epoch: {epoch.name}")

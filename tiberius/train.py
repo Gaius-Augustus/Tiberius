@@ -511,7 +511,7 @@ def main():
     wandb.init(project="Tiberius", config=config_dict)
 
     # get paths of tfrecord files
-    species_file = f'{args.train_species_file}'
+    species_file = f'{data_path}/{args.train_species_file}'
     species = read_species(species_file)
     file_paths = [f'{data_path}/{s}_{i}.tfrecords' for s in species for i in range(100)]
 
@@ -531,6 +531,7 @@ def main():
           tx_filter=mask_tx_list,
           tx_filter_region=config_dict["mask_flank"]
       )
+    print(f"BATCH SIZE:\t {config_dict['batch_size']}")
     
     dataset = generator.get_dataset()
 

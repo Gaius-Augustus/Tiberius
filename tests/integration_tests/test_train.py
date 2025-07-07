@@ -75,6 +75,10 @@ def minimal_config(tmp_path):
         "oracle": False,
         "pool_size": 1,
         "num_epochs": 1,
+        "warmup": 1, # number of trainingssteps to warmup the learning rate
+        "min_lr": 1e-6, # minimum learning rate
+        "lr_decay_rate": 0.9, # decay rate of learning rate
+        "use_lr_scheduler": False, # if True, uses a learning rate scheduler
     }
     d["model_load"] = None
     d["model_load_lstm"] = None

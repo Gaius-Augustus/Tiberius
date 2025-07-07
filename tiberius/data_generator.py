@@ -53,6 +53,10 @@ class DataGenerator:
         self.output_size = output_size
         self.hmm_factor = hmm_factor
         self.softmasking=softmasking
+        if self.softmasking:
+            self.input_shape = 6
+        else:
+            self.input_shape = 5
         self.clamsa = clamsa
         self.oracle = oracle
         self.threads = threads
@@ -145,12 +149,12 @@ class DataGenerator:
             tf.debugging.assert_rank(y, 2, message="y must be [seq_len, output_size]")
             x = tf.reshape(x, [-1, tf.shape(x)[-1]]) 
             y = tf.reshape(y, [-1, self.output_size])
-            x.set_shape([None, 6])
+            x.set_shape([None, self.input_shape])
             y.set_shape([None, self.output_size])
             if tf.greater(tf.size(t), 0):
                 t = tf.reshape(t, [-1, 3])
             if not self.softmasking:
-                x = x[:, :, :5]
+                x = x[:, :5]
             
             if y.shape[-1] != self.output_size:
                 y = self._reformat_labels(y)

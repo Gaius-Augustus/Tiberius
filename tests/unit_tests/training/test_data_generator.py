@@ -55,7 +55,7 @@ def test_parse_and_next(tmp_path):
         shuffle=False,
         repeat=False,
         output_size=5,
-        softmasking=True,
+        softmasking=False,
         clamsa=False,
         oracle=False
     )

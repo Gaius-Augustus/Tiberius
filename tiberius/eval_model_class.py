@@ -4,8 +4,9 @@
 # Class handling the prediction and evaluation for a single species
 # ==============================================================
 
-import sys, json, os, re, sys, csv, time
+import sys, json, os, re, csv, time
 import subprocess as sp
+from pathlib import Path
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras as keras
@@ -18,6 +19,8 @@ from tiberius import (GenePredHMMLayer,
                     GenomeSequences,
                     GeneStructure, Anno,
                     custom_cce_f1_loss, lstm_model, Cast)
+
+tf.config.optimizer.set_jit(False)
 
 class PredictionGTF:
     """Class for generating GTF predictions based on a model's output.
@@ -122,7 +125,14 @@ class PredictionGTF:
                 'clamsa_kernel', 'lru_layer']
             relevant_args = {key: config[key] for key in relevant_keys if key in config}
             self.lstm_model = lstm_model(**relevant_args)
-            self.lstm_model.load_weights(f"{self.model_path}/weights.h5")
+            if Path(f"{self.model_path}/weights.h5").exists():
+                self.lstm_model.load_weights(f"{self.model_path}/weights.h5")
+            elif Path(f"{self.model_path}/model.weights.h5").exists():
+                self.lstm_model.load_weights(f"{self.model_path}/model.weights.h5")
+            else:
+                print(f"Could not find weights for model {self.model_path}. "
+                      "Please make sure that either weights.h5 or model.weights.h5 is present in your model savepoint.")
+                sys.exit(1)
 
             if self.model_path_hmm:
                 model_hmm = keras.models.load_model(self.model_path_hmm, 
@@ -130,20 +140,7 @@ class PredictionGTF:
                                                             'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
                 self.gene_pred_hmm_layer = model_hmm.get_layer('gene_pred_hmm_layer')
                 self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
-                self.gene_pred_hmm_layer.cell.recurrent_init() 
-            elif config["hmm"]:
-                try:
-                    self.gene_pred_hmm_layer = self.lstm_model.get_layer('gene_pred_hmm_layer')
-                except ValueError as e:
-                    self.gene_pred_hmm_layer = self.lstm_model.layers[-1]
-                try:
-                    lstm_output=self.lstm_model.get_layer('out').output
-                except ValueError as e:
-                    lstm_output=self.lstm_model.get_layer('lstm_out').output
-                self.lstm_model = Model(
-                                inputs=self.lstm_model.input, 
-                                outputs=lstm_output
-                                )
+                self.gene_pred_hmm_layer.cell.recurrent_init()
             else:
                 self.make_default_hmm(inp_size=self.lstm_model.output_shape[-1])
         # loading full models for training or old models

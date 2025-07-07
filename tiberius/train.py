@@ -101,7 +101,7 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
         - trainable (bool): Flag indicating whether the LSTM model's layers are trainable. 
         - constant_hmm (bool): Flag to add a constant HMM layer to the model. 
     """
-    epoch_callback = EpochSave(model_save_dir)
+    epoch_callback = EpochSave(model_save_dir, config)
 
     csv_logger = CSVLogger(f'{model_save_dir}/training.log', 
                 append=True, separator=';')
@@ -222,8 +222,7 @@ def train_clamsa(dataset, model_save_dir, config, val_data=None, model_load=None
                                  to load a preexisting model that will be trained
         - model_load_lstm (optional): Path to a pre-trained LSTM model to be loaded.
     """
-    
-    epoch_callback = EpochSave(model_save_dir)
+    epoch_callback = EpochSave(model_save_dir, config)
 
     adam = Adam(learning_rate=config['lr'])
     
@@ -296,8 +295,7 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
         - model_load (optional): Path to a directory from which 
                                  to load a preexisting model that will be trained
     """
-
-    epoch_callback = EpochSave(model_save_dir)
+    epoch_callback = EpochSave(model_save_dir, config)
     csv_logger = CSVLogger(f'{model_save_dir}/training.log', append=True, separator=';')
     
   
@@ -502,6 +500,7 @@ def main():
     config_dict['model_load_hmm'] = os.path.abspath(args.load_hmm) if args.load_hmm else None
     config_dict["mask_tx_list_file"] = os.path.abspath(args.mask_tx_list) if args.mask_tx_list else None
     config_dict["mask_flank"] = args.mask_flank if args.mask_flank else 100 
+    config_dict["use_hmm"] = True if args.hmm else False
 
     mask_tx_list = read_species(config_dict["mask_tx_list_file"]) if config_dict["mask_tx_list_file"] else []
 

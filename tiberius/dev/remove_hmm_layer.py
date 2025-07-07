@@ -98,7 +98,7 @@ def main():
 
     # Save the modified model to the output path
 
-    new_model.save_weights(args.output_model + "/weights.h5")
+    new_model.save_weights(args.output_model + "/model.weights.h5")
     print(f"\nModified model successfully saved to {args.output_model}")
     Path(args.output_model + "/model_layers.json").write_text(new_model.to_json())
     with Path(args.output_model + "/model_config.json").open("w", encoding="utf-8") as f:

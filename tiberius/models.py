@@ -1,6 +1,7 @@
-import sys 
+import sys, json
 import numpy as np
 import tensorflow as tf
+from pathlib import Path
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (Conv1D, Conv1DTranspose, LSTM, 
                                 Dense, Bidirectional, Dropout, Activation, Input, 
@@ -17,16 +18,37 @@ class Cast(tf.keras.layers.Layer):
         return tf.cast(x[0][..., :5] if isinstance(x, list) else x[..., :5], tf.float32)
 
 class EpochSave(tf.keras.callbacks.Callback):
-    def __init__(self, model_save_dir):
+    def __init__(self, model_save_dir, config):
         super(EpochSave, self).__init__()
-        self.model_save_dir = model_save_dir
+        self.model_save_dir = Path(model_save_dir)
+        self.config = config
         self.tf_old = tf.__version__ < "2.12.0"
 
     def on_epoch_end(self, epoch, logs=None):
-        if self.tf_old:
-            self.model.save(f"{self.model_save_dir}/epoch_{epoch:02d}", save_traces=False)
+        # find the epoch dir with the highest number in model_save_dir
+        if not self.model_save_dir.exists():
+            self.model_save_dir.mkdir(parents=True, exist_ok=True)
+        existing_epochs = [int(d.name.split('_')[-1]) for \
+            d in self.model_save_dir.iterdir() if d.is_dir() and d.name.startswith('epoch_')]
+        if existing_epochs:
+            max_epoch = max(existing_epochs)
+            new_epoch = max_epoch + 1
         else:
-            self.model.save(f"{self.model_save_dir}/epoch_{epoch:02d}.keras")
+            new_epoch = 0
+        
+        # create a new directory for the current epoch
+        new_epoch_path = self.model_save_dir / f'epoch_{new_epoch:02d}'
+        if new_epoch_path.exists():
+            print(f"Warning: Directory {new_epoch_path} already exists. Overwriting.")
+            # create the new directory
+        else:
+            new_epoch_path.mkdir(parents=True, exist_ok=True)
+        
+        self.model.save_weights(f"{new_epoch_path}/model.weights.h5")
+        Path(new_epoch_path / "model_layers.json").write_text(self.model.to_json())
+        with Path(new_epoch_path / "model_config.json").open("w", encoding="utf-8") as f:
+            json.dump(self.config, f, indent=2)
+        
 
 class BatchLearningRateScheduler(tf.keras.callbacks.Callback):
     def __init__(self, peak=0.1, warmup=0, min_lr=0.0001):
@@ -332,11 +354,11 @@ def add_hmm_layer(model,
                   num_hmm=1,
                   num_copy=1,
                   hmm_factor=9,
-                  share_intron_parameters=True,
+                  share_intron_parameters=False,
                   trainable_nucleotides_at_exons = False,
-                  trainable_emissions = True,
-                  trainable_transitions = True,
-                  trainable_starting_distribution=True,
+                  trainable_emissions = False,
+                  trainable_transitions = False,
+                  trainable_starting_distribution=False,
                   include_lstm_in_output=False,
                   emission_noise_strength=0.001):
     """Add trainable HMM layer to existing hel_model.

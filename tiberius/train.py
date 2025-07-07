@@ -32,6 +32,55 @@ strategy = tf.distribute.MirroredStrategy()
 
 batch_save_numb = 1000
 
+
+@tf.keras.utils.register_keras_serializable()
+class WarmupExponentialDecay(tf.keras.optimizers.schedules.LearningRateSchedule):
+    def __init__(self, peak_lr, warmup_epochs, decay_rate, min_lr, steps_per_epoch):
+        super().__init__()
+        self.peak_lr         = peak_lr
+        self.warmup_epochs   = warmup_epochs
+        self.decay_rate      = decay_rate
+        self.min_lr          = min_lr
+        self.steps_per_epoch = tf.constant(steps_per_epoch, dtype=tf.float32)
+
+    def __call__(self, step):
+        # step is a scalar int32/64 tensor: number of batches so far
+        # convert to epoch index by integer division
+        epoch_int = tf.cast(step, dtype=tf.float32) // self.steps_per_epoch
+        epoch = tf.cast(epoch_int, tf.float32)
+        lr = tf.cond(
+            epoch < self.warmup_epochs,
+            lambda: self.peak_lr * ((epoch + 1) / tf.cast(self.warmup_epochs, tf.float32)),
+            lambda: tf.maximum(
+                self.peak_lr * tf.pow(self.decay_rate, epoch - self.warmup_epochs + 1),
+                self.min_lr
+            )
+        )
+        return lr
+
+    def get_config(self):
+        return {
+            "peak_lr":         self.peak_lr,
+            "warmup_epochs":   self.warmup_epochs,
+            "decay_rate":      self.decay_rate,
+            "min_lr":          self.min_lr,
+            "steps_per_epoch": int(self.steps_per_epoch.numpy()),
+        }
+
+class PrintLr(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        # logs['lr'] will be set by LearningRateScheduler
+        lr = logs.get('lr')
+        if lr is not None:
+            print(f"Epoch {epoch+1}: Learning rate is {lr:.6f}")
+        else:
+            # fallback if you didn’t use a scheduler callback
+            lr_t = self.model.optimizer.learning_rate
+            # if it’s a schedule, call it on current iteration
+            if isinstance(lr_t, tf.keras.optimizers.schedules.LearningRateSchedule):
+                lr_t = lr_t(self.model.optimizer.iterations)
+            print(f"\nEpoch {epoch+1}: Learning rate is {tf.keras.backend.get_value(lr_t):.6f}")
+
 def train_hmm_model(dataset, model_save_dir, config, val_data=None,
                   model_load=None, model_load_lstm=None, model_load_hmm=None, trainable=True, constant_hmm=False
                  ):  
@@ -56,25 +105,23 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
 
     csv_logger = CSVLogger(f'{model_save_dir}/training.log', 
                 append=True, separator=';')
-     # add learning rate scheduler
-    if config['use_lr_scheduler']:
-        warmup_epochs = config['warmup']
-        peak_lr = config['lr']
-        min_lr = config['min_lr']
-        decay_rate = config['lr_decay_rate']
-        def scheduler(epoch, lr):
-            if epoch < warmup_epochs:
-                # linear warm-up: epoch goes 0…warmup_epochs-1, so (epoch+1)/warmup_epochs ∈ (0,1]
-                return peak_lr * (epoch + 1) / warmup_epochs
-            else:
-                # exponential decay off the *previous* lr, but don’t go below min_lr
-                decayed = lr * 0.9
-                return tf.maximum(decayed, min_lr)
 
-        lr_callback = tf.keras.callbacks.LearningRateScheduler(scheduler, verbose=1)
 
-    adam = Adam(learning_rate=config['lr'])
     with strategy.scope():
+        if config['use_lr_scheduler']:
+            warmup_epochs = config['warmup']
+            peak_lr = config['lr']
+            min_lr = config['min_lr']
+            decay_rate = config['lr_decay_rate']
+            schedule = WarmupExponentialDecay(peak_lr=peak_lr,
+                                            warmup_epochs=warmup_epochs,
+                                            decay_rate=decay_rate,
+                                            min_lr=min_lr, 
+                                            steps_per_epoch=config["steps_per_epoch"])
+            adam = Adam(learning_rate=schedule)
+        else:            
+            adam = Adam(learning_rate=config['lr'])
+        
         if config['oracle']:
             inputs = tf.keras.layers.Input(shape=(None, 6 if config['softmasking'] else 5), name='main_input')
             oracle_inputs = tf.keras.layers.Input(shape=(None, config['output_size']), name='oracle_input')
@@ -139,7 +186,8 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
             loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"], from_logits=True)
         model.compile(loss=loss, optimizer=adam, metrics=['accuracy'], loss_weights=loss_weights)     
         model.summary()
-        callbacks = [epoch_callback, csv_logger, lr_callback] \
+        print_lr_cb = PrintLr()
+        callbacks = [epoch_callback, csv_logger, print_lr_cb] \
             if config['use_lr_scheduler'] else [epoch_callback, csv_logger]
         model.save(model_save_dir+"/untrained.keras")
         model.fit(dataset, epochs=config["num_epochs"], validation_data=val_data,
@@ -252,25 +300,22 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
     epoch_callback = EpochSave(model_save_dir)
     csv_logger = CSVLogger(f'{model_save_dir}/training.log', append=True, separator=';')
     
-    # add learning rate scheduler
-    if config['use_lr_scheduler']:
-        warmup_epochs = config['warmup']
-        peak_lr = config['lr']
-        min_lr = config['min_lr']
-        decay_rate = config['lr_decay_rate']
-        def scheduler(epoch, lr):
-            if epoch < warmup_epochs:
-                # linear warm-up: epoch goes 0…warmup_epochs-1, so (epoch+1)/warmup_epochs ∈ (0,1]
-                return peak_lr * (epoch + 1) / warmup_epochs
-            else:
-                # exponential decay off the *previous* lr, but don’t go below min_lr
-                decayed = lr * 0.9
-                return tf.maximum(decayed, min_lr)
-
-        lr_callback = tf.keras.callbacks.LearningRateScheduler(scheduler, verbose=1)
+  
     
-    with strategy.scope():        
-        if config['sgd']:
+    with strategy.scope():
+        # add learning rate scheduler
+        if config['use_lr_scheduler']:
+            warmup_epochs = config['warmup']
+            peak_lr = config['lr']
+            min_lr = config['min_lr']
+            decay_rate = config['lr_decay_rate']
+            schedule = WarmupExponentialDecay(peak_lr=peak_lr,
+                                            warmup_epochs=warmup_epochs,
+                                            decay_rate=decay_rate,
+                                            min_lr=min_lr, 
+                                            steps_per_epoch=config["steps_per_epoch"])
+            optimizer = tf.keras.optimizers.Adam(learning_rate=schedule)
+        elif config['sgd']:
             optimizer = SGD(learning_rate=config['lr'])
         else:
             optimizer = Adam(learning_rate=config['lr'])
@@ -303,8 +348,10 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
             model.compile(loss=cce_loss, optimizer=optimizer, 
                 metrics=['accuracy'])        
         model.summary()
-        callbacks = [epoch_callback, csv_logger, lr_callback] \
+        print_lr_cb = PrintLr()
+        callbacks = [epoch_callback, csv_logger, print_lr_cb] \
             if config['use_lr_scheduler'] else [epoch_callback, csv_logger]
+
         model.fit(dataset, epochs=config["num_epochs"], validation_data=val_data,
                 steps_per_epoch=config["steps_per_epoch"],
                 callbacks=callbacks)

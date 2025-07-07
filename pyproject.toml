@@ -14,7 +14,7 @@ authors = [
 ]
 description = "Tiberius is a deep learning gene finder."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",

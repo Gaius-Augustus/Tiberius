@@ -211,25 +211,26 @@ def load_tiberius_model(model_path: str = "", add_hmm: bool = False,
                 batch_size: int = 12, loss_weight: float = 1.0, 
                 summary: bool = False, config=None):
     model_weights = None
-    if Path(model_path + "/model.weights.h5").is_file():
-        model_weights = Path(model_path + "/model.weights.h5")
-    elif Path(model_path + "/weights.h5").is_file():
-        model_weights = Path(model_path + "/weights.h5")
-    else: 
-        try:
-            model = keras.models.load_model(
-                    str(model_path), 
-                    custom_objects={
-                    'custom_cce_f1_loss': custom_cce_f1_loss(loss_weight, batch_size),
-                    'loss_': custom_cce_f1_loss(loss_weight, batch_size),
-                    "Cast": Cast}, 
-                    compile=False,
-                    )
-            print(f"Model loaded from {model_path}")
-            return model
-        except Exception as e:
-            print(f"Error loading the model from {model_path}: {e}")
-            sys.exit(1)
+    if model_path:
+        if Path(model_path + "/model.weights.h5").is_file():
+            model_weights = Path(model_path + "/model.weights.h5")
+        elif Path(model_path + "/weights.h5").is_file():
+            model_weights = Path(model_path + "/weights.h5")
+        else: 
+            try:
+                model = keras.models.load_model(
+                        str(model_path), 
+                        custom_objects={
+                        'custom_cce_f1_loss': custom_cce_f1_loss(loss_weight, batch_size),
+                        'loss_': custom_cce_f1_loss(loss_weight, batch_size),
+                        "Cast": Cast}, 
+                        compile=False,
+                        )
+                print(f"Model loaded from {model_path}")
+                return model
+            except Exception as e:
+                print(f"Error loading the model from {model_path}: {e}")
+                sys.exit(1)
 
     if config is None:
         try:        
@@ -658,7 +659,6 @@ def weighted_categorical_crossentropy(class_weights, overall_weight):
         # Calculate mean loss across all classes
         return tf.reduce_mean(weighted_loss)    
     return loss
-
 
 
 #Felix: added to make my code run

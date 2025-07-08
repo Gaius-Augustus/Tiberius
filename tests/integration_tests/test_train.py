@@ -22,7 +22,7 @@ import pytest
 import tensorflow as tf
 
 import tiberius.train as train_module
-from tiberius.train import read_species, load_val_data, train_hmm_model, train_clamsa, train_lstm_model
+from tiberius.train import read_species, load_val_data, train_model, get_model
 
 train_module.strategy = tf.distribute.get_strategy()
 
@@ -114,17 +114,14 @@ def test_train_hmm_model_invokes_fit(minimal_config):
                       [1,0,0,0,0],
                       [0,1,0,0,0]]], dtype=tf.int32)
     dummy_ds = tf.data.Dataset.from_tensors((x, y)).repeat()
+    minimal_config["use_hmm"] = True
+    model = get_model(minimal_config)
     # call train_hmm_model
-    train_module.train_hmm_model(
+    train_module.train_model(
         dataset=dummy_ds,
-        model_save_dir=minimal_config["model_save_dir"],
+        model=model,
         config=minimal_config,
         val_data=None,
-        model_load=None,
-        model_load_lstm=None,
-        model_load_hmm=None,
-        trainable=True,
-        constant_hmm=False
     )
     # Since our DummyModel.fit sets .fit_called, ensure it was called
     # The DummyModel instance used by add_hmm_layer should be the one that .fit() was invoked on
@@ -160,12 +157,13 @@ def test_train_lstm_model_invokes_fit(minimal_config):
                       [0,1,0,0,0]]], dtype=tf.int32)
     dummy_ds = tf.data.Dataset.from_tensors((x, y)).repeat()
     # call train_lstm_model
-    train_module.train_lstm_model(
+    model = get_model(minimal_config)
+    # call train_hmm_model
+    train_module.train_model(
         dataset=dummy_ds,
-        model_save_dir=minimal_config["model_save_dir"],
+        model=model,
         config=minimal_config,
         val_data=None,
-        model_load=None
     )
     # Expect training.log to exist (CSVLogger stub still created an empty file)
     assert os.path.exists(os.path.join(minimal_config["model_save_dir"], "training.log"))

@@ -23,7 +23,7 @@ import tiberius.models as models
 from tiberius.models import (weighted_categorical_crossentropy, custom_cce_f1_loss, BatchLearningRateScheduler, 
                     add_hmm_only, add_hmm_layer, ValidationCallback,
                     BatchSave, EpochSave, lstm_model, add_constant_hmm, 
-                    make_weighted_cce_loss,)
+                    make_weighted_cce_loss, Cast)
 from tensorflow.keras.callbacks import LearningRateScheduler
 
 gpus = tf.config.list_physical_devices('GPU')
@@ -122,54 +122,62 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
         else:            
             adam = Adam(learning_rate=config['lr'])
         
-        if config['oracle']:
-            inputs = tf.keras.layers.Input(shape=(None, 6 if config['softmasking'] else 5), name='main_input')
-            oracle_inputs = tf.keras.layers.Input(shape=(None, config['output_size']), name='oracle_input')
-            model = tf.keras.Model(inputs=[inputs, oracle_inputs], outputs=oracle_inputs) 
-        elif model_load_lstm:
-            model = keras.models.load_model(model_load_lstm, 
-                                                custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
-                                                        'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size'])}) 
-        else:
-            relevant_keys = ['units', 'filter_size', 'kernel_size', 
-                            'numb_conv', 'numb_lstm', 'dropout_rate', 
-                            'pool_size', 'stride', 'lstm_mask', 'co',
-                            'output_size', 'residual_conv', 'softmasking',
-                            'clamsa_kernel', 'lru_layer', 'clamsa', 'clamsa_kernel']
-            relevant_args = {key: config[key] for key in relevant_keys if key in config}
-            model = lstm_model(**relevant_args)
-        for layer in model.layers:
-            layer.trainable = trainable
-        if constant_hmm:
-            model = add_constant_hmm(model,seq_len=config['sample_size'], batch_size=config['batch_size'], output_size=config['output_size'])    
-        else: 
-            if model_load_hmm:
-                model_hmm = keras.models.load_model(model_load_hmm, 
-                                                    custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
-                                                            'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size'])})
-                gene_pred_layer = model_hmm.layers[-3]
-            else:
-                gene_pred_layer = None
-            model = add_hmm_layer(model, 
-                                    gene_pred_layer,
-                                    output_size=config['output_size'], 
-                                    num_hmm=config['num_hmm_layers'],
-                                    hmm_factor=config['hmm_factor'], 
-                                    share_intron_parameters=config['hmm_share_intron_parameters'],
-                                    trainable_nucleotides_at_exons=config['hmm_nucleotides_at_exons'],
-                                    trainable_emissions=config['hmm_trainable_emissions'],
-                                    trainable_transitions=config['hmm_trainable_transitions'],
-                                    trainable_starting_distribution=config['hmm_trainable_starting_distribution'],
-                                    include_lstm_in_output=config['multi_loss'])
         if model_load:
             # load the weights onto the raw model instead of using model.load to allow hyperparameter changes
             # i.e. you can change hmm_factor and still use checkpoint saved with a different hmm_factor
-            model.load_weights(model_load+"/variables/variables")
-            if trainable:
-                model.trainable = trainable
-                for layer in model.layers:
-                    layer.trainable = trainable
+            model = keras.models.load_model(model_load, 
+                    custom_objects={
+                    'custom_cce_f1_loss': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
+                    'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
+                    "Cast": Cast}, 
+                    compile=False,
+                    )
             print("Loaded model:", model_load)
+        else:
+            if config['oracle']:
+                inputs = tf.keras.layers.Input(shape=(None, 6 if config['softmasking'] else 5), name='main_input')
+                oracle_inputs = tf.keras.layers.Input(shape=(None, config['output_size']), name='oracle_input')
+                model = tf.keras.Model(inputs=[inputs, oracle_inputs], outputs=oracle_inputs) 
+            elif model_load_lstm:
+                model = keras.models.load_model(model_load_lstm, 
+                        custom_objects={
+                        'custom_cce_f1_loss': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
+                        'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
+                        "Cast": Cast}, 
+                        compile=False,
+                        )
+            else:
+                relevant_keys = ['units', 'filter_size', 'kernel_size', 
+                                'numb_conv', 'numb_lstm', 'dropout_rate', 
+                                'pool_size', 'stride', 'lstm_mask', 'co',
+                                'output_size', 'residual_conv', 'softmasking',
+                                'clamsa_kernel', 'lru_layer', 'clamsa', 'clamsa_kernel']
+                relevant_args = {key: config[key] for key in relevant_keys if key in config}
+                model = lstm_model(**relevant_args)
+            for layer in model.layers:
+                layer.trainable = trainable
+            if constant_hmm:
+                model = add_constant_hmm(model,seq_len=config['sample_size'], batch_size=config['batch_size'], output_size=config['output_size'])    
+            else: 
+                if model_load_hmm:
+                    model_hmm = keras.models.load_model(model_load_hmm, 
+                                    custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
+                                            'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size'])})
+                    gene_pred_layer = model_hmm.layers[-3]
+                else:
+                    gene_pred_layer = None
+                model = add_hmm_layer(model, 
+                                        gene_pred_layer,
+                                        output_size=config['output_size'], 
+                                        num_hmm=config['num_hmm_layers'],
+                                        hmm_factor=config['hmm_factor'], 
+                                        share_intron_parameters=config['hmm_share_intron_parameters'],
+                                        trainable_nucleotides_at_exons=config['hmm_nucleotides_at_exons'],
+                                        trainable_emissions=config['hmm_trainable_emissions'],
+                                        trainable_transitions=config['hmm_trainable_transitions'],
+                                        trainable_starting_distribution=config['hmm_trainable_starting_distribution'],
+                                        include_lstm_in_output=config['multi_loss'])
+        
         if config["loss_f1_factor"]:
             print("using f1 loss")
             loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
@@ -335,10 +343,18 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
                          'output_size', 'residual_conv', 'softmasking',
                         'clamsa_kernel', 'lru_layer']
 
-        relevant_args = {key: config[key] for key in relevant_keys if key in config}
-        model = lstm_model(**relevant_args)
+        relevant_args = {key: config[key] for key in relevant_keys if key in config}        
         if model_load:
-            model.load_weights(model_load + '/variables/variables')
+            model = keras.models.load_model(model_load, 
+                    custom_objects={
+                    'custom_cce_f1_loss': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
+                    'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
+                    "Cast": Cast}, 
+                    compile=False,
+                    )
+            # model.load_weights(model_load + '/variables/variables')
+        else:
+            model = lstm_model(**relevant_args)
         if config["loss_weights"]:
             model.compile(loss=cce_loss, optimizer=optimizer, 
                 metrics=['accuracy'], #sample_weight_mode='temporal', 

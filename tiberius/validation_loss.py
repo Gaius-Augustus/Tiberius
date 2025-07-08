@@ -7,7 +7,7 @@ import sys
 import json
 from tensorflow import keras
 from tiberius import DataGenerator
-from tiberius.models import lstm_model, custom_cce_f1_loss, Cast, add_hmm_layer
+from tiberius.models import lstm_model, custom_cce_f1_loss, Cast, add_hmm_layer, load_tiberius_model
 
 def parse_args(argv = None) -> argparse.Namespace:
     """Parse CLI arguments, convert to absolute paths, and perform basic path sanity checks."""
@@ -73,54 +73,6 @@ def parse_args(argv = None) -> argparse.Namespace:
 
     return args
 
-def load_model(model_path: str, batch_size: int = 12):
-    model_weights = None
-    if Path(model_path + "/model.weights.h5").is_file():
-        model_weights = Path(model_path + "/model.weights.h5")
-    elif Path(model_path + "/weights.h5").is_file():
-        model_weights = Path(model_path + "/weights.h5")
-    else: 
-        try:
-            model = keras.models.load_model(
-                    str(model_path), 
-                    custom_objects={
-                    'custom_cce_f1_loss': custom_cce_f1_loss(2, batch_size),
-                    'loss_': custom_cce_f1_loss(2, batch_size),
-                    "Cast": Cast}, 
-                    compile=False,
-                    )
-            return model
-        except Exception as e:
-            print(f"Error loading the model from {model_path}: {e}")
-            sys.exit(1)
-    
-    try:        
-        with open(f"{model_path}/model_config.json", 'r') as f:
-            config = json.load(f)
-    except Exception as e:
-        print(f"Error could not find config of the model. It should be located at {model_path}/model_config.json: {e}")
-        sys.exit(1)
-    relevant_keys = ['units', 'filter_size', 'kernel_size', 
-                'numb_conv', 'numb_lstm', 'dropout_rate', 
-                'pool_size', 'stride', 'lstm_mask', 'clamsa',
-                'output_size', 'residual_conv', 'softmasking',
-                'clamsa_kernel', 'lru_layer']
-    relevant_args = {key: config[key] for key in relevant_keys if key in config}
-    model = lstm_model(**relevant_args)
-    if config["use_hmm"]:
-        relevant_keys = ['output_size', 'num_hmm', 'num_copy', 'hmm_factor', 
-                    'share_intron_parameters', 'trainable_nucleotides_at_exons',
-                    'trainable_emissions', 'trainable_transitions',
-                    'trainable_starting_distribution', 'include_lstm_in_output',
-                    'emission_noise_strength']        
-        relevant_args = {key: config[key] for key in relevant_keys if key in config}
-        model = add_hmm_layer(model,
-                           **relevant_args)
-        
-    model.load_weights(str(model_weights))
-    return model
-
-
 def main(argv = None) -> None:
     """Main entry point.
 
@@ -172,8 +124,17 @@ def main(argv = None) -> None:
     # print(epochs_dirs)
     result = []
     for epoch in epochs_dirs:
+        add_hmm=False
+        if Path(epoch / "model_config.json").exists():
+            print("e")
+            with open(Path(epoch / "model_config.json"), "r") as f:
+                config = json.load(f)
+                add_hmm = config.get("use_hmm", False)
+
+
         print(str(epoch))
-        model = load_model(str(epoch), args.batch_size)
+        model = load_tiberius_model(str(epoch), add_hmm=add_hmm,
+                batch_size=args.batch_size, summary=True)
         # model.summary()
         use_hmm = any("gene_pred_hmm_layer" in layer.name for layer in model.layers)
         model.compile(

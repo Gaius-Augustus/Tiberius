@@ -17,6 +17,54 @@ class Cast(tf.keras.layers.Layer):
     def call(self, x):
         return tf.cast(x[0][..., :5] if isinstance(x, list) else x[..., :5], tf.float32)
 
+@tf.keras.utils.register_keras_serializable()
+class WarmupExponentialDecay(tf.keras.optimizers.schedules.LearningRateSchedule):
+    def __init__(self, peak_lr, warmup_epochs, decay_rate, min_lr, steps_per_epoch):
+        super().__init__()
+        self.peak_lr         = peak_lr
+        self.warmup_epochs   = warmup_epochs
+        self.decay_rate      = decay_rate
+        self.min_lr          = min_lr
+        self.steps_per_epoch = tf.constant(steps_per_epoch, dtype=tf.float32)
+
+    def __call__(self, step):
+        # step is a scalar int32/64 tensor: number of batches so far
+        # convert to epoch index by integer division
+        epoch_int = tf.cast(step, dtype=tf.float32) // self.steps_per_epoch
+        epoch = tf.cast(epoch_int, tf.float32)
+        lr = tf.cond(
+            epoch < self.warmup_epochs,
+            lambda: self.peak_lr * ((epoch + 1) / tf.cast(self.warmup_epochs, tf.float32)),
+            lambda: tf.maximum(
+                self.peak_lr * tf.pow(self.decay_rate, epoch - self.warmup_epochs + 1),
+                self.min_lr
+            )
+        )
+        return lr
+
+    def get_config(self):
+        return {
+            "peak_lr":         self.peak_lr,
+            "warmup_epochs":   self.warmup_epochs,
+            "decay_rate":      self.decay_rate,
+            "min_lr":          self.min_lr,
+            "steps_per_epoch": int(self.steps_per_epoch.numpy()),
+        }
+
+class PrintLr(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        # logs['lr'] will be set by LearningRateScheduler
+        lr = logs.get('lr')
+        if lr is not None:
+            print(f"Epoch {epoch+1}: Learning rate is {lr:.6f}")
+        else:
+            # fallback if you didn’t use a scheduler callback
+            lr_t = self.model.optimizer.learning_rate
+            # if it’s a schedule, call it on current iteration
+            if isinstance(lr_t, tf.keras.optimizers.schedules.LearningRateSchedule):
+                lr_t = lr_t(self.model.optimizer.iterations)
+            print(f"\nEpoch {epoch+1}: Learning rate is {tf.keras.backend.get_value(lr_t):.6f}")
+
 class EpochSave(tf.keras.callbacks.Callback):
     def __init__(self, model_save_dir, config):
         super(EpochSave, self).__init__()
@@ -157,8 +205,69 @@ def custom_cce_f1_loss(f1_factor, batch_size,
         # Combine CCE loss and F1 score
         combined_loss = cce_loss + f1_factor * (f1_loss + fpr)
         return combined_loss
-    return loss_       
-       
+    return loss_
+
+def load_tiberius_model(model_path: str = "", add_hmm: bool = False, 
+                batch_size: int = 12, loss_weight: float = 1.0, 
+                summary: bool = False, config=None):
+    model_weights = None
+    if Path(model_path + "/model.weights.h5").is_file():
+        model_weights = Path(model_path + "/model.weights.h5")
+    elif Path(model_path + "/weights.h5").is_file():
+        model_weights = Path(model_path + "/weights.h5")
+    else: 
+        try:
+            model = keras.models.load_model(
+                    str(model_path), 
+                    custom_objects={
+                    'custom_cce_f1_loss': custom_cce_f1_loss(loss_weight, batch_size),
+                    'loss_': custom_cce_f1_loss(loss_weight, batch_size),
+                    "Cast": Cast}, 
+                    compile=False,
+                    )
+            print(f"Model loaded from {model_path}")
+            return model
+        except Exception as e:
+            print(f"Error loading the model from {model_path}: {e}")
+            sys.exit(1)
+
+    if config is None:
+        try:        
+            with open(f"{model_path}/model_config.json", 'r') as f:
+                config = json.load(f)
+        except Exception as e:
+            print(f"Error could not find config of the model. It should be located at {model_path}/model_config.json: {e}")
+            sys.exit(1)
+    try:
+        relevant_keys = ['units', 'filter_size', 'kernel_size', 
+                    'numb_conv', 'numb_lstm', 'dropout_rate', 
+                    'pool_size', 'stride', 'lstm_mask', 'clamsa',
+                    'output_size', 'residual_conv', 'softmasking',
+                    'clamsa_kernel', 'lru_layer']
+        relevant_args = {key: config[key] for key in relevant_keys if key in config}
+        model = lstm_model(**relevant_args)
+
+        if add_hmm:
+            relevant_keys = ['output_size', 'num_hmm', 'num_copy', 'hmm_factor', 
+                        'share_intron_parameters', 'trainable_nucleotides_at_exons',
+                        'trainable_emissions', 'trainable_transitions',
+                        'trainable_starting_distribution', 'include_lstm_in_output',
+                        'emission_noise_strength']        
+            relevant_args = {key: config[key] for key in relevant_keys if key in config}
+            model = add_hmm_layer(model,
+                            **relevant_args)
+        if model_weights is not None:
+            model.load_weights(str(model_weights))
+            print(f"Model weights loaded from {model_weights}")
+    except Exception as e:
+        print(f"Error loading the model from {model_path}: {e}")
+        sys.exit(1)
+
+    if summary:
+        model.summary()
+
+    return model
+
 def lstm_model(units=200, filter_size=64, 
               kernel_size=9, numb_conv=2, 
                numb_lstm=3, dropout_rate=0.0, 

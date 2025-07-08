@@ -82,7 +82,7 @@ def load_model(model_path: str, batch_size: int = 12):
     else: 
         try:
             model = keras.models.load_model(
-                    str(model_weights), 
+                    str(model_path), 
                     custom_objects={
                     'custom_cce_f1_loss': custom_cce_f1_loss(2, batch_size),
                     'loss_': custom_cce_f1_loss(2, batch_size),
@@ -116,7 +116,8 @@ def load_model(model_path: str, batch_size: int = 12):
         relevant_args = {key: config[key] for key in relevant_keys if key in config}
         model = add_hmm_layer(model,
                            **relevant_args)
-
+        
+    model.load_weights(str(model_weights))
     return model
 
 

@@ -109,10 +109,10 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
 
     with strategy.scope():
         if config['use_lr_scheduler']:
-            warmup_epochs = config['warmup']
+            warmup_epochs = config.get('warmup', 1)
             peak_lr = config['lr']
-            min_lr = config['min_lr']
-            decay_rate = config['lr_decay_rate']
+            min_lr = config.get('min_lr', 1e-6)
+            decay_rate = config.get('lr_decay_rate', 0.9)
             schedule = WarmupExponentialDecay(peak_lr=peak_lr,
                                             warmup_epochs=warmup_epochs,
                                             decay_rate=decay_rate,
@@ -313,10 +313,10 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
     with strategy.scope():
         # add learning rate scheduler
         if config['use_lr_scheduler']:
-            warmup_epochs = config['warmup']
+            warmup_epochs = config.get('warmup', 1)
             peak_lr = config['lr']
-            min_lr = config['min_lr']
-            decay_rate = config['lr_decay_rate']
+            min_lr = config.get('min_lr', 1e-6)
+            decay_rate = config.get('lr_decay_rate', 0.9)
             schedule = WarmupExponentialDecay(peak_lr=peak_lr,
                                             warmup_epochs=warmup_epochs,
                                             decay_rate=decay_rate,

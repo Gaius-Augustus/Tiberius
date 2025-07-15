@@ -47,7 +47,7 @@ def main():
             example_x, example_y, example_clamsa = next(generator)            
             data_clamsa.append(example_clamsa[i][2])
         else:
-            example_x, example_y = next(generator)
+            example_x, example_y, _ = next(generator)
         data_x.append(example_x[i])
         data_y.append(example_y[i])
 

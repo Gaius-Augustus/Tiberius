@@ -27,7 +27,7 @@ singularity build tiberius.sif docker://larsgabriel23/tiberius:latest
 
 Run Tiberius with the Singularity container (use `-nv` for GPU support):
 ```
- singularity run --nv tiberius.sif tiberius.py [options]
+ singularity run --cleanenv --env PYTHONNOUSERSITE=1 --nv tiberius.sif tiberius.py [options]
 ```
 
 ### Installation from Source

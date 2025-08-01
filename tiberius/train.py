@@ -148,10 +148,10 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
                         )
             else:
                 relevant_keys = ['units', 'filter_size', 'kernel_size', 
-                                'numb_conv', 'numb_lstm', 'dropout_rate', 
-                                'pool_size', 'stride', 'lstm_mask', 'co',
+                                'numb_conv', 'numb_lstm', 
+                                'pool_size', 
                                 'output_size', 'residual_conv', 'softmasking',
-                                'clamsa_kernel', 'lru_layer', 'clamsa', 'clamsa_kernel']
+                                'clamsa_kernel', 'clamsa', 'clamsa_kernel']
                 relevant_args = {key: config[key] for key in relevant_keys if key in config}
                 model = lstm_model(**relevant_args)
             for layer in model.layers:
@@ -260,8 +260,8 @@ def train_clamsa(dataset, model_save_dir, config, val_data=None, model_load=None
                     model = models.clamsa_lstm_model(lstm_model, **relevant_args)
                 else:
                     relevant_keys = ['units', 'filter_size', 'kernel_size', 
-                             'numb_conv', 'numb_lstm', 'dropout_rate', 
-                             'pool_size', 'stride', 'lstm_mask', 'clamsa',
+                             'numb_conv', 'numb_lstm', 
+                             'pool_size',  'clamsa',
                              'output_size', 'residual_conv', 'softmasking',
                             'clamsa_kernel']
                     relevant_args = {key: config[key] for key in relevant_keys if key in config}
@@ -338,10 +338,10 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
             cce_loss = tf.keras.losses.BinaryCrossentropy()
         
         relevant_keys = ['units', 'filter_size', 'kernel_size', 
-                         'numb_conv', 'numb_lstm', 'dropout_rate', 
-                         'pool_size', 'stride', 'lstm_mask', 'clamsa',
+                         'numb_conv', 'numb_lstm', 
+                         'pool_size', 'clamsa',
                          'output_size', 'residual_conv', 'softmasking',
-                        'clamsa_kernel', 'lru_layer']
+                        'clamsa_kernel',]
 
         relevant_args = {key: config[key] for key in relevant_keys if key in config}        
         if model_load:
@@ -466,12 +466,10 @@ def main():
             # "loss_weights": [1.0, 1.0, 100.0, 100.0, 100.0],#[1., 1., 1., 1., 1.],
             # [1.0, 5.0, 5.0, 5.0, 15.0, 15.0, 15.0],#[0.33, 1.0, 1.0, 1.0, 3.0, 3.0, 3.0],#
             # binary weights: [0.5033910039153116, 74.22447990141231]
-            "stride": 0, # if > 0 reduces size of sequence CNN stride
             "units": 372, #192, #512, # output size of LSTMS
             "filter_size": 128, #192,#64, # filter size of CNNs
             "numb_lstm": 2, 
             "numb_conv": 3,
-            "dropout_rate": 0.0,
             "lstm_mask": False,
             # pool size is the reduction factor for the sequence before the LSTM,
             # number of adjacent nucleotides that are one position for the LSTM
@@ -509,7 +507,6 @@ def main():
             'loss_f1_factor': 2.0,
             'sgd': False,
             'oracle': False, # if True, the correct labels will be used as input data. Can be used to debug the HMM.
-            "lru_layer": False
         }
         
     config_dict['model_load'] = os.path.abspath(args.load) if args.load else None

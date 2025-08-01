@@ -139,11 +139,9 @@ def custom_cce_f1_loss(f1_factor, batch_size,
        
 def lstm_model(units=200, filter_size=64, 
               kernel_size=9, numb_conv=2, 
-               numb_lstm=3, dropout_rate=0.0, 
-               pool_size=10, stride=0, 
-               lstm_mask=False, output_size=7,
-               multi_loss=False, residual_conv=False,
-               clamsa=False, clamsa_kernel=6, softmasking=True, lru_layer=False
+               numb_lstm=3, pool_size=9, 
+               output_size=15,  multi_loss=False, residual_conv=False,
+               clamsa=False, clamsa_kernel=6, softmasking=True, 
               ):
     """
     Constructs a hybrid model that combines CNNs and bLSTM layers for gene prediction.
@@ -154,10 +152,7 @@ def lstm_model(units=200, filter_size=64,
         kernel_size (int): The kernel size for convolutional operations.
         numb_conv (int): The total number of convolutional layers in the model.
         numb_lstm (int): The total number of bidirectional LSTM layers.
-        dropout_rate (float): Dropout rate applied to LSTM layers for regularization.
         pool_size (int): The size of the pooling operation to reduce dimensionality.
-        stride (int): The stride length for convolutional operations. Applies striding if > 1.
-        lstm_mask (bool): If True, applies a masking mechanism to LSTM layers.
         output_size (int): The dimensionality of the output layer, often equal to the number of classes.
         multi_loss (bool): If True, utilizes intermediate outputs for multi-loss training.
         residual_conv (bool): If True, adds a residual connection from the convolutional layers to the final output.
@@ -171,9 +166,7 @@ def lstm_model(units=200, filter_size=64,
     and outputs a prediction vector. The architecture supports customization through various 
     parameters, enabling it to adapt to different types of sequential data and learning tasks.
     """
-    if lru_layer:
-        import LRU_tf as lru
-    
+   
     # Input
     outputs = []
     if softmasking:
@@ -194,15 +187,10 @@ def lstm_model(units=200, filter_size=64,
         inp = main_input
     #inp_embedding = Dense(filter_size, activation="relu", name="inp_embed")(main_input)
 
-    if stride > 1:
-        x = Conv1D(filter_size, kernel_size, strides=stride, padding='valid',
-            activation="relu", name='initial_conv')(main_input) 
-        inp_embedding = x
-    else:
-        # First convolution
-        inp_embedding = main_input
-        x = Conv1D(filter_size, 3, padding='same',
-                        activation="relu", name='initial_conv')(main_input)     
+    # First convolution
+    inp_embedding = main_input
+    x = Conv1D(filter_size, 3, padding='same',
+                    activation="relu", name='initial_conv')(main_input)     
     
     # Convolutional layers
     for i in range(numb_conv-1):
@@ -228,29 +216,11 @@ def lstm_model(units=200, filter_size=64,
     x = Dense(2*units, name='pre_lstm_dense')(x)
     pi = 3.141
     # Bidirectional LSTM layers
-    for i in range(numb_lstm):
-        if lru_layer:
-            # period >=3 in first layer, >=20 in deeper layers
-            mp = 2*pi/2 if i<1 else 2*pi/50
-            rmin = 0 if i<1 else 0.9
-            lru_block = lru.LRU_Block(
-                  N=2*units, # hidden dim
-                  H=2*units, # output dim
-                  bidirectional=True,
-                  max_tree_depth=17,
-                  r_min=rmin,
-                  # return_sequences=True,
-                   max_phase=mp)
-            # lru_block.build(input_shape=x.shape)
-            x_next = lru_block(x)
-        else:
-            x_next = Bidirectional(LSTM(units, return_sequences=True), 
-                    name=f'biLSTM_{i+1}')(x)
-        if dropout_rate:
-            x_next = Dropout(dropout_rate, name=f'dropout_{i+1}')(x_next)
-            x = LayerNormalization(name=f'layer_normalization_lstm{i+1}')(x_next + x)
-        else:
-            x = x_next
+    for i in range(numb_lstm):        
+        x_next = Bidirectional(LSTM(units, return_sequences=True), 
+                name=f'biLSTM_{i+1}')(x)
+        
+        x = x_next
             
         if multi_loss and i < numb_lstm-1:   
             x_loss = Dense(pool_size * output_size, activation='relu', name=f'dense_lstm_{i+1}')(x)
@@ -258,25 +228,14 @@ def lstm_model(units=200, filter_size=64,
                 x_loss = Reshape((-1, output_size), name=f'Reshape_loss_{i+1}')(x_loss)
             outputs.append(Activation('softmax', name=f'out_lstm_{i+1}')(x_loss))
     
-    if lstm_mask:
-        mask = Dense(1, activation='sigmoid', name='mask')(x)
-        mask = tf.greater(mask[:, :, 0], 0.5)
-        for i in range(2):
-            x = Bidirectional(LSTM(units, return_sequences=True), 
-                name=f'biLSTM_mask_{i+1}')(inputs=x, mask=mask)
-       
     if residual_conv:
         x = Dense(pool_size * 30, activation='relu', name='dense')(x)
         x = Reshape((-1, 30), name='Reshape2')(x)
         # x = tf.concat([x, cnn_out], axis=-1)
         x = keras.layers.Concatenate(axis=-1)([x, cnn_out])
         x = Dense(output_size, name='out_dense')(x)
-    else:
-        if stride > 1:
-            x = Conv1DTranspose(output_size, kernel_size, strides=stride, padding='valid',
-                activation="relu", name='transpose_conv')(x) 
-        else:
-            x = Dense(pool_size * output_size, activation='relu', name='out_dense')(x)
+    else:        
+        x = Dense(pool_size * output_size, activation='relu', name='out_dense')(x)
 
         if pool_size > 1:
             x = Reshape((-1, output_size), name='Reshape2')(x)

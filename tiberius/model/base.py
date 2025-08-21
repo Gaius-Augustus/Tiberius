@@ -8,16 +8,16 @@ from .util import LSTMInferenceLoss, extract_nucleotides
 
 class TiberiusConfig(ModelConfig):
 
-    units: int = 200
-    filter_size: int = 64
+    units: int = 372
+    filter_size: int = 128
     kernel_size: int = 9
-    numb_conv: int = 2
-    numb_lstm: int = 3
+    numb_conv: int = 3
+    numb_lstm: int = 2
     pool_size: int = 9
     output_size: int = 15
 
     multi_loss: bool = False
-    residual_conv: bool = False
+    residual_conv: bool = True
 
     with_hmm: bool = False
     hmm_heads: int = 1
@@ -28,8 +28,8 @@ class TiberiusConfig(ModelConfig):
     initial_intron_len: int = 10000
     initial_ir_len: int = 10000
     intron_state_chain: int = 1
-    train_transitions: bool = True
-    train_start_dist: bool = True
+    train_transitions: bool = False
+    train_start_dist: bool = False
     share_noncoding_params: bool = False
 
     model_config = {"frozen": True}

@@ -15,6 +15,7 @@ class TrainerConfig(BaseModel):
     batch_size: int
     lr: float = 1e-4
 
+    use_lr_scheduler: bool = False
     warmup_epochs: int = 1
     min_lr: float = 1e-6
     decay_rate: float = 0.9

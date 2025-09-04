@@ -13,9 +13,9 @@ from typing import Sequence
 
 import tensorflow as tf
 
-from base import TiberiusConfig
-from trainer import Trainer, TrainerConfig
-from data_generator import DataGeneratorConfig, build_dataset
+from model.base import TiberiusConfig
+from train.trainer import Trainer, TrainerConfig
+from train.data_generator import DataGeneratorConfig, build_dataset
 from config_utils import load_json, deep_update, log_diff
 
 # logging
@@ -164,7 +164,6 @@ def main():
     # ensure save dir exists
     Path(tcfg.model_save_dir).expanduser().mkdir(parents=True, exist_ok=True)
 
-    # 6) Dataset 
     train_ds = build_dataset(train_files, tcfg.batch_size, mcfg.output_size,
                             shuffle=True, repeat=True, softmasking=args.softmasking)
     # val_ds   = make_dataset(val_files,   tcfg.batch_size, mcfg.output_size,

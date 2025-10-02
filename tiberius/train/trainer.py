@@ -4,8 +4,9 @@ from pathlib import Path
 import tensorflow as tf
 from pydantic import BaseModel
 
+from ..data import DatasetConfig, build_dataset
 from ..model.base import Tiberius, TiberiusConfig
-from .callback import EpochSave, WarmupExponentialDecay, PrintLr
+from .callback import EpochSave, PrintLr, WarmupExponentialDecay
 from .loss import CCE_F1_Loss
 
 
@@ -32,8 +33,7 @@ class Trainer:
         self,
         config: TrainerConfig | Path | str,
         model_config: TiberiusConfig | Path | str,
-        dataset: tf.data.Dataset,
-        val_data: tf.data.Dataset,
+        dataset_config: DatasetConfig | Path | str,
         load: Path | str | None = None,
     ) -> None:
         if not isinstance(model_config, TiberiusConfig):
@@ -46,9 +46,22 @@ class Trainer:
                 config = TrainerConfig(**json.load(f))
         self.config = config
 
+        if isinstance(dataset_config, (Path, str)):
+            with open(dataset_config, "r") as f:
+                dataset_config = DatasetConfig(**json.load(f))
+        self.dataset_config = dataset_config
+        self.train_dataset = build_dataset(
+            self.dataset_config.train_paths,
+            self.dataset_config,
+        )
+        self.val_dataset = None
+        if self.dataset_config.validation_paths is not None:
+            self.val_dataset = build_dataset(
+                self.dataset_config.validation_paths,
+                self.dataset_config,
+            )
+
         self.load = Path(load).expanduser() if load is not None else None
-        self.dataset = dataset
-        self.val_data = val_data
 
     def compile(self) -> None:
         schedule = WarmupExponentialDecay(

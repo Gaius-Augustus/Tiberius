@@ -1,0 +1,55 @@
+{
+    "model": {
+        "units": 372,
+        "filter_size": 128,
+        "kernel_size": 9,
+        "numb_conv": 3,
+        "numb_lstm": 2,
+        "pool_size": 9,
+        "output_size": 15,
+
+        "with_hmm": false,
+        "hmm_heads": 1,
+        "hmm_reverse_strand": false,
+        "parallel_factor": 1,
+        "initial_exon_len": 100,
+        "initial_intron_len": 10000,
+        "initial_ir_len": 10000,
+
+        "intron_state_chain": 1,
+        "train_transitions": true,
+        "train_start_dist": true,
+        "residual_conv": true,
+        "multi_loss": false
+    },
+
+    "dataset": {
+        "files": "",
+        "batch_size": 500,
+        "shuffle": true,
+        "repeat": true,
+        "output_size": 15,
+        "input_size": 6,
+        "clamsa": false,
+        "oracle": false,
+        "tx_filter": [],
+        "tx_filter_region": 1000,
+        "seq_weights_window": 250,
+        "seq_weights_value": 100,
+        "compression": "GZIP",
+        "shuffle_buffer": 100
+    },
+
+    "trainer": {
+        "epochs": 100,
+        "batch_size": 500,
+        "steps_per_epoch": 5000,
+        "lr": 1e-4,
+        "use_lr_scheduler": false,
+        "warmup_epochs": 1,
+        "min_lr": 1e-4,
+        "decay_rate": 0.9,
+        "loss_f1_factor": 0.0,
+        "model_save_dir": "./tiberius_training/"
+    }
+}

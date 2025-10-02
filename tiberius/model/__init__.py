@@ -1,1 +1,1 @@
-from .base import Tiberius
+from .base import Tiberius, TiberiusConfig

@@ -112,7 +112,7 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
                             'lru_layer', 'lru_hidden_state_dim', 
                             'lru_max_tree_depth', 'lru_init_bounds', 
                             'lru_scan_use_tf_while_loop', 'lru_scan_base_case_n',
-                            'use_optimized_scan']
+                            'use_optimized_scan', 'use_special_lru_scan']
             relevant_args = {key: config[key] for key in relevant_keys if key in config}
             model = lstm_model(**relevant_args)
         #if model_load_lstm:
@@ -164,9 +164,13 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
         else:
             loss_weights = None
             loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"], from_logits=True)
-        model.compile(loss=loss, optimizer=adam, metrics=['accuracy'], loss_weights=loss_weights) 
+        model.compile(loss=loss, optimizer=adam, 
+                      metrics=['accuracy'], 
+                      loss_weights=loss_weights,
+                      #jit_compile=True if args.jit_compile else 'auto'
+                      ) 
         model.summary()
-        #model.save(model_save_dir+"/untrained.keras")  # get error that dataset already exists
+        model.save(model_save_dir+"/untrained") 
         callbacks = [epoch_callback, csv_logger, lr_callback, gpu_callback, WandbCallback(save_model=False)] \
             if config['use_lr_scheduler'] else [epoch_callback, csv_logger, gpu_callback, WandbCallback(save_model=False)]
         model.fit(dataset, epochs=config["num_epochs"], validation_data=val_data,
@@ -252,11 +256,14 @@ def train_clamsa(dataset, model_save_dir, config, val_data=None, model_load=None
         if config["loss_weights"]:
             model.compile(loss=cce_loss, optimizer=adam, 
                 metrics=['accuracy'], #sample_weight_mode='temporal', 
-                loss_weights=config["loss_weights"]
+                loss_weights=config["loss_weights"],
+                #jit_compile=True if args.jit_compile else 'auto'
                 )
         else:
             model.compile(loss=cce_loss, optimizer=adam, 
-                metrics=['accuracy'])        
+                metrics=['accuracy'],
+                #jit_compile=True if args.jit_compile else 'auto'
+                )        
         model.summary()
 
         model.fit(dataset, epochs=config["num_epochs"], 
@@ -325,7 +332,7 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
                          'output_size', 'residual_conv', 'softmasking',
                         'clamsa_kernel', 'lru_layer', 'lru_hidden_state_dim', 
                         'lru_max_tree_depth', 'lru_init_bounds', 'lru_scan_use_tf_while_loop',
-                        'lru_scan_base_case_n', 'use_optimized_scan']
+                        'lru_scan_base_case_n', 'use_optimized_scan', 'use_special_lru_scan']
         relevant_args = {key: config[key] for key in relevant_keys if key in config}
         model = lstm_model(**relevant_args)
         if model_load:
@@ -333,13 +340,17 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
             model.load_weights(model_load + '/variables/variables')
         if config["loss_weights"]:
             model.compile(loss=cce_loss, optimizer=optimizer, 
-                metrics=['accuracy'], #sample_weight_mode='temporal', 
-                loss_weights=config["loss_weights"]
+                metrics=['accuracy'], sample_weight_mode='temporal', 
+                loss_weights=config["loss_weights"],
+                #jit_compile=True if args.jit_compile else 'auto'
                 )
         else:
             model.compile(loss=cce_loss, optimizer=optimizer, 
-                metrics=['accuracy']) #, jit_compile=True)       #ATTENTION JIT_COMPILE=TRUE 
+                metrics=['accuracy'],
+                #jit_compile=True if args.jit_compile else 'auto'
+                ) 
         model.summary()
+        model.save(model_save_dir+"/untrained") 
         callbacks = [epoch_callback, csv_logger, lr_callback, gpu_callback, WandbCallback(save_model=False)] \
             if config['use_lr_scheduler'] else [epoch_callback, csv_logger, gpu_callback, WandbCallback(save_model=False)]
         model.fit(dataset, epochs=config["num_epochs"], validation_data=val_data,

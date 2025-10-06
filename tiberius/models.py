@@ -144,9 +144,9 @@ def lstm_model(units=200, filter_size=64,
                lstm_mask=False, output_size=7,
                multi_loss=False, residual_conv=False,
                clamsa=False, clamsa_kernel=6, softmasking=True, lru_layer=False,
-               lru_hidden_state_dim=200, lru_max_tree_depth=48, lru_init_bounds='',
+               lru_hidden_state_dim=200, lru_max_tree_depth=48, lru_init_bounds=None,
                lru_scan_use_tf_while_loop=False, lru_scan_base_case_n=None,
-               use_optimized_scan=False
+               use_optimized_scan=False, use_special_lru_scan=False
               ):
     """
     Constructs a hybrid model that combines CNNs and bLSTM layers for gene prediction.
@@ -233,6 +233,11 @@ def lstm_model(units=200, filter_size=64,
     # Bidirectional LSTM layers
     if not lru_init_bounds:
         lru_init_bounds = [[[0.,1.,0.,2*pi,1.]] for _ in range(numb_lstm)]
+    elif isinstance(lru_init_bounds, str):
+            lru_init_bounds = np.load(lru_init_bounds).tolist()
+    # assert lru_init_bounds is a list of length numb_lstm
+    assert(len(lru_init_bounds) == numb_lstm), "lru_init_bounds must be a list of length numb_lstm"
+
     print("LRU init bounds: ", lru_init_bounds)
     for i in range(numb_lstm):
         if lru_layer:
@@ -250,7 +255,8 @@ def lstm_model(units=200, filter_size=64,
                   init_bounds=lru_init_bounds[i],
                   scan_use_tf_while_loop=lru_scan_use_tf_while_loop, 
                   scan_base_case_n=lru_scan_base_case_n,
-                  use_optimized_scan=use_optimized_scan)
+                  use_optimized_scan=use_optimized_scan,
+                  use_special_lru_scan=use_special_lru_scan)
 
             x = lru_block(x)# no additional dropout for lru layer
  

@@ -162,6 +162,18 @@ class PredictionGTF:
                     custom_objects=custom_objects, 
                     compile=False,
                     )
+            #### patch max_tree_depth ####
+            if self.lru:
+            # set maxtree_depth to bigger value for inference
+                for layer in self.lstm_model.layers:
+                    if hasattr(layer, "max_tree_depth"):
+                        print(f"Setting max_tree_depth of layer {layer.name} to 48 for inference. Was {layer.max_tree_depth} during training.")
+                        layer.max_tree_depth = 48
+                        print(f"Setting max_tree_depth of layer lru_fw to 48 for inference. Was {layer.lru_fw.max_tree_depth} during training.")
+                        layer.lru_fw.max_tree_depth = 48
+                        if layer.bidirectional:
+                            layer.lru_rv.max_tree_depth = 48
+            ##############################
             self.make_default_hmm(inp_size=self.lstm_model.output.shape[-1])
         elif self.model_path_old: 
             custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
@@ -173,6 +185,17 @@ class PredictionGTF:
 
             self.model = keras.models.load_model(self.model_path_old, 
                     custom_objects=custom_objects)
+            #### patch max_tree_depth ####
+            if self.lru:
+            # set maxtree_depth to bigger value for inference
+                for layer in self.model.layers:
+                    if hasattr(layer, "max_tree_depth"):
+                        print(f"Setting max_tree_depth of LRU layer to 48 for inference. Was {layer.max_tree_depth} during training.")
+                        layer.max_tree_depth = 48
+                        layer.lru_fw.max_tree_depth = 48
+                        if layer.bidirectional:
+                            layer.lru_rv.max_tree_depth = 48
+            ##############################
             try:
                 lstm_output=self.model.get_layer('out').output
             except ValueError as e:
@@ -187,6 +210,8 @@ class PredictionGTF:
                 self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
             print(f"Running gene pred hmm layer with parallel factor {self.gene_pred_hmm_layer.parallel_factor}")
             self.gene_pred_hmm_layer.cell.recurrent_init()
+
+
         if summary:
             self.lstm_model.summary()
         

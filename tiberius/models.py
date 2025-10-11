@@ -139,7 +139,7 @@ def custom_cce_f1_loss(f1_factor, batch_size,
        
 def lstm_model(units=200, filter_size=64, 
               kernel_size=9, numb_conv=2, 
-               numb_lstm=3, dropout_rate=0.0,
+               numb_lstm=3, dropout_rate=0.0, 
                pool_size=10, stride=0, 
                lstm_mask=False, output_size=7,
                multi_loss=False, residual_conv=False,
@@ -236,7 +236,7 @@ def lstm_model(units=200, filter_size=64,
     elif isinstance(lru_init_bounds, str):
             lru_init_bounds = np.load(lru_init_bounds).tolist()
     # assert lru_init_bounds is a list of length numb_lstm
-    assert(len(lru_init_bounds) == numb_lstm), "lru_init_bounds must be a list of length numb_lstm"
+    assert(len(lru_init_bounds) == numb_lstm), f"lru_init_bounds must be a list of length {numb_lstm}"
 
     print("LRU init bounds: ", lru_init_bounds)
     for i in range(numb_lstm):

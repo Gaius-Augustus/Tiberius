@@ -383,7 +383,7 @@ def run_tiberius(args):
     
 
 def main():    
-    from tiberius_args import parseCmd
+    from tiberius import parseCmd
     args = parseCmd()
     run_tiberius(args)
 

@@ -38,5 +38,4 @@ def parseCmd():
     parser.add_argument('--mask_flank',  type=int, default=500,
         help='Number of bases flanking the masked transcript on both sides to be masked as well')
 
-
     return parser.parse_args()

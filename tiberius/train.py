@@ -29,16 +29,12 @@ from tensorflow.keras.callbacks import LearningRateScheduler
 if args.LRU:
     sys.path.insert(0, args.LRU)
     import LRU_tf as lru
-    
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # WARN & ERROR only
-
-#from gradient_accumulator import GradientAccumulateOptimizer   # CHANGED: for gradiant accumulation... need to try
 from track_gpu_callback import GPUMemoryCallback
 gpu_callback_step_size = 100
 
 gpus = tf.config.list_physical_devices('GPU')
 print("CUDA_VISIBLE_DEVICES:", os.environ.get("CUDA_VISIBLE_DEVICES"))
-print("TF sieht:", tf.config.list_physical_devices('GPU'))
+print("TF GPU access:", tf.config.list_physical_devices('GPU'))
 
 import wandb
 from wandb.integration.keras import WandbCallback
@@ -220,6 +216,7 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
                       loss_weights=loss_weights,
                       #jit_compile=True if args.jit_compile else 'auto'
                       ) 
+        print_lr_cb = PrintLr()
         model.summary()
         model.save(model_save_dir+"/untrained") 
         callbacks = [epoch_callback, csv_logger, print_lr_cb, gpu_callback, WandbCallback(save_model=False)] \
@@ -340,11 +337,6 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
     csv_logger = CSVLogger(f'{model_save_dir}/training.log', append=True, separator=';')
     gpu_callback = GPUMemoryCallback(step_size=gpu_callback_step_size, file_path=model_save_dir + "/gpu_ram_usage.json")
     
-    if config['sgd']:
-        optimizer = SGD(learning_rate=config['lr'])
-    else:
-        optimizer = Adam(learning_rate=config['lr'])
-    
   
     
     with strategy.scope():
@@ -399,15 +391,12 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
         if config["loss_weights"]:
             model.compile(loss=cce_loss, optimizer=optimizer, 
                 metrics=['accuracy'], sample_weight_mode='temporal', 
-                loss_weights=config["loss_weights"],
-                #jit_compile=True if args.jit_compile else 'auto'
-                )
+                loss_weights=config["loss_weights"])
         else:
             model.compile(loss=cce_loss, optimizer=optimizer, 
-                metrics=['accuracy'],
-                #jit_compile=True if args.jit_compile else 'auto'
-                ) 
+                metrics=['accuracy']) 
         model.summary()
+        print_lr_cb = PrintLr()
         model.save(model_save_dir+"/untrained") 
         callbacks = [epoch_callback, csv_logger, print_lr_cb, gpu_callback, WandbCallback(save_model=False)] \
             if config['use_lr_scheduler'] else [epoch_callback, csv_logger, gpu_callback, WandbCallback(save_model=False)]
@@ -554,8 +543,7 @@ def main():
             'loss_f1_factor': 2.0,
             'sgd': False,
             'oracle': False, # if True, the correct labels will be used as input data. Can be used to debug the HMM.
-            "lru_layer": False,
-            "batch_accumulation": 1
+            "lru_layer": False, # if True, uses an LRU layer instead of LSTM
         }
         
     config_dict['model_load'] = os.path.abspath(args.load) if args.load else None
@@ -600,7 +588,6 @@ def main():
           tx_filter=mask_tx_list,
           tx_filter_region=config_dict["mask_flank"]
       )
-    print(f"BATCH SIZE:\t {config_dict['batch_size']}")
     
     dataset = generator.get_dataset()
 
@@ -622,7 +609,7 @@ def main():
             model_load=config_dict["model_load"],
             trainable=config_dict["trainable_lstm"], 
             constant_hmm=config_dict["constant_hmm"]
-        )
+            )
     elif args.clamsa:
         train_clamsa(dataset=dataset,
                     model_save_dir=config_dict["model_save_dir"], 
@@ -633,8 +620,7 @@ def main():
     else:
         train_lstm_model(dataset=dataset, val_data=val_data,
             model_save_dir=config_dict["model_save_dir"], config=config_dict,
-            model_load=config_dict["model_load"]
-        )
+            model_load=config_dict["model_load"])
 
 if __name__ == '__main__':
     main()

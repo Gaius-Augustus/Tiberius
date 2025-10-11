@@ -116,7 +116,7 @@ class PredictionGTF:
             except Exception as e:
                 print(f"Error could not find config of the model. It should be located at {self.model_path}/model_config.json: {e}")
                 sys.exit(1)
-            relevant_keys = ['units', 'filter_size', 'kernel_size',
+            relevant_keys = ['units', 'filter_size', 'kernel_size', 
                 'numb_conv', 'numb_lstm', 'dropout_rate', 
                 'pool_size', 'stride', 'lstm_mask', 'clamsa',
                 'output_size', 'residual_conv', 'softmasking',
@@ -210,8 +210,6 @@ class PredictionGTF:
                 self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
             print(f"Running gene pred hmm layer with parallel factor {self.gene_pred_hmm_layer.parallel_factor}")
             self.gene_pred_hmm_layer.cell.recurrent_init()
-
-
         if summary:
             self.lstm_model.summary()
         

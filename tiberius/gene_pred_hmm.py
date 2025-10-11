@@ -211,24 +211,6 @@ class GenePredHMMLayer(HmmLayer):
             config["trainable_starting_distribution"] = config["starting_distribution_trainable"]
             del config["starting_distribution_trainable"]
         config["emitter_init"] = deserialize(config["emitter_init"])
-        if "emit_embeddings" in config:
-            del config["emit_embeddings"]  # remove deprecated key
-        if "embedding_dim" in config:
-            del config["embedding_dim"]
-        if "full_covariance" in config:
-            del config["full_covariance"]
-        if "embedding_kernel_init" in config:
-            del config["embedding_kernel_init"]
-        if "initial_variance" in config:
-            del config["initial_variance"]
-        if "temperature" in config:
-            del config["temperature"]
-        if "simple" in config:
-            del config["simple"]
-        if "variance_l2_lambda" in config:
-            del config["variance_l2_lambda"]
-        if "use_border_hints" in config:
-            del config["use_border_hints"]
         return cls(**config)
 
 

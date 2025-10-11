@@ -53,6 +53,10 @@ class DataGenerator:
         self.output_size = output_size
         self.hmm_factor = hmm_factor
         self.softmasking=softmasking
+        if self.softmasking:
+            self.input_shape = 6
+        else:
+            self.input_shape = 5
         self.clamsa = clamsa
         self.oracle = oracle
         self.threads = threads
@@ -145,10 +149,12 @@ class DataGenerator:
             tf.debugging.assert_rank(y, 2, message="y must be [seq_len, output_size]")
             x = tf.reshape(x, [-1, tf.shape(x)[-1]]) 
             y = tf.reshape(y, [-1, self.output_size])
+            x.set_shape([None, self.input_shape])
+            y.set_shape([None, self.output_size])
             if tf.greater(tf.size(t), 0):
                 t = tf.reshape(t, [-1, 3])
             if not self.softmasking:
-                x = x[:, :, :5]
+                x = x[:, :5]
             
             if y.shape[-1] != self.output_size:
                 y = self._reformat_labels(y)
@@ -169,21 +175,21 @@ class DataGenerator:
             else:
                 X = x
                 Y = y
-            def with_tx():
-                seq_len = tf.shape(y)[0]
-                w = self.get_seq_mask(seq_len,
-                                    transcripts=t,
+            seq_len = tf.shape(y)[0]
+
+            real_w = self.get_seq_mask(seq_len, transcripts=t,
                                     tx_filter=self.tx_filter,
                                     r_u=self.tx_filter_region,
-                                    r_f=self.tx_filter_region//2)
-                return X, Y, w
+                                    r_f=self.tx_filter_region//2) 
 
-            def without_tx():
-                default_w = tf.ones([tf.shape(y)[0]], dtype=tf.float32) 
-                return X, Y, default_w
+            default_w = tf.ones([seq_len], dtype=tf.float32)         
+
+            has_tx = tf.size(t) > 0
+            w = tf.where(has_tx, real_w, default_w)                 
             
-            mask = tf.logical_and(tf.size(t) > 0, tf.size(t) > 0)            
-            return tf.cond(mask, with_tx, without_tx)
+            w = tf.expand_dims(w, axis=-1)                           
+            w.set_shape([None, 1])
+            return X, Y, w
 
         dataset = dataset.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
         dataset = dataset.batch(self.batch_size, drop_remainder=True)

@@ -23,7 +23,7 @@ import tiberius.models as models
 from tiberius.models import (weighted_categorical_crossentropy, custom_cce_f1_loss, BatchLearningRateScheduler, 
                     add_hmm_only, add_hmm_layer, ValidationCallback,
                     BatchSave, EpochSave, lstm_model, add_constant_hmm, 
-                    make_weighted_cce_loss,)
+                    make_weighted_cce_loss, Cast)
 from tensorflow.keras.callbacks import LearningRateScheduler
 
 if args.LRU:
@@ -46,6 +46,55 @@ from wandb.integration.keras import WandbCallback
 strategy = tf.distribute.MirroredStrategy()
 
 batch_save_numb = 1000
+
+
+@tf.keras.utils.register_keras_serializable()
+class WarmupExponentialDecay(tf.keras.optimizers.schedules.LearningRateSchedule):
+    def __init__(self, peak_lr, warmup_epochs, decay_rate, min_lr, steps_per_epoch):
+        super().__init__()
+        self.peak_lr         = peak_lr
+        self.warmup_epochs   = warmup_epochs
+        self.decay_rate      = decay_rate
+        self.min_lr          = min_lr
+        self.steps_per_epoch = tf.constant(steps_per_epoch, dtype=tf.float32)
+
+    def __call__(self, step):
+        # step is a scalar int32/64 tensor: number of batches so far
+        # convert to epoch index by integer division
+        epoch_int = tf.cast(step, dtype=tf.float32) // self.steps_per_epoch
+        epoch = tf.cast(epoch_int, tf.float32)
+        lr = tf.cond(
+            epoch < self.warmup_epochs,
+            lambda: self.peak_lr * ((epoch + 1) / tf.cast(self.warmup_epochs, tf.float32)),
+            lambda: tf.maximum(
+                self.peak_lr * tf.pow(self.decay_rate, epoch - self.warmup_epochs + 1),
+                self.min_lr
+            )
+        )
+        return lr
+
+    def get_config(self):
+        return {
+            "peak_lr":         self.peak_lr,
+            "warmup_epochs":   self.warmup_epochs,
+            "decay_rate":      self.decay_rate,
+            "min_lr":          self.min_lr,
+            "steps_per_epoch": int(self.steps_per_epoch.numpy()),
+        }
+
+class PrintLr(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        # logs['lr'] will be set by LearningRateScheduler
+        lr = logs.get('lr')
+        if lr is not None:
+            print(f"Epoch {epoch+1}: Learning rate is {lr:.6f}")
+        else:
+            # fallback if you didn’t use a scheduler callback
+            lr_t = self.model.optimizer.learning_rate
+            # if it’s a schedule, call it on current iteration
+            if isinstance(lr_t, tf.keras.optimizers.schedules.LearningRateSchedule):
+                lr_t = lr_t(self.model.optimizer.iterations)
+            print(f"\nEpoch {epoch+1}: Learning rate is {tf.keras.backend.get_value(lr_t):.6f}")
 
 def train_hmm_model(dataset, model_save_dir, config, val_data=None,
                   model_load=None, model_load_lstm=None, model_load_hmm=None, trainable=True, constant_hmm=False
@@ -71,85 +120,87 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
 
     csv_logger = CSVLogger(f'{model_save_dir}/training.log', 
                 append=True, separator=';')
-     # add learning rate scheduler
-    if config['use_lr_scheduler']:
-        warmup_epochs = config['warmup']
-        peak_lr = config['lr']
-        min_lr = config['min_lr']
-        decay_rate = config['lr_decay_rate']
-        def scheduler(epoch, lr):
-            if epoch < warmup_epochs:
-                # linear warm-up: epoch goes 0…warmup_epochs-1, so (epoch+1)/warmup_epochs ∈ (0,1]
-                return peak_lr * (epoch + 1) / warmup_epochs
-            else:
-                # exponential decay off the *previous* lr, but don’t go below min_lr
-                decayed = lr * 0.9
-                return tf.maximum(decayed, min_lr)
-
-        lr_callback = tf.keras.callbacks.LearningRateScheduler(scheduler, verbose=1)
-
     gpu_callback = GPUMemoryCallback(step_size=gpu_callback_step_size, file_path=model_save_dir + "/gpu_ram_usage.json")
 
-    adam = Adam(learning_rate=config['lr'])
     with strategy.scope():
-        if config['oracle']:
-            inputs = tf.keras.layers.Input(shape=(None, 6 if config['softmasking'] else 5), name='main_input')
-            oracle_inputs = tf.keras.layers.Input(shape=(None, config['output_size']), name='oracle_input')
-            model = tf.keras.Model(inputs=[inputs, oracle_inputs], outputs=oracle_inputs) 
-        elif model_load_lstm:
-            custom_objects ={'custom_cce_f1_loss': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
-                                                        'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size'])}
-            if args.LRU:
-                custom_objects['LRU_Block'] = lru.LRU_Block
-                print(custom_objects)
-            model = keras.models.load_model(model_load_lstm, custom_objects=custom_objects) 
-        else:
-            relevant_keys = ['units', 'filter_size', 'kernel_size', 
-                            'numb_conv', 'numb_lstm', 'dropout_rate', 
-                            'pool_size', 'stride', 'lstm_mask', 'co',
-                            'output_size', 'residual_conv', 'softmasking',
-                            'clamsa_kernel', 'clamsa', 'clamsa_kernel', 
-                            'lru_layer', 'lru_hidden_state_dim', 
-                            'lru_max_tree_depth', 'lru_init_bounds', 
-                            'lru_scan_use_tf_while_loop', 'lru_scan_base_case_n',
-                            'use_optimized_scan', 'use_special_lru_scan']
-            relevant_args = {key: config[key] for key in relevant_keys if key in config}
-            model = lstm_model(**relevant_args)
-        #if model_load_lstm:
-        #    print("load weights")
-        #    model.load_weights(model_load_lstm + '/variables/variables').expect_partial()
-        for layer in model.layers:
-            layer.trainable = trainable
-        if constant_hmm:
-            model = add_constant_hmm(model,seq_len=config['sample_size'], batch_size=config['batch_size'], output_size=config['output_size'])    
-        else: 
-            if model_load_hmm:
-                model_hmm = keras.models.load_model(model_load_hmm, 
-                                                    custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
-                                                            'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size'])})
-                gene_pred_layer = model_hmm.layers[-3]
-            else:
-                gene_pred_layer = None
-            model = add_hmm_layer(model, 
-                                    gene_pred_layer,
-                                    output_size=config['output_size'], 
-                                    num_hmm=config['num_hmm_layers'],
-                                    hmm_factor=config['hmm_factor'], 
-                                    share_intron_parameters=config['hmm_share_intron_parameters'],
-                                    trainable_nucleotides_at_exons=config['hmm_nucleotides_at_exons'],
-                                    trainable_emissions=config['hmm_trainable_emissions'],
-                                    trainable_transitions=config['hmm_trainable_transitions'],
-                                    trainable_starting_distribution=config['hmm_trainable_starting_distribution'],
-                                    include_lstm_in_output=config['multi_loss'])
+        if config['use_lr_scheduler']:
+            warmup_epochs = config.get('warmup', 1)
+            peak_lr = config['lr']
+            min_lr = config.get('min_lr', 1e-6)
+            decay_rate = config.get('lr_decay_rate', 0.9)
+            schedule = WarmupExponentialDecay(peak_lr=peak_lr,
+                                            warmup_epochs=warmup_epochs,
+                                            decay_rate=decay_rate,
+                                            min_lr=min_lr, 
+                                            steps_per_epoch=config["steps_per_epoch"])
+            adam = Adam(learning_rate=schedule)
+        else:            
+            adam = Adam(learning_rate=config['lr'])
+
         if model_load:
             # load the weights onto the raw model instead of using model.load to allow hyperparameter changes
             # i.e. you can change hmm_factor and still use checkpoint saved with a different hmm_factor
-            model.load_weights(model_load+"/variables/variables")
-            if trainable:
-                model.trainable = trainable
-                for layer in model.layers:
-                    layer.trainable = trainable
+            model = keras.models.load_model(model_load, 
+                    custom_objects={
+                    'custom_cce_f1_loss': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
+                    'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
+                    "Cast": Cast}, 
+                    compile=False,
+                    )
             print("Loaded model:", model_load)
+        else:
+            if config['oracle']:
+                inputs = tf.keras.layers.Input(shape=(None, 6 if config['softmasking'] else 5), name='main_input')
+                oracle_inputs = tf.keras.layers.Input(shape=(None, config['output_size']), name='oracle_input')
+                model = tf.keras.Model(inputs=[inputs, oracle_inputs], outputs=oracle_inputs) 
+            elif model_load_lstm:
+                custom_objects={
+                        'custom_cce_f1_loss': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
+                        'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
+                        "Cast": Cast}
+                if args.LRU:
+                    custom_objects['LRU_Block'] = lru.LRU_Block   # add LRU custom object if LRU is used
+
+                model = keras.models.load_model(model_load_lstm, 
+                        custom_objects=custom_objects, 
+                        compile=False,
+                        )
+            else:
+                relevant_keys = ['units', 'filter_size', 'kernel_size', 
+                                'numb_conv', 'numb_lstm', 'dropout_rate', 
+                                'pool_size', 'stride', 'lstm_mask', 'co',
+                                'output_size', 'residual_conv', 'softmasking',
+                                'clamsa_kernel', 'clamsa', 'clamsa_kernel',
+                                'lru_layer', 'lru_hidden_state_dim', 
+                                'lru_max_tree_depth', 'lru_init_bounds', 
+                                'lru_scan_use_tf_while_loop', 'lru_scan_base_case_n',
+                                'use_optimized_scan', 'use_special_lru_scan']
+                relevant_args = {key: config[key] for key in relevant_keys if key in config}
+                model = lstm_model(**relevant_args)
+            for layer in model.layers:
+                layer.trainable = trainable
+            if constant_hmm:
+                model = add_constant_hmm(model,seq_len=config['sample_size'], batch_size=config['batch_size'], output_size=config['output_size'])    
+            else: 
+                if model_load_hmm:
+                    model_hmm = keras.models.load_model(model_load_hmm, 
+                                    custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
+                                            'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size'])})
+                    gene_pred_layer = model_hmm.layers[-3]
+                else:
+                    gene_pred_layer = None
+                model = add_hmm_layer(model, 
+                                        gene_pred_layer,
+                                        output_size=config['output_size'], 
+                                        num_hmm=config['num_hmm_layers'],
+                                        hmm_factor=config['hmm_factor'], 
+                                        share_intron_parameters=config['hmm_share_intron_parameters'],
+                                        trainable_nucleotides_at_exons=config['hmm_nucleotides_at_exons'],
+                                        trainable_emissions=config['hmm_trainable_emissions'],
+                                        trainable_transitions=config['hmm_trainable_transitions'],
+                                        trainable_starting_distribution=config['hmm_trainable_starting_distribution'],
+                                        include_lstm_in_output=config['multi_loss'])
+        
         if config["loss_f1_factor"]:
             print("using f1 loss")
             loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
@@ -171,7 +222,7 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
                       ) 
         model.summary()
         model.save(model_save_dir+"/untrained") 
-        callbacks = [epoch_callback, csv_logger, lr_callback, gpu_callback, WandbCallback(save_model=False)] \
+        callbacks = [epoch_callback, csv_logger, print_lr_cb, gpu_callback, WandbCallback(save_model=False)] \
             if config['use_lr_scheduler'] else [epoch_callback, csv_logger, gpu_callback, WandbCallback(save_model=False)]
         model.fit(dataset, epochs=config["num_epochs"], validation_data=val_data,
                 steps_per_epoch=config["steps_per_epoch"],
@@ -294,25 +345,22 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
     else:
         optimizer = Adam(learning_rate=config['lr'])
     
-    # add learning rate scheduler
-    if config['use_lr_scheduler']:
-        warmup_epochs = config['warmup']
-        peak_lr = config['lr']
-        min_lr = config['min_lr']
-        decay_rate = config['lr_decay_rate']
-        def scheduler(epoch, lr):
-            if epoch < warmup_epochs:
-                # linear warm-up: epoch goes 0…warmup_epochs-1, so (epoch+1)/warmup_epochs ∈ (0,1]
-                return peak_lr * (epoch + 1) / warmup_epochs
-            else:
-                # exponential decay off the *previous* lr, but don’t go below min_lr
-                decayed = lr * 0.9
-                return tf.maximum(decayed, min_lr)
-
-        lr_callback = tf.keras.callbacks.LearningRateScheduler(scheduler, verbose=1)
+  
     
-    with strategy.scope():        
-        if config['sgd']:
+    with strategy.scope():
+        # add learning rate scheduler
+        if config['use_lr_scheduler']:
+            warmup_epochs = config.get('warmup', 1)
+            peak_lr = config['lr']
+            min_lr = config.get('min_lr', 1e-6)
+            decay_rate = config.get('lr_decay_rate', 0.9)
+            schedule = WarmupExponentialDecay(peak_lr=peak_lr,
+                                            warmup_epochs=warmup_epochs,
+                                            decay_rate=decay_rate,
+                                            min_lr=min_lr, 
+                                            steps_per_epoch=config["steps_per_epoch"])
+            optimizer = tf.keras.optimizers.Adam(learning_rate=schedule)
+        elif config['sgd']:
             optimizer = SGD(learning_rate=config['lr'])
         else:
             optimizer = Adam(learning_rate=config['lr'])
@@ -330,14 +378,24 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
                          'numb_conv', 'numb_lstm', 'dropout_rate', 
                          'pool_size', 'stride', 'lstm_mask', 'clamsa',
                          'output_size', 'residual_conv', 'softmasking',
-                        'clamsa_kernel', 'lru_layer', 'lru_hidden_state_dim', 
+                         'clamsa_kernel', 'lru_layer', 'lru_hidden_state_dim', 
                         'lru_max_tree_depth', 'lru_init_bounds', 'lru_scan_use_tf_while_loop',
                         'lru_scan_base_case_n', 'use_optimized_scan', 'use_special_lru_scan']
         relevant_args = {key: config[key] for key in relevant_keys if key in config}
-        model = lstm_model(**relevant_args)
+        custom_objects={
+                    'custom_cce_f1_loss': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
+                    'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
+                    "Cast": Cast}
+        if args.LRU:
+                custom_objects['LRU_Block'] = lru.LRU_Block # add LRU custom object if LRU is used
         if model_load:
-            print("load weights")
-            model.load_weights(model_load + '/variables/variables')
+            model = keras.models.load_model(model_load, 
+                    custom_objects=custom_objects,
+                    compile=False,
+                    )
+            # model.load_weights(model_load + '/variables/variables')
+        else:
+            model = lstm_model(**relevant_args)
         if config["loss_weights"]:
             model.compile(loss=cce_loss, optimizer=optimizer, 
                 metrics=['accuracy'], sample_weight_mode='temporal', 
@@ -351,7 +409,7 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
                 ) 
         model.summary()
         model.save(model_save_dir+"/untrained") 
-        callbacks = [epoch_callback, csv_logger, lr_callback, gpu_callback, WandbCallback(save_model=False)] \
+        callbacks = [epoch_callback, csv_logger, print_lr_cb, gpu_callback, WandbCallback(save_model=False)] \
             if config['use_lr_scheduler'] else [epoch_callback, csv_logger, gpu_callback, WandbCallback(save_model=False)]
         model.fit(dataset, epochs=config["num_epochs"], validation_data=val_data,
                 steps_per_epoch=config["steps_per_epoch"],

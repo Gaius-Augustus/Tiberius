@@ -7,11 +7,9 @@ import sys
 import json
 from tensorflow import keras
 from tiberius import DataGenerator
-
-
 from tiberius.models import lstm_model, custom_cce_f1_loss, Cast
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+def parse_args(argv = None) -> argparse.Namespace:
     """Parse CLI arguments, convert to absolute paths, and perform basic path sanity checks."""
     parser = argparse.ArgumentParser(
         description="Run training/validation pipeline and record validation loss."
@@ -76,7 +74,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv = None) -> None:
     """Main entry point.
 
     Expand this function with your model-specific training / evaluation code.

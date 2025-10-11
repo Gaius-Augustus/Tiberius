@@ -47,7 +47,7 @@ def main():
             example_x, example_y, example_clamsa = next(generator)            
             data_clamsa.append(example_clamsa[i][2])
         else:
-            example_x, example_y = next(generator)
+            example_x, example_y, _ = next(generator)
         data_x.append(example_x[i])
         data_y.append(example_y[i])
 
@@ -68,9 +68,9 @@ def parseCmd():
         Creates a numpy array from sampels from tfrecords files.
         The tfrecord files have to be named like <species>_<number>.tfrecords .
     """)
-    parser.add_argument('--tfrec_dir', type=str,
+    parser.add_argument('--tfrec_dir', type=str, required=True,
         help='Location of the tfrecords files.')
-    parser.add_argument('--species', type=str,
+    parser.add_argument('--species', type=str, required=True,
         help='Text file with species names. The tfrecords have to have the species name as prefix.')
     parser.add_argument('--tfrec_per_species', type=int, default=100,
         help='Number of tfRecord files per species. Default 100.')  

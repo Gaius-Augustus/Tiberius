@@ -9,7 +9,6 @@ import sys
 from collections import defaultdict
 from typing import List, Dict, Optional
 import numpy as np
-import time
 
 class GeneFeature:
     """Represents a single feature (exon or intron) in a transcript.
@@ -118,11 +117,12 @@ class Transcript:
             self.end = self.features[-1].end
 
         # check if an intron feature is missing
+        introns_added = []
         for i in range(len(self.features) - 1):
             if self.features[i].type == 'CDS' and self.features[i+1].type == 'CDS':
                 # check if an intron feature is missing
                 if self.features[i].end + 1 < self.features[i+1].start:
-                    self.features.insert(i + 1, GeneFeature(
+                    introns_added.append(GeneFeature(
                         feature_type='intron',
                         start=self.features[i].end + 1,
                         end=self.features[i+1].start - 1,
@@ -130,6 +130,8 @@ class Transcript:
                         phase=self.features[i].phase if self.strand == '+' \
                                 else self.features[i+1].phase
                     ))
+        self.features.extend(introns_added)
+        self.features.sort(key=lambda x: x.start)
 
         # redo phases
         # interate through features and set phases reverse iteration if strand is '-'
@@ -150,7 +152,7 @@ class Transcript:
                     feat.phase = self.features[list(indices)[k+1]].phase                                      
                 except IndexError:
                     print(f"Warning: Intron feature {feat.start}-{feat.end} in transcript {self.id} has no next CDS feature. Setting phase to 0.")
-                
+ 
 
     def to_class_labels(self) -> np.ndarray:
         """Assemble a full integer-label sequence for the transcript.

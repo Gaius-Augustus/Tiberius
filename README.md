@@ -27,7 +27,7 @@ singularity build tiberius.sif docker://larsgabriel23/tiberius:latest
 
 Run Tiberius with the Singularity container (use `-nv` for GPU support):
 ```
- singularity run --nv tiberius.sif tiberius.py [options]
+ singularity run --cleanenv --env PYTHONNOUSERSITE=1 --nv tiberius.sif tiberius.py [options]
 ```
 
 ### Installation from Source
@@ -120,7 +120,7 @@ If you want to write custom code for Tiberius gene prediction, see [example_pred
 ## Training Tiberius
 Currently, we provide only model weights for mammalian species. If you want to train Tiberius on your own data, you need at least a genomic seqeunce file (FASTA) and reference annotations (GTF) for each species. **Note that you can only train on genes with one transcript isoform per gene.** Please remove alternative splicing variants before training. There two ways to train Tiberius:
 1. Training Tiberius with a large dataset that does not fit into memory. See [training_large_data.md](docs/training_large_data.md) for documentation on how to prepare a dataset and train Tiberius with it.
-2. Training Tiberius with a small dataset that fits into memory. See [example_train_full.ipynb](test_data/Panthera_pardus/example_train_full.ipynb) for an example on how to load data and train Tiberius on a single genome. This can easily be adapted to train Tiberius on several genomes by first loading the data for all genome and then training the model. See [training_large_data.md](docs/training_large_data-md) (Step 1) and [softmasking_workflow.md](docs/softmasking_workflow.md) for the preparation of the genome and annotation files.
+2. Training Tiberius with a small dataset that fits into memory. See [example_train_full.ipynb](test_data/Panthera_pardus/example_train_full.ipynb) for an example on how to load data and train Tiberius on a single genome. This can easily be adapted to train Tiberius on several genomes by first loading the data for all genome and then training the model. See [training_large_data.md](docs/training_large_data.md) (Step 1) and [softmasking_workflow.md](docs/softmasking_workflow.md) for the preparation of the genome and annotation files.
 
 ## Tiberius Model and Accuracies on non Mammalian species
 

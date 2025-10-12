@@ -122,7 +122,7 @@ class PredictionGTF:
                 'output_size', 'residual_conv', 'softmasking',
                 'clamsa_kernel', 'lru_layer', 'lru_hidden_state_dim', 'lru_max_tree_depth',
                 'lru_init_bounds', 'lru_scan_use_tf_while_loop', 'lru_scan_base_case_n',
-                'use_optimized_scan']
+                'lru_use_memory_optimized_scan', 'lru_use_lru_optimized_scan']
             relevant_args = {key: config[key] for key in relevant_keys if key in config}
             self.lstm_model = lstm_model(**relevant_args)
             self.lstm_model.load_weights(f"{self.model_path}/weights.h5")
@@ -155,8 +155,8 @@ class PredictionGTF:
                             'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
                             "Cast": Cast}
             if self.lru:
-                    import LRU_tf as lru
-                    custom_objects['LRU_Block'] = lru.LRU_Block
+                    from lru import LRU_Block
+                    custom_objects['LRU_Block'] = LRU_Block
 
             self.lstm_model = keras.models.load_model(self.model_path_lstm_old, 
                     custom_objects=custom_objects, 
@@ -180,8 +180,8 @@ class PredictionGTF:
                             'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
                             "Cast": Cast}
             if self.lru:
-                    import LRU_tf as lru
-                    custom_objects['LRU_Block'] = lru.LRU_Block
+                    from lru import LRU_Block
+                    custom_objects['LRU_Block'] = LRU_Block
 
             self.model = keras.models.load_model(self.model_path_old, 
                     custom_objects=custom_objects)

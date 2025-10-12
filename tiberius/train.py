@@ -28,7 +28,7 @@ from tensorflow.keras.callbacks import LearningRateScheduler
 
 if args.LRU:
     sys.path.insert(0, args.LRU)
-    import LRU_tf as lru
+    from lru import LRU_Block
 from track_gpu_callback import GPUMemoryCallback
 gpu_callback_step_size = 100
 
@@ -155,7 +155,7 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
                         'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
                         "Cast": Cast}
                 if args.LRU:
-                    custom_objects['LRU_Block'] = lru.LRU_Block   # add LRU custom object if LRU is used
+                    custom_objects['LRU_Block'] = LRU_Block   # add LRU custom object if LRU is used
 
                 model = keras.models.load_model(model_load_lstm, 
                         custom_objects=custom_objects, 
@@ -170,7 +170,7 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
                                 'lru_layer', 'lru_hidden_state_dim', 
                                 'lru_max_tree_depth', 'lru_init_bounds', 
                                 'lru_scan_use_tf_while_loop', 'lru_scan_base_case_n',
-                                'use_optimized_scan', 'use_special_lru_scan']
+                                'lru_use_memory_optimized_scan', 'lru_use_lru_optimized_scan']
                 relevant_args = {key: config[key] for key in relevant_keys if key in config}
                 model = lstm_model(**relevant_args)
             for layer in model.layers:
@@ -372,14 +372,14 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
                          'output_size', 'residual_conv', 'softmasking',
                          'clamsa_kernel', 'lru_layer', 'lru_hidden_state_dim', 
                         'lru_max_tree_depth', 'lru_init_bounds', 'lru_scan_use_tf_while_loop',
-                        'lru_scan_base_case_n', 'use_optimized_scan', 'use_special_lru_scan']
+                        'lru_scan_base_case_n', 'lru_use_memory_optimized_scan', 'lru_use_lru_optimized_scan']
         relevant_args = {key: config[key] for key in relevant_keys if key in config}
         custom_objects={
                     'custom_cce_f1_loss': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
                     'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
                     "Cast": Cast}
         if args.LRU:
-                custom_objects['LRU_Block'] = lru.LRU_Block # add LRU custom object if LRU is used
+                custom_objects['LRU_Block'] = LRU_Block # add LRU custom object if LRU is used
         if model_load:
             model = keras.models.load_model(model_load, 
                     custom_objects=custom_objects,
@@ -609,18 +609,18 @@ def main():
             model_load=config_dict["model_load"],
             trainable=config_dict["trainable_lstm"], 
             constant_hmm=config_dict["constant_hmm"]
-            )
+        )
     elif args.clamsa:
         train_clamsa(dataset=dataset,
                     model_save_dir=config_dict["model_save_dir"], 
                     config=config_dict, 
                     model_load=config_dict["model_load"], 
-                    model_load_lstm=config_dict["model_load_lstm"]
-        )
+                    model_load_lstm=config_dict["model_load_lstm"])
     else:
         train_lstm_model(dataset=dataset, val_data=val_data,
             model_save_dir=config_dict["model_save_dir"], config=config_dict,
-            model_load=config_dict["model_load"])
+            model_load=config_dict["model_load"]
+        )
 
 if __name__ == '__main__':
     main()

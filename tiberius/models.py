@@ -269,7 +269,9 @@ def lstm_model(units=200, filter_size=64,
                   scan_use_tf_while_loop=lru_scan_use_tf_while_loop, 
                   scan_base_case_n=lru_scan_base_case_n,
                   use_memory_optimized_scan=lru_use_memory_optimized_scan,
-                  use_lru_optimized_scan=lru_use_lru_optimized_scan)
+                  use_lru_optimized_scan=lru_use_lru_optimized_scan,
+                  name=f'lru_block_{i+1}'
+                  )
 
             x = lru_block(x)# no additional dropout for lru layer
  

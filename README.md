@@ -1,3 +1,37 @@
+# Attention
+This branch implements the option to use LRU layers instead of LSTM layers. 
+
+The following files were edited to support LRU layers:
+- [pyproject.toml](https://github.com/Gaius-Augustus/Tiberius/blob/update_lru/pyproject.toml)
+- [tiberius/main.py](https://github.com/Gaius-Augustus/Tiberius/blob/update_lru/tiberius/main.py)
+- [tiberius/train.py](https://github.com/Gaius-Augustus/Tiberius/blob/update_lru/tiberius/train.py)
+- [tiberius/models.py](https://github.com/Gaius-Augustus/Tiberius/blob/update_lru/tiberius/models.py)
+- [tiberius/eval_model_class.py](https://github.com/Gaius-Augustus/Tiberius/blob/update_lru/tiberius/eval_model_class.py)
+- [tiberius/tiberius_args.py](https://github.com/Gaius-Augustus/Tiberius/blob/update_lru/tiberius/tiberius_args.py)
+- [tiberius/parse_args.py](https://github.com/Gaius-Augustus/Tiberius/blob/update_lru/tiberius/parse_args.py)
+
+The following file was added to track the GPU memory usage during training:
+- [tiberius/track_gpu_callback.py](https://github.com/Gaius-Augustus/Tiberius/blob/update_lru/tiberius/track_gpu_callback.py)
+
+Follow these [instructions](docs/install_tensorflow.md) to install Tensorflow 2.10. All dependencies that are needed to support LRU layers are added to pyproject.toml of this branch.  Therefore, to install this repository with LRU support firs checkout this branch ('update_lru') and then follow tehse steps:
+```shell
+git clone https://github.com/Gaius-Augustus/Tiberius
+cd Tiberius
+git ceckout update_lru
+pip install -e .
+```
+
+When using LRUs instead of LSTMs, it is important to add the path to the LRU repository for the training and inference. 
+```shell
+python tiberius/train.py --data $tfrecords/ --LRU $LRU  --cfg config.json --train_species_file species.txt --val_data val.npz
+```
+To validate the trained models use [compare_intervals_exact.pl](https://github.com/Gaius-Augustus/BRAKER/blob/master/scripts/compare_intervals_exact.pl) from the [BRAKER repository](https://github.com/Gaius-Augustus/BRAKER). For a reference annotation (ref_anno.gtf) and a list of pseudo gens (pseudo.gff3) use the following lines to obtain exon and gene level precision and recall for predicted genes (tiberius.gtf).
+```shell
+compare_intervals_exact.pl --f1 ref_annot.gtf --f2 tiberius.gtf --pseudo pseudo.gff3 --exon
+compare_intervals_exact.pl --f1 ref_annot.gtf --f2 tiberius.gtf --pseudo pseudo.gff3 --gene
+```
+
+
 ![Docker Pulls](https://img.shields.io/docker/pulls/larsgabriel23/tiberius) 
 
 # Tiberius: End-to-End Deep Learning with an HMM for Gene Prediction

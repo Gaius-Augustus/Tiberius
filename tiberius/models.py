@@ -165,6 +165,19 @@ def lstm_model(units=200, filter_size=64,
         multi_loss (bool): If True, utilizes intermediate outputs for multi-loss training.
         residual_conv (bool): If True, adds a residual connection from the convolutional layers to the final output.
         clamsa (bool): If True, clamsa track is added to class labels of the LSTM.
+        lru_layer (bool): If True, uses LRU layers instead of standard LSTM layers.
+                          If False, all arguments related to LRU layers are ignored.
+        lru_hidden_state_dim (int): The dimension of the hidden state in LRU layers.
+        lru_max_tree_depth (int): The maximum tree depth for associative scan of the LRU layers.
+        lru_init_bounds (list): Initialization bounds for the complex eigenvalues of the LRU layers.
+        lru_scan_base_case_n (int): Alternative base case for the associative scan of the LRU layers.
+                                    Is ignored if lru_use_memory_optimized_scan or lru_use_lru_optimized_scan is True.
+        lru_scan_use_tf_while_loop (bool): If True, uses a tf.while_loop for the alternative base cases of the associative
+                                           scan in LRU layers. Only used if lru_scan_base_case_n is not None.
+        lru_use_memory_optimized_scan (bool): If True, uses a memory optimized version of the associative scan in LRU layers.
+                                              Is ignored if lru_use_lru_optimized_scan is True.
+        lru_use_lru_optimized_scan (bool): If True, uses a LRU optimized version of the associative scan in LRU layers.
+
 
     Returns:
         tf.keras.Model: A compiled Keras model that is ready for training, featuring a mix of 

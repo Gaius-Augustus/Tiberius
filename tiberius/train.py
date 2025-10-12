@@ -36,9 +36,6 @@ gpus = tf.config.list_physical_devices('GPU')
 print("CUDA_VISIBLE_DEVICES:", os.environ.get("CUDA_VISIBLE_DEVICES"))
 print("TF GPU access:", tf.config.list_physical_devices('GPU'))
 
-import wandb
-from wandb.integration.keras import WandbCallback
-
 strategy = tf.distribute.MirroredStrategy()
 
 batch_save_numb = 1000
@@ -136,11 +133,14 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
         if model_load:
             # load the weights onto the raw model instead of using model.load to allow hyperparameter changes
             # i.e. you can change hmm_factor and still use checkpoint saved with a different hmm_factor
-            model = keras.models.load_model(model_load, 
-                    custom_objects={
+            custom_objects={
                     'custom_cce_f1_loss': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
                     'loss_': custom_cce_f1_loss(config['loss_f1_factor'], config['batch_size']),
-                    "Cast": Cast}, 
+                    "Cast": Cast}
+            if args.LRU:
+                custom_objects['LRU_Block'] = LRU_Block   # add LRU custom object if LRU is used
+            model = keras.models.load_model(model_load, 
+                    custom_objects=custom_objects, 
                     compile=False,
                     )
             print("Loaded model:", model_load)
@@ -214,13 +214,12 @@ def train_hmm_model(dataset, model_save_dir, config, val_data=None,
         model.compile(loss=loss, optimizer=adam, 
                       metrics=['accuracy'], 
                       loss_weights=loss_weights,
-                      #jit_compile=True if args.jit_compile else 'auto'
                       ) 
         print_lr_cb = PrintLr()
         model.summary()
-        model.save(model_save_dir+"/untrained") 
-        callbacks = [epoch_callback, csv_logger, print_lr_cb, gpu_callback, WandbCallback(save_model=False)] \
-            if config['use_lr_scheduler'] else [epoch_callback, csv_logger, gpu_callback, WandbCallback(save_model=False)]
+        model.save(model_save_dir+"/untrained", save_traces=False) 
+        callbacks = [epoch_callback, csv_logger, print_lr_cb, gpu_callback] \
+            if config['use_lr_scheduler'] else [epoch_callback, csv_logger, gpu_callback]
         model.fit(dataset, epochs=config["num_epochs"], validation_data=val_data,
                 steps_per_epoch=config["steps_per_epoch"],
                 validation_batch_size=config['batch_size'],
@@ -316,7 +315,7 @@ def train_clamsa(dataset, model_save_dir, config, val_data=None, model_load=None
 
         model.fit(dataset, epochs=config["num_epochs"], 
                 steps_per_epoch=config["steps_per_epoch"],
-                callbacks=[epoch_callback, csv_logger, gpu_callback, WandbCallback(save_model=False)])
+                callbacks=[epoch_callback, csv_logger, gpu_callback])
     
 def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=None):  
     """Trains the LSTM model using data provided by a tf.dataset, while saving the 
@@ -397,9 +396,9 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
                 metrics=['accuracy']) 
         model.summary()
         print_lr_cb = PrintLr()
-        model.save(model_save_dir+"/untrained") 
-        callbacks = [epoch_callback, csv_logger, print_lr_cb, gpu_callback, WandbCallback(save_model=False)] \
-            if config['use_lr_scheduler'] else [epoch_callback, csv_logger, gpu_callback, WandbCallback(save_model=False)]
+        model.save(model_save_dir+"/untrained", save_traces=False) 
+        callbacks = [epoch_callback, csv_logger, print_lr_cb, gpu_callback] \
+            if config['use_lr_scheduler'] else [epoch_callback, csv_logger, gpu_callback]
         model.fit(dataset, epochs=config["num_epochs"], validation_data=val_data,
                 steps_per_epoch=config["steps_per_epoch"],
                 callbacks=callbacks,
@@ -564,8 +563,6 @@ def main():
     for d in [config_dict["model_save_dir"], data_path]:
         if not os.path.exists(d):
             os.mkdir(d)
-        
-    wandb.init(project="Tiberius", config=config_dict)
 
     # get paths of tfrecord files
     species_file = f'{data_path}/{args.train_species_file}'

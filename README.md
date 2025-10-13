@@ -20,10 +20,12 @@ cd Tiberius
 git ceckout update_lru
 pip install -e .
 ```
+The implementation of the LRU layers  can be found in the private [LRU repository](https://github.com/Gaius-Augustus/LRU). Thereby, to run Tiberius with LRU layers first checkout the branch [param_init_bounds](https://github.com/Gaius-Augustus/LRU/tree/param_init_bounds) as this branch was used to adapt Tiberius.
 
 When using LRUs instead of LSTMs, it is important to add the path to the LRU repository for the training and inference. 
 ```shell
-python tiberius/train.py --data $tfrecords/ --LRU $LRU  --cfg config.json --train_species_file species.txt --val_data val.npz
+python tiberius/train.py --data $tfrecords/ --LRU $LRU_PATH  --cfg config.json --train_species_file species.txt --val_data val.npz
+python tiberius.py --LRU $LRU_PATH --model_old $MODEL_PATH --genome input.fasta --out output.gtf
 ```
 To validate the trained models use [compare_intervals_exact.pl](https://github.com/Gaius-Augustus/BRAKER/blob/master/scripts/compare_intervals_exact.pl) from the [BRAKER repository](https://github.com/Gaius-Augustus/BRAKER). For a reference annotation (ref_anno.gtf) and a list of pseudo gens (pseudo.gff3) use the following lines to obtain exon and gene level precision and recall for predicted genes (tiberius.gtf).
 ```shell

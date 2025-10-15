@@ -26,7 +26,8 @@ dependencies = [
   "numpy",
   "tensorflow[and-cuda]<2.18",  
   "biopython",
-  "tensorflow_probability==0.18.0"
+  "tensorflow_probability==0.18.0",
+  "rich"
 ]
 
 [project.optional-dependencies]

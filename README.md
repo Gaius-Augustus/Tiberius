@@ -1,7 +1,5 @@
 # Attention
-This branch implements the option to use LRU layers instead of LSTM layers. 
-
-The following files were edited to support LRU layers:
+This branch implements the option to use LRU layers instead of LSTM layers. The following files were edited to support the LRU layers:
 - [pyproject.toml](https://github.com/Gaius-Augustus/Tiberius/blob/update_lru/pyproject.toml)
 - [tiberius/main.py](https://github.com/Gaius-Augustus/Tiberius/blob/update_lru/tiberius/main.py)
 - [tiberius/train.py](https://github.com/Gaius-Augustus/Tiberius/blob/update_lru/tiberius/train.py)
@@ -13,14 +11,14 @@ The following files were edited to support LRU layers:
 The following file was added to track the GPU memory usage during training:
 - [tiberius/track_gpu_callback.py](https://github.com/Gaius-Augustus/Tiberius/blob/update_lru/tiberius/track_gpu_callback.py)
 
-Follow these [instructions](docs/install_tensorflow.md) to install Tensorflow 2.10. All dependencies that are needed to support LRU layers are added to pyproject.toml of this branch.  Therefore, to install this repository with LRU support firs checkout this branch ('update_lru') and then follow tehse steps:
+Follow these [instructions](docs/install_tensorflow.md) to install Tensorflow 2.10. All dependencies that are needed to support LRU layers are added to pyproject.toml of this branch.  Therefore, to install this repository follow these steps:
 ```shell
 git clone https://github.com/Gaius-Augustus/Tiberius
 cd Tiberius
 git ceckout update_lru
 pip install -e .
 ```
-The implementation of the LRU layers  can be found in the private [LRU repository](https://github.com/Gaius-Augustus/LRU). Thereby, to run Tiberius with LRU layers first checkout the branch [param_init_bounds](https://github.com/Gaius-Augustus/LRU/tree/param_init_bounds) as this branch was used to adapt Tiberius.
+The implementation of the LRU layers  can be found in the private [LRU repository](https://github.com/Gaius-Augustus/LRU). Thereby, to run Tiberius with LRU layers first checkout the branch [param_init_bounds](https://github.com/Gaius-Augustus/LRU/tree/param_init_bounds) as this branch was used for the integration of the LRU into Tiberius.
 
 When using LRUs instead of LSTMs, it is important to add the path to the LRU repository for the training and inference. 
 ```shell

@@ -162,9 +162,8 @@ class PredictionGTF:
                     custom_objects=custom_objects, 
                     compile=False,
                     )
-            #### patch max_tree_depth ####
             if self.lru:
-            # set maxtree_depth to bigger value for inference
+            # set max_tree_depth to a bigger value for inference because the sequences are longer than during training
                 for layer in self.lstm_model.layers:
                     if hasattr(layer, "max_tree_depth"):
                         print(f"Setting max_tree_depth of layer {layer.name} to 48 for inference. Was {layer.max_tree_depth} during training.")
@@ -173,7 +172,6 @@ class PredictionGTF:
                         layer.lru_fw.max_tree_depth = 48
                         if layer.bidirectional:
                             layer.lru_rv.max_tree_depth = 48
-            ##############################
             self.make_default_hmm(inp_size=self.lstm_model.output.shape[-1])
         elif self.model_path_old: 
             custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
@@ -185,9 +183,8 @@ class PredictionGTF:
 
             self.model = keras.models.load_model(self.model_path_old, 
                     custom_objects=custom_objects)
-            #### patch max_tree_depth ####
             if self.lru:
-            # set maxtree_depth to bigger value for inference
+            # set max_tree_depth to a bigger value for inference because the sequences are longer than during training
                 for layer in self.model.layers:
                     if hasattr(layer, "max_tree_depth"):
                         print(f"Setting max_tree_depth of LRU layer to 48 for inference. Was {layer.max_tree_depth} during training.")
@@ -195,7 +192,6 @@ class PredictionGTF:
                         layer.lru_fw.max_tree_depth = 48
                         if layer.bidirectional:
                             layer.lru_rv.max_tree_depth = 48
-            ##############################
             try:
                 lstm_output=self.model.get_layer('out').output
             except ValueError as e:

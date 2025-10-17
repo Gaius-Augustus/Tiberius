@@ -33,8 +33,6 @@ from track_gpu_callback import GPUMemoryCallback
 gpu_callback_step_size = 100
 
 gpus = tf.config.list_physical_devices('GPU')
-print("CUDA_VISIBLE_DEVICES:", os.environ.get("CUDA_VISIBLE_DEVICES"))
-print("TF GPU access:", tf.config.list_physical_devices('GPU'))
 
 strategy = tf.distribute.MirroredStrategy()
 

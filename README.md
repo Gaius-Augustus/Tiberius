@@ -30,7 +30,7 @@ To validate the trained models use [compare_intervals_exact.pl](https://github.c
 compare_intervals_exact.pl --f1 ref_annot.gtf --f2 tiberius.gtf --pseudo pseudo.gff3 --exon
 compare_intervals_exact.pl --f1 ref_annot.gtf --f2 tiberius.gtf --pseudo pseudo.gff3 --gene
 ```
-
+Example configuration files for Tiberius with LSTM and Tiberius with LRUs are given in [tiberius/config_LSTM.json](https://github.com/Gaius-Augustus/Tiberius/blob/update_lru/tiberius/config_LSTM.json) and [tiberius/config_LRU.json](https://github.com/Gaius-Augustus/Tiberius/blob/update_lru/tiberius/config_LRU.json).
 
 ![Docker Pulls](https://img.shields.io/docker/pulls/larsgabriel23/tiberius) 
 

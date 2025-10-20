@@ -12,25 +12,25 @@ class DatasetConfig(BaseModel):
     train_paths: Sequence[str]
     validation_paths: Sequence[str] | None = None
 
+    input_size: int = 6
+    output_size: int = 15
     batch_size: int = 500
     shuffle: bool = True
     repeat: bool = True
-    output_size: int = 15
-    hmm_factor: int | None = None
-    input_size: int = 6
+    softmasking: bool = True
+
     clamsa: bool = False
     oracle: bool = False
+
     tx_filter: Sequence[bytes] = ()
     tx_filter_region: int = 1000
-    seq_weights_window: int = 250                # r
-    seq_weights_value: float = 100.0             # w
-    softmasking: bool = True
+    seq_weights_window: int = 250
+    seq_weights_value: float = 100.0
 
     compression: str | None = "GZIP"
     shuffle_buffer: int = 100
     num_parallel_calls: Any = tf.data.AUTOTUNE
 
-    # default value: serialized empty [0,3] string tensor
     @property
     def empty_tx_serial(self) -> tf.Tensor:
         return tf.io.serialize_tensor(
@@ -41,9 +41,10 @@ class DatasetConfig(BaseModel):
 def build_dataset(paths: Sequence[str], cfg: DatasetConfig) -> tf.data.Dataset:
     files = []
     for file in paths: files.extend(expand_path(Path(file)))
+    files = list(map(str, files))
 
     files_ds = tf.data.Dataset.from_tensor_slices(files)
-    if len(paths) > 1: files_ds = files_ds.shuffle(len(paths))
+    if len(files) > 1: files_ds = files_ds.shuffle(len(files))
 
     ds = files_ds.interleave(
         lambda p: tf.data.TFRecordDataset(p, compression_type=cfg.compression),

@@ -7,12 +7,15 @@ class CCE_F1_Loss(tf.keras.Loss):
         self,
         f1_factor: float,
         batch_size: int,
+        output_dim: int = 15,
         include_reading_frame: bool = True,
         use_cce: bool = True,
         from_logits: bool = False,
     ) -> None:
+        super().__init__(name="cee_f1")
         self.f1_factor = f1_factor
         self.batch_size = batch_size
+        self.output_dim = output_dim
         self.include_reading_frame = include_reading_frame
         self.use_cce = use_cce
         self.from_logits = from_logits
@@ -32,36 +35,21 @@ class CCE_F1_Loss(tf.keras.Loss):
         if self.from_logits:
             y_pred = tf.nn.softmax(y_pred, axis=-1)
 
-        if tf.shape(y_true)[-1] == 5:
-            if self.include_reading_frame:
-                cds_pred = y_pred[:, :, -3:]
-                cds_true = y_true[:, :, -3:]
-            else:
-                cds_pred = tf.reduce_sum(
-                    y_pred[:, :, -3:],
-                    axis=-1,
-                    keepdims=True,
-                )
-                cds_true = tf.reduce_sum(
-                    y_true[:, :, -3:],
-                    axis=-1,
-                    keepdims=True,
-                )
+        dim = -3 if self.output_dim == 5 else 4
+        if self.include_reading_frame:
+            cds_pred = y_pred[:, :, dim:]
+            cds_true = y_true[:, :, dim:]
         else:
-            if self.include_reading_frame:
-                cds_pred = y_pred[:, :, 4:]
-                cds_true = y_true[:, :, 4:]
-            else:
-                cds_pred = tf.reduce_sum(
-                    y_pred[:, :, 4:],
-                    axis=-1,
-                    keepdims=True,
-                )
-                cds_true = tf.reduce_sum(
-                    y_true[:, :, 4:],
-                    axis=-1,
-                    keepdims=True,
-                )
+            cds_pred = tf.reduce_sum(
+                y_pred[:, :, dim:],
+                axis=-1,
+                keepdims=True,
+            )
+            cds_true = tf.reduce_sum(
+                y_true[:, :, dim:],
+                axis=-1,
+                keepdims=True,
+            )
 
         # Compute precision and recall for the specified class
         true_positives = tf.reduce_sum(cds_pred * cds_true, axis=1)

@@ -40,6 +40,7 @@ class Trainer:
             with open(Path(model_config).expanduser(), "r") as f:
                 model_config = TiberiusConfig(**json.load(f))
         self.model = Tiberius(**model_config.model_dump())
+        self.model.build((None, None, 6))
 
         if not isinstance(config, TrainerConfig):
             with open(Path(config).expanduser(), "r") as f:
@@ -76,6 +77,7 @@ class Trainer:
             loss=CCE_F1_Loss(
                 f1_factor=self.config.loss_f1_factor,
                 batch_size=self.config.batch_size,
+                output_dim=self.dataset_config.output_size,
                 from_logits=True,
             ),
             optimizer=tf.keras.optimizers.Adam(
@@ -100,10 +102,10 @@ class Trainer:
 
     def train(self) -> None:
         self.model.fit(
-            self.dataset,
+            self.train_dataset,
             epochs=self.config.epochs,
             steps_per_epoch=self.config.steps_per_epoch,
-            validation_data=self.val_data,
+            validation_data=self.val_dataset,
             validation_batch_size=self.config.batch_size,
             callbacks=self.get_callbacks(),
         )

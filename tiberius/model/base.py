@@ -1,5 +1,5 @@
 import tensorflow as tf
-from bricks2marble.tf import AnnotationHMM
+from bricks2marble.tf import AnnotationHMM, AnnotationHMMConfig
 from hidten.config import ModelConfig, with_config
 from hidten.hmm import HMMMode
 
@@ -19,18 +19,7 @@ class TiberiusConfig(ModelConfig):
     multi_loss: bool = False
     residual_conv: bool = True
 
-    with_hmm: bool = False
-    hmm_heads: int = 1
-    hmm_reverse_strand: bool = False
-    parallel_factor: int = 1
-
-    initial_exon_len: int = 100
-    initial_intron_len: int = 10000
-    initial_ir_len: int = 10000
-    intron_state_chain: int = 1
-    train_transitions: bool = False
-    train_start_dist: bool = False
-    share_noncoding_params: bool = False
+    hmm: AnnotationHMMConfig | None = None
 
     model_config = {"frozen": True}
 
@@ -92,19 +81,8 @@ class Tiberius(tf.keras.Model):
                 for _ in range(self.config.numb_lstm - 1)
             ]
 
-        if self.config.with_hmm:
-            self.hmm = AnnotationHMM(
-                heads=self.config.hmm_heads,
-                use_reverse_strand=self.config.hmm_reverse_strand,
-                parallel_factor=self.config.parallel_factor,
-                initial_exon_len=self.config.initial_exon_len,
-                initial_intron_len=self.config.initial_intron_len,
-                initial_ir_len=self.config.initial_ir_len,
-                intron_state_chain=self.config.intron_state_chain,
-                train_transitions=self.config.train_transitions,
-                train_start_dist=self.config.train_start_dist,
-                share_noncoding_params=self.config.share_noncoding_params,
-            )
+        if self.config.hmm is not None:
+            self.hmm = AnnotationHMM(**self.config.hmm.model_dump())
             self.hmm_dense = tf.keras.layers.Dense(15, activation="softmax")
 
     def build(self, input_shape: tuple[int | None, ...]) -> None:
@@ -133,17 +111,16 @@ class Tiberius(tf.keras.Model):
         else:
             self.out_dense.build(input_shape[:-1] + (2*self.config.units, ))
 
-        if self.config.with_hmm:
+        if self.config.hmm is not None:
             self.hmm.build(input_shape[:-1] + (15, ))
             self.hmm.hmm.mode = HMMMode.POSTERIOR
-            self.hmm.hmm.parallel_factor = self.config.parallel_factor
             hmm_out = self.hmm.compute_output_shape(input_shape[:-1]+(15, ))
             self.hmm_dense.build(input_shape[:-1]+(hmm_out[-2]*hmm_out[-1], ))
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         B, T, _ = tf.unstack(tf.shape(x))
 
-        if self.config.with_hmm:
+        if self.config.hmm is not None:
             nuc = extract_nucleotides(x)
         y = self.conv[0](x)
         for i in range(self.config.numb_conv-1):
@@ -168,7 +145,7 @@ class Tiberius(tf.keras.Model):
             x = tf.reshape(x, (B, -1, self.config.output_size))
 
         x = tf.nn.softmax(x)
-        if self.config.with_hmm:
+        if self.config.hmm is not None:
             x = self.hmm(x, nuc)
             x = self.hmm_dense(tf.reshape(x, (B, T, -1)))
         return x

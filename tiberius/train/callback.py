@@ -24,20 +24,6 @@ class PrintLr(tf.keras.callbacks.Callback):
             )
 
 
-class EpochSave(tf.keras.callbacks.Callback):
-
-    def __init__(self, model_save_dir: str) -> None:
-        super().__init__()
-        self.model_save_dir = model_save_dir
-        self.tf_old = tf.__version__ < "2.12.0"
-
-    def on_epoch_end(self, epoch, logs=None):
-        self.model.save(
-            f"{self.model_save_dir}/epoch_{epoch:02d}",
-            save_traces=False,
-        )
-
-
 class BatchLearningRateScheduler(
     tf.keras.optimizers.schedules.LearningRateSchedule
 ):

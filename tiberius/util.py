@@ -5,6 +5,7 @@ from typing import Any
 
 from .data import DatasetConfig
 from .model import TiberiusConfig
+from .model.residual import ResidualTiberiusConfig
 from .train import TrainerConfig
 
 
@@ -68,7 +69,11 @@ def setup_logging(log_dir: Path) -> None:
 
 def split_config(
     file: Path | str,
-) -> tuple[TiberiusConfig, DatasetConfig, TrainerConfig]:
+) -> tuple[
+    TiberiusConfig | ResidualTiberiusConfig,
+    DatasetConfig,
+    TrainerConfig,
+]:
     with open(file, "r") as f:
         total_dict = json.load(f)
     if (
@@ -80,6 +85,12 @@ def split_config(
             "A total config has to consist of model, dataset and trainer."
         )
 
+    if "n_layers" in total_dict["model"]:
+        return (
+            ResidualTiberiusConfig(**total_dict["model"]),
+            DatasetConfig(**total_dict["dataset"]),
+            TrainerConfig(**total_dict["trainer"]),
+        )
     return (
         TiberiusConfig(**total_dict["model"]),
         DatasetConfig(**total_dict["dataset"]),

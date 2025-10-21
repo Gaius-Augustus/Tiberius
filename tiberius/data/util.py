@@ -247,18 +247,21 @@ def _border_weights(
 
 def _preprocess_batched(ex: dict[str, tf.Tensor], cfg: "DatasetConfig"):
     # [B, T, C]
-    x = tf.reshape(ex["x"], [tf.shape(ex["x"])[0], -1, tf.shape(ex["x"])[-1]])
+    x = tf.reshape(ex["x"], [tf.shape(ex["x"])[0], tf.shape(ex["x"])[-1]])
     # [B, T, K]
-    y = tf.reshape(ex["y"], [tf.shape(ex["y"])[0], -1, tf.shape(ex["y"])[-1]])
+    y = tf.reshape(ex["y"], [tf.shape(ex["y"])[0], tf.shape(ex["y"])[-1]])
     # [B, N, 3] strings
     t = ex["t"]
 
     if not cfg.softmasking:
-        x = x[:, :, :5]
+        x = x[..., :5]
 
+    # TODO: currently not working
     # y = _reformat_labels(y, cfg.output_size)  # [B, T, O]
     y = tf.cast(y, tf.float32)
+    y.set_shape((cfg.T, cfg.output_size))
     x = tf.cast(x, tf.float32)
+    x.set_shape((cfg.T, cfg.input_size))
 
     if cfg.clamsa:
         X = (x, tf.cast(ex["clamsa"], tf.float32))
@@ -270,6 +273,7 @@ def _preprocess_batched(ex: dict[str, tf.Tensor], cfg: "DatasetConfig"):
         X = x
         Y = y
 
+    # TODO: sample_weights
     # # Weights (per example independently)
     # def per_example_weights(i):
     #     tx_i = t[i]  # [Ni,3]

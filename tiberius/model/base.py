@@ -1,9 +1,9 @@
 import tensorflow as tf
-from bricks2marble.tf import AnnotationHMM, AnnotationHMMConfig
 from hidten.config import ModelConfig, with_config
 from hidten.hmm import HMMMode
 
 from .util import LSTMInferenceLoss, extract_nucleotides
+from .hmm import HMMBlock, HMMBlockConfig
 
 
 class TiberiusConfig(ModelConfig):
@@ -19,7 +19,7 @@ class TiberiusConfig(ModelConfig):
     multi_loss: bool = False
     residual_conv: bool = True
 
-    hmm: AnnotationHMMConfig | None = None
+    hmm: HMMBlockConfig | None = None
 
     model_config = {"frozen": True}
 
@@ -82,7 +82,7 @@ class Tiberius(tf.keras.Model):
             ]
 
         if self.config.hmm is not None:
-            self.hmm = AnnotationHMM(**self.config.hmm.model_dump())
+            self.hmm = HMMBlock(**self.config.hmm.model_dump())
             self.hmm_dense = tf.keras.layers.Dense(15, activation="softmax")
 
     def build(self, input_shape: tuple[int | None, ...]) -> None:
@@ -113,7 +113,6 @@ class Tiberius(tf.keras.Model):
 
         if self.config.hmm is not None:
             self.hmm.build(input_shape[:-1] + (15, ))
-            self.hmm.hmm.mode = HMMMode.POSTERIOR
             hmm_out = self.hmm.compute_output_shape(input_shape[:-1]+(15, ))
             self.hmm_dense.build(input_shape[:-1]+(hmm_out[-2]*hmm_out[-1], ))
 
@@ -146,6 +145,6 @@ class Tiberius(tf.keras.Model):
 
         x = tf.nn.softmax(x)
         if self.config.hmm is not None:
-            x = self.hmm(x, nuc)
-            x = self.hmm_dense(tf.reshape(x, (B, T, -1)))
+            x = self.hmm(x, nuc, mode=HMMMode.POSTERIOR)
+            x = self.hmm_dense(x)
         return x

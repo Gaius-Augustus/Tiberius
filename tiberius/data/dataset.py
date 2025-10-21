@@ -15,6 +15,7 @@ class DatasetConfig(BaseModel):
     input_size: int = 6
     output_size: int = 15
     batch_size: int = 500
+    T: int = 9999
     shuffle: bool = True
     repeat: bool = True
     softmasking: bool = True
@@ -59,8 +60,6 @@ def build_dataset(paths: Sequence[str], cfg: DatasetConfig) -> tf.data.Dataset:
     if cfg.repeat:
         ds = ds.repeat()
 
-    # Batch BEFORE parse to use parse_example
-    ds = ds.batch(cfg.batch_size, drop_remainder=True)
     ds = ds.map(
         lambda batch: _parse_batch(batch, cfg),
         num_parallel_calls=cfg.num_parallel_calls,
@@ -69,5 +68,6 @@ def build_dataset(paths: Sequence[str], cfg: DatasetConfig) -> tf.data.Dataset:
         lambda ex: _preprocess_batched(ex, cfg),
         num_parallel_calls=cfg.num_parallel_calls,
     )
+    ds = ds.batch(cfg.batch_size, drop_remainder=True)
     ds = ds.prefetch(tf.data.AUTOTUNE)
     return ds

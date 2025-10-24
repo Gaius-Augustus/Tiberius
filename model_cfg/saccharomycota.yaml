@@ -1,0 +1,38 @@
+target_species: "Saccharomycota"
+ncbi_tax_id: 147537
+weights_url: "https://bioinf.uni-greifswald.de/bioinf/tiberius/models/saccharomycota_weights.tar.gz"
+softmasking: True
+clamsa: False
+tiberius_version: 1.1.6
+date: "2025-10-24"
+comment: "Saccharomycota training weights trained by the fungal team at JGI."
+training_species: [
+   Blastobotrys (Arxula) adeninivorans
+   Debaryomyces fabryi NRRL Y-17914
+   Blastobotrys raffinosifermentans NRRL Y-27150
+   Lachancea fermentati INRA UMR 1319
+   Torulaspora delbrueckii CBS 1146
+   Cephaloascus fragrans 12-1022 v1.0
+   Blastobotrys indianensis NRRL YB-1950
+   Yarrowia lipolytica NRRL Y-64008 v1.0
+   Debaryomyces hansenii CBS 767
+   Zygosaccharomyces rouxii CBS732
+   Scheffersomyces xylosifermentans CBS12540T v1.0
+   Yarrowia lipolytica PO1f v2.0
+   Zygosaccharomyces rouxii NRRL Y-64007 v1.0
+   Scheffersomyces virginianus NRRL Y-48822T v1.1
+   Eremothecium gossypii FDAG1
+   Scheffersomyces virginianus NRRL Y-48822T v1.0
+   Dipodascopsis uninucleata Phaff 50-6 v1.0
+   Sugiyamaella americana NRRL YB-2067 v1.0
+   Eremothecium gossypii ATCC 10895
+   Scheffersomyces cryptocercus NRRL Y-48824T v1.0
+   Yarrowia lipolytica PO1f v1.0
+   Millerozyma farinosa CBS 7064
+   Scheffersomyces shehatae NRRL Y-12858T v1.0
+   Yarrowia lipolytica YB419 v1.0
+   Kazachstania africana CBS 2517
+   Cyberlindnera jadinii NRRL Y-1542 v1.0
+   Lipomyces tetrasporus NRRL Y-8875 v1.0
+   Lipomyces suomiensis NRRL Y-17356 v1.0
+]

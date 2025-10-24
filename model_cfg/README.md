@@ -9,9 +9,17 @@ Each file is read at runtime by Tiberius and therefore must follow the schema be
 
 | Model name | Target species | Softmasking required | ClaMSA input required| 
 | ----------------|------------------|-------------------|------------------|
+| diatoms | Diatoms | :white_check_mark: |  :x:| 
+| eudicotyledons | Eudicotyledons | :white_check_mark: |  :x:| 
+| lepidoptera | Lepidoptera | :white_check_mark: |  :x:| 
+| monocotyledonae | Monocotyledonae | :white_check_mark: |  :x:| 
+| mucoromycota | Mucoromycota | :white_check_mark: |  :x:| 
+| mammalia_softmasking_v2 | Mammalia | :white_check_mark: |  :x:| 
 | mammalia_softmasking_v2 | Mammalia | :white_check_mark: |  :x:| 
 | mammalia_nosofttmasking_v2 | Mammalia | :x: |  :x:| 
 | mammalia_clamsa_v2 | Mammalia | :white_check_mark: |  :white_check_mark:| 
+| saccharomycota | Saccharomycota | :white_check_mark: |  :x:| 
+| sordariomycota | Sordariomycota | :white_check_mark: |  :x:| 
 
 
 ## 2  File naming convention

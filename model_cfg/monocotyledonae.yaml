@@ -1,0 +1,30 @@
+target_species: "Monocotyledonae"
+ncbi_tax_id: 4447
+weights_url: "https://bioinf.uni-greifswald.de/bioinf/tiberius/models/monocotyledonae_weights.tar.gz"
+softmasking: True
+clamsa: False
+tiberius_version: 1.1.6
+date: "2025-10-24"
+comment: "Monocot training weights trained by Tomas Bruna (JGI)."
+training_species: [
+   Aamericanusv1.1
+   AdonaxvarAD10v1.1_A1
+   AtequilanavarWebersBlueHAP1v3.1
+   BmicranthavarABG20031627HAP1v1.2
+   Claxumv1.1
+   Dalatav2.1
+   Dendrobium_catenatum_GCF_001605985
+   Jascendensv1.1
+   Msinensisv7.1
+   Musa_acumitana_GCF_036884655_BXJ1
+   OsativaKitaakev3.1
+   Phoenix_dactylifera_CF_009389715
+   Platifoliusv1.1
+   Pvirgatumv5.1_K
+   Sbicolorv5.1
+   Sviridisv4.1
+   Tintermediumv3.1_J
+   YfilamentosaC3priv2.1
+   Zingiber_officinale_GCF_018446385_A
+   ZmaysZm-B73-REFERENCE-NAM-5.0.55
+]

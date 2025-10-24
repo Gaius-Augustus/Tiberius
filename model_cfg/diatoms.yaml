@@ -1,0 +1,20 @@
+target_species: "Bacillariophyta"
+ncbi_tax_id: 2836
+weights_url: "https://bioinf.uni-greifswald.de/bioinf/tiberius/models/diatoms_weights.tar.gz"
+softmasking: True
+clamsa: False
+tiberius_version: 1.1.6
+date: "2025-10-24"
+comment: "Diatom training weights trained by Katharina Hoff."
+training_species: [
+   Skeletonema_menzelii
+   Skeletonema_potamos
+   Discostella_pseudostelligera
+   Cylindrotheca_closterium
+   Pseudo-nitzschia_multistriata
+   Mayamaea_pseudoterrestris
+   Seminavis_robusta
+   Fragilaria_crotonensis
+   Chaetoceros_muellerii
+   Chaetoceros_tenuissimus
+]

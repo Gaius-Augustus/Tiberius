@@ -1,5 +1,8 @@
 ![Docker Pulls](https://img.shields.io/docker/pulls/larsgabriel23/tiberius) 
 
+[!IMPORTANT]
+> **Update (October 2025):** Tiberius models for Mammals, Eudicots, Monocots, Fungi and Diatoms are now available.  
+
 # Tiberius: End-to-End Deep Learning with an HMM for Gene Prediction
 
 For more information, see the [Tiberius paper](https://academic.oup.com/bioinformatics/article/40/12/btae685/7903281).
@@ -12,7 +15,15 @@ and long short-term memory layers with a differentiable HMM layer. It can be use
 
 
 
-Currently, we provide only model weights for mammalian species and Tiberius does not predict alternative splicing variants. 
+We are providing different models for following species (see model_cfg/README.md for more information):
+- Diatoms 
+- Eudicotyledons
+- Lepidoptera
+- Monocotyledonae
+- Mucoromycota
+- Mammalia 
+- Saccharomycota
+- Sordariomycota
 
 
 ## Installation
@@ -61,7 +72,7 @@ Tiberius does also work with TensorFlow >2.10, however, **it will produce an err
 
 ## Running Tiberius for Gene Prediction
 
-To run Tiberius with `tiberius.py`, you need to provide a FASTA file containing the genomic sequences. The sequence can either include repeat softmasking (recommended) or be run without softmasking. See [softmasking_workflow](docs/softmasking_workflow.md) for recommandations on how to mask repeats for Tiberius. Currently, we only provide weights for mammalian species, they can be downloaded automatically by Tiberius if no model_cfg is provided.
+To run Tiberius with `tiberius.py`, you need to provide a FASTA file containing the genomic sequences. The sequence can either include repeat softmasking (recommended) or be run without softmasking. See [softmasking_workflow](docs/softmasking_workflow.md) for recommandations on how to mask repeats for Tiberius.
 
 ### Choosing the model weights
 
@@ -118,19 +129,15 @@ Tiberius produces a GTF file containing the predicted gene structures. It can al
 If you want to write custom code for Tiberius gene prediction, see [example_prediction.ipynb](test_data/Panthera_pardus/example_prediction.ipynb) for an example on how to write a custom prediction script.
 
 ## Training Tiberius
-Currently, we provide only model weights for mammalian species. If you want to train Tiberius on your own data, you need at least a genomic seqeunce file (FASTA) and reference annotations (GTF) for each species. **Note that you can only train on genes with one transcript isoform per gene.** Please remove alternative splicing variants before training. There two ways to train Tiberius:
+We recommend using one of the provided trained models. However, if you want to train Tiberius on your own data, you need at least a genomic seqeunce file (FASTA) and reference annotations (GTF) for each species. **Note that you can only train on genes with one transcript isoform per gene.** Please remove alternative splicing variants before training. There two ways to train Tiberius:
 1. Training Tiberius with a large dataset that does not fit into memory. See [training_large_data.md](docs/training_large_data.md) for documentation on how to prepare a dataset and train Tiberius with it.
 2. Training Tiberius with a small dataset that fits into memory. See [example_train_full.ipynb](test_data/Panthera_pardus/example_train_full.ipynb) for an example on how to load data and train Tiberius on a single genome. This can easily be adapted to train Tiberius on several genomes by first loading the data for all genome and then training the model. See [training_large_data.md](docs/training_large_data.md) (Step 1) and [softmasking_workflow.md](docs/softmasking_workflow.md) for the preparation of the genome and annotation files.
 
-## Tiberius Model and Accuracies on non Mammalian species
+## Tiberius Model
 
 Tiberius' model consists of a model that consist of CNN, biLSTM, and a differentiable HMM layer. 
   
 ![Tiberius Architecture](figures/tiberius_architecture.png)
-
-The model was trained end-to-end on 32 mammalian genomes and it reaches state-of-the-art prediction accuracies for mammalian genomes, matching the accuracy of extrinsic evidence based gene prediction tools.
-
-![Tiberius Architecture](figures/tiberius_acc.png)
 
 
 ## Annotations from Tiberius

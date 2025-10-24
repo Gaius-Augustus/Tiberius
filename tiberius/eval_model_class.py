@@ -121,7 +121,7 @@ class PredictionGTF:
                 'output_size', 'residual_conv', 'softmasking',
                 'clamsa_kernel', 'lru_layer']
             relevant_args = {key: config[key] for key in relevant_keys if key in config}
-            self.lstm_model = lstm_model(**relevant_args)
+            self.lstm_model = lstm_model(**relevant_args, softmasking=config["inp_size"]==6)
             self.lstm_model.load_weights(f"{self.model_path}/weights.h5")
 
             if self.model_path_hmm:

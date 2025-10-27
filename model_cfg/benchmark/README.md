@@ -1,6 +1,6 @@
 ## Mammals
 
-| Species                 | Tool     | Exon Sn | Exon Pr |  Exon F1 | Locus Sn | Locus Pr | Locus F1 |
+| Species                 | Tool     | Exon Sn | Exon Pr |  Exon F1 | Gene Sn | Gene Pr | Gene F1 |
 | :---------------------- | :------- | :-----: | :-----: | :------: | :------: | :------: | :------: |
 | *Bos taurus*            | Tiberius |   88.2  |   87.2  |   87.7   |   51.2   |   50.2   |   50.7   |
 |                         | ANNEVO   |   85.2  |   74.9  |   79.7   |   33.7   |   29.7   |   31.6   |
@@ -27,7 +27,7 @@
 
 ## Diatoms
 
-| Species                     | Tool     | Exon Sn | Exon Pr |  Exon F1 | Locus Sn | Locus Pr | Locus F1 |
+| Species                     | Tool     | Exon Sn | Exon Pr |  Exon F1 | Gene Sn | Gene Pr | Gene F1 |
 | :-------------------------- | :------- | :-----: | :-----: | :------: | :------: | :------: | :------: |
 | *Phaeodactylum tricornutum* | Tiberius |   61.0  |   67.3  |   64.0   |   59.9   |   60.8   | 60.3 |
 |                             | ANNEVO   |   18.2  |   58.0  |   27.7   |   12.2   |   45.5   |   19.3   |
@@ -43,7 +43,7 @@
 
 ## Lepidotera
 
-| Species            | Tool     | Exon Sn | Exon Pr |  Exon F1 | Locus Sn | Locus Pr | Locus F1 |
+| Species            | Tool     | Exon Sn | Exon Pr |  Exon F1 | Gene Sn | Gene Pr | Gene F1 |
 | :----------------- | :------- | :-----: | :-----: | :------: | :------: | :------: | :------: |
 | *Bombyx mori*      | Tiberius |   74.4  |   81.3  |   77.8   |   39.8   |   32.5   |   35.8   |
 |                    | ANNEVO   |   84.3  |   77.9  |   81.0   |   36.9   |   35.9   |   36.4   |
@@ -65,7 +65,7 @@
 
 
 ## Eudicots 
-| Species                    | Tool            | Exon Sn | Exon Pr |  Exon F1 | Locus Sn | Locus Pr | Locus F1 |
+| Species                    | Tool            | Exon Sn | Exon Pr |  Exon F1 | Gene Sn | Gene Pr | Gene F1 |
 | :------------------------- | :-------------- | :-----: | :-----: | :------: | :------: | :------: | :------: |
 | *Arabidopsis thaliana*     | Tiberius        |   87.3  |   92.9  |   90.0   |   67.4   |   76.4   |   71.6   |
 |                            | ANNEVO          |   84.9  |   86.9  |   85.9   |   58.1   |   63.7   |   60.8   |
@@ -85,7 +85,7 @@
 
 
 ## Monocts
-| Species                  | Tool            | Exon Sn | Exon Pr |  Exon F1 | Locus Sn | Locus Pr | Locus F1 |
+| Species                  | Tool            | Exon Sn | Exon Pr |  Exon F1 | Gene Sn | Gene Pr | Gene F1 |
 | :----------------------- | :-------------- | :-----: | :-----: | :------: | :------: | :------: | :------: |
 | *Brachypodium stacei*    | Tiberius        |   85.7  |   91.2  |   88.3   |   64.3   |   69.2   |   66.7   |
 |                          | ANNEVO          |   83.9  |   85.4  |   84.6   |   53.8   |   61.6   |   57.4   |
@@ -103,7 +103,7 @@
 
 ## Mucoromycota
 
-| Species             | Tool     | Exon Sn | Exon Pr |  Exon F1 | Locus Sn | Locus Pr | Locus F1 |
+| Species             | Tool     | Exon Sn | Exon Pr |  Exon F1 | Gene Sn | Gene Pr | Gene F1 |
 | :------------------ | :------- | :-----: | :-----: | :------: | :------: | :------: | :------: |
 | *Fennellomyces sp.* | Tiberius |   70.2  |   71.2  |   70.7   |   36.5   |   38.1   | 37.3 |
 |                     | ANNEVO   |   72.5  |   67.0  |   69.6   |   35.2   |   35.8   |   35.5   |
@@ -117,7 +117,7 @@
 
 ## Saccharomycota
 
-| Species                   | Tool     | Exon Sn | Exon Pr |  Exon F1 | Locus Sn | Locus Pr | Locus F1 |
+| Species                   | Tool     | Exon Sn | Exon Pr |  Exon F1 | Gene Sn | Gene Pr | Gene F1 |
 | :------------------------ | :------- | :-----: | :-----: | :------: | :------: | :------: | :------: |
 | *Candida tanzawaensis*    | Tiberius |   50.1  |   66.2  |   57.0   |   55.5   |   66.7   | 60.6 |
 |                           | ANNEVO   |   46.5  |   60.0  |   52.3   |   50.7   |   61.0   |   55.4   |
@@ -130,7 +130,7 @@
 
 ## Sordariomycota
 
-| Species                     | Tool     | Exon Sn | Exon Pr |  Exon F1 | Locus Sn | Locus Pr | Locus F1 |
+| Species                     | Tool     | Exon Sn | Exon Pr |  Exon F1 | Gene Sn | Gene Pr | Gene F1 |
 | :-------------------------- | :------- | :-----: | :-----: | :------: | :------: | :------: | :------: |
 | *Purpureocillium lilacinum* | Tiberius |   71.1  |   70.3  | 70.7 |   57.6   |   57.5   | 57.6 |
 |                             | ANNEVO   |   72.7  |   68.9  |   70.7   |   55.2   |   55.9   |   55.5   |

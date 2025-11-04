@@ -27,7 +27,7 @@ def _feature_spec(clamsa: bool) -> dict[str, tf.io.FixedLenFeature]:
     spec = {
         "input":  tf.io.FixedLenFeature([], tf.string),
         "output": tf.io.FixedLenFeature([], tf.string),
-        "tx_ids": tf.io.FixedLenFeature([], tf.string),
+        # "tx_ids": tf.io.FixedLenFeature([], tf.string),
         # will fill default in parse
     }
     if clamsa:

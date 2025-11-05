@@ -27,8 +27,6 @@ def _feature_spec(clamsa: bool) -> dict[str, tf.io.FixedLenFeature]:
     spec = {
         "input":  tf.io.FixedLenFeature([], tf.string),
         "output": tf.io.FixedLenFeature([], tf.string),
-        # "tx_ids": tf.io.FixedLenFeature([], tf.string),
-        # will fill default in parse
     }
     if clamsa:
         spec["clamsa"] = tf.io.FixedLenFeature([], tf.string)
@@ -41,24 +39,12 @@ def _parse_batch(
 ) -> dict[str, tf.Tensor]:
     feats = tf.io.parse_example(examples, _feature_spec(cfg.clamsa))
 
-    # ensure a default for missing tx_ids
-    tx_ids_serial = tf.where(
-        tf.equal(feats["tx_ids"], ""),
-        tf.fill(
-            tf.shape(feats["tx_ids"]),
-            tf.cast(cfg.empty_tx_serial, tf.string)
-        ),
-        feats["tx_ids"],
-    )
-
     # [B, T, C]
-    x = tf.io.parse_tensor(feats["input"], out_type=tf.int32)
+    x = tf.io.parse_tensor(feats["input"], out_type=tf.float32)
     # [B, T, K]
-    y = tf.io.parse_tensor(feats["output"], out_type=tf.int32)
-    # [B, N, 3] or [B, 0, 3]
-    t = tf.io.parse_tensor(tx_ids_serial, out_type=tf.string)
+    y = tf.io.parse_tensor(feats["output"], out_type=tf.float32)
 
-    out: dict[str, tf.Tensor] = {"x": x, "y": y, "t": t}
+    out: dict[str, tf.Tensor] = {"x": x, "y": y}
     if cfg.clamsa:
         out["clamsa"] = tf.io.parse_tensor(
             feats["clamsa"],
@@ -250,8 +236,6 @@ def _preprocess_batched(ex: dict[str, tf.Tensor], cfg: "DatasetConfig"):
     x = tf.reshape(ex["x"], [tf.shape(ex["x"])[0], tf.shape(ex["x"])[-1]])
     # [B, T, K]
     y = tf.reshape(ex["y"], [tf.shape(ex["y"])[0], tf.shape(ex["y"])[-1]])
-    # [B, N, 3] strings
-    t = ex["t"]
 
     if not cfg.softmasking:
         x = x[..., :5]

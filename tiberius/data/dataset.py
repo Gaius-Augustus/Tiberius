@@ -13,7 +13,7 @@ class DatasetConfig(BaseModel):
     validation_paths: Sequence[str] | None = None
 
     input_size: int = 6
-    output_size: int = 15
+    output_size: int = 30
     batch_size: int = 500
     T: int = 9999
     shuffle: bool = True

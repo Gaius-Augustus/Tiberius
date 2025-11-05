@@ -133,15 +133,15 @@ class ResidualTiberius(tf.keras.Model):
 
         x = x if not self.config.layernorm else self.layernorms[-1](x)
         if self.config.hmm is not None:
-            x = self.hmm(
-                x, nuc,
-                mode=HMMMode.POSTERIOR,
-            )  # type: ignore
             if self._hmm_inference is not None:
                 return self.hmm(
                     x, nuc,
                     mode=self._hmm_inference,
                 )  # type: ignore
+            x = self.hmm(
+                x, nuc,
+                mode=HMMMode.POSTERIOR,
+            )  # type: ignore
 
         x = self.unembedding(x)  # type: ignore
         return x

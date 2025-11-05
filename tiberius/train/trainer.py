@@ -24,6 +24,7 @@ class TrainerConfig(BaseModel):
     min_lr: float = 1e-6
     decay_rate: float = 0.9
 
+    use_cee: bool = True
     loss_f1_factor: float
 
     model_save_dir: Path | str
@@ -79,6 +80,7 @@ class Trainer:
                 f1_factor=self.config.loss_f1_factor,
                 batch_size=self.dataset_config.batch_size,
                 output_dim=self.dataset_config.output_size,
+                use_cee=self.config.use_cee,
                 from_logits=True,
             ),
             optimizer=tf.keras.optimizers.Adam(

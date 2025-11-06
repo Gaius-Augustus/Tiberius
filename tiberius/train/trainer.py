@@ -7,6 +7,7 @@ import tensorflow as tf
 import wandb
 from hidten.config import ModelConfig
 from pydantic import BaseModel
+from vipsania.train.callback import WandbLRUEigenvalues
 from wandb.integration.keras import WandbMetricsLogger
 
 from ..data import DatasetConfig, build_dataset
@@ -48,6 +49,7 @@ class TrainerConfig(BaseModel):
     use_cee: bool = True
     loss_f1_factor: float
 
+    log_plot_freq: int = 25
     log_annotation_metrics: list[AnnotationMetricsConfig] = []
 
 
@@ -219,6 +221,13 @@ class Trainer:
                 callbacks.append(AnnotationMetrics(
                     save_path=self.path,
                     **lam.model_dump(),
+                ))
+            if (
+                hasattr(self.model.config, "lru")
+                and self.model.config.lru is not None
+            ):
+                callbacks.append(WandbLRUEigenvalues(
+                    every_n_epochs=self.config.log_plot_freq,
                 ))
         return callbacks
 

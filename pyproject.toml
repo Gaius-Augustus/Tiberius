@@ -4,12 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tiberius"
-version = "1.1.6"
+version = "2.0.0"
 authors = [
   { name="Lars Gabriel", email="lgabriel23@gmx.de" },
   { name="Felix Becker", email="beckerfelix94@gmail.com" },
   { name="Katharina Hoff", email="katharina.hoff@uni-greifswald.de" },
   { name="Mario Stanke", email="mario.stanke@uni-greifswald.de " },
+  { name="Richard Krieg", email="richard.krieg@uni-greifswald.de " },
   # please add yourself if you are a contributor
 ]
 description = "Tiberius is a deep learning gene finder."
@@ -22,9 +23,9 @@ classifiers = [
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
 dependencies = [
-  "learnMSA",
+  "bricks2marble",
   "numpy",
-  "tensorflow[and-cuda]<2.18",  
+  "tensorflow[and-cuda]<2.18",
   "biopython",
 ]
 

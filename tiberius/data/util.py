@@ -53,83 +53,6 @@ def _parse_batch(
     return out
 
 
-def _reformat_labels(y: tf.Tensor, output_size: int) -> tf.Tensor:
-    # y: [B, T, C]
-    C = tf.shape(y)[-1]
-    def eq(v): return tf.equal(C, v)
-
-    def id_(): return tf.cast(y, tf.float32)
-
-    def from7():
-        def to5():
-            return tf.cast(tf.concat([
-                y[:, :, :1],
-                tf.reduce_sum(y[:, :, 1:4], axis=-1, keepdims=True),
-                y[:, :, 4:],
-            ], axis=-1), dtype=tf.float32)
-        def to3():
-            return tf.cast(tf.concat([
-                y[:, :, :1],
-                tf.reduce_sum(y[:, :, 1:4], axis=-1, keepdims=True),
-                tf.reduce_sum(y[:, :, 4:], axis=-1, keepdims=True),
-            ], axis=-1), dtype=tf.float32)
-        return tf.case([
-            (tf.equal(output_size, 3), to3),
-            (tf.equal(output_size, 5), to5),
-            (tf.equal(output_size, 7), id_),
-        ], default=id_)
-
-    def from15():
-        idx_1 = [4, 7, 10, 12]
-        idx_2 = [5, 8, 13]
-        idx_3 = [6, 9, 11, 14]
-        g = lambda idx: tf.reduce_sum(
-            tf.gather(y, idx, axis=-1),
-            axis=-1,
-            keepdims=True,
-        )
-        def to3():
-            return tf.cast(tf.concat([
-                y[:, :, :1],
-                tf.reduce_sum(y[:, :, 1:4], axis=-1, keepdims=True),
-                tf.reduce_sum(y[:, :, 4:], axis=-1, keepdims=True),
-            ], axis=-1), dtype=tf.float32)
-        def to5():
-            return tf.cast(tf.concat([
-                y[:, :, :1],
-                tf.reduce_sum(y[:, :, 1:4], axis=-1, keepdims=True),
-                g(idx_1), g(idx_2), g(idx_3),
-            ], axis=-1), dtype=tf.float32)
-        def to7():
-            return tf.cast(tf.concat([
-                y[:, :, :4],
-                g(idx_1), g(idx_2), g(idx_3)
-            ], axis=-1), dtype=tf.float32)
-        def to2():
-            return tf.cast(tf.concat([
-                tf.reduce_sum(y[:, :, :4], axis=-1, keepdims=True),
-                tf.reduce_sum(y[:, :, 4:], axis=-1, keepdims=True),
-            ], axis=-1), dtype=tf.float32)
-        def to4():
-            return tf.cast(tf.concat([
-                tf.reduce_sum(y[:, :, :4], axis=-1, keepdims=True),
-                g(idx_1), g(idx_2), g(idx_3),
-            ], axis=-1), dtype=tf.float32)
-        return tf.case([
-            (tf.equal(output_size, 2), to2),
-            (tf.equal(output_size, 3), to3),
-            (tf.equal(output_size, 4), to4),
-            (tf.equal(output_size, 5), to5),
-            (tf.equal(output_size, 7), to7),
-            (tf.equal(output_size, 15), id_),
-        ], default=id_)
-
-    return tf.cast(
-        tf.case([(eq(7), from7), (eq(15), from15)], default=id_),
-        tf.float32,
-    )
-
-
 def _seq_mask(
     seq_len: tf.Tensor,
     transcripts: tf.Tensor,
@@ -240,8 +163,6 @@ def _preprocess_batched(ex: dict[str, tf.Tensor], cfg: "DatasetConfig"):
     if not cfg.softmasking:
         x = x[..., :5]
 
-    # TODO: currently not working
-    # y = _reformat_labels(y, cfg.output_size)  # [B, T, O]
     y = tf.cast(y, tf.float32)
     y.set_shape((cfg.T, cfg.output_size))
     x = tf.cast(x, tf.float32)
@@ -257,8 +178,8 @@ def _preprocess_batched(ex: dict[str, tf.Tensor], cfg: "DatasetConfig"):
         X = x
         Y = y
 
-    # TODO: sample_weights
-    # # Weights (per example independently)
+    # # TODO: sample_weights !
+    # # # Weights (per example independently)
     # def per_example_weights(i):
     #     tx_i = t[i]  # [Ni,3]
     #     tx_i.set_shape([None, 3])

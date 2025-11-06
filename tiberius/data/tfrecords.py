@@ -1,4 +1,3 @@
-import sys
 import warnings
 from pathlib import Path
 from typing import Iterable
@@ -123,15 +122,8 @@ def create_tfrecords(
             for strand in ["+", "-"]:
                 lab = labels[strand] if strand == "+" else labels[strand][::-1]
                 indices = np.where(labels[strand] == 14)
-                print(
-                    name,
-                    strand,
-                    indices[0].shape,
-                    indices[:50],
-                    file=sys.stderr,
-                )
                 A = build_allowed_matrix(ALLOWED_TRANSITIONS)
-                check, idx = check_transitions(lab, A)
+                _, idx = check_transitions(lab, A)
                 for i in idx:
                     if 7 not in lab[i-4:i+4] or 14 in lab[i-4:i+4]:
                         warnings.warn(
@@ -141,9 +133,11 @@ def create_tfrecords(
 
     nuc = fasta_.nuc
     labels_plus = np.concatenate(
-        [np.reshape(anno_labels[s]["+"], (-1, T)) for s in sequence_dict])
+        [np.reshape(anno_labels[s]["+"], (-1, T)) for s in sequence_dict]
+    )
     labels_minus = np.concatenate(
-        [np.reshape(anno_labels[s]["-"], (-1, T)) for s in sequence_dict])
+        [np.reshape(anno_labels[s]["-"], (-1, T)) for s in sequence_dict]
+    )
 
     if not (nuc.shape[0] == labels_plus.shape[0] == labels_minus.shape[0]):
         raise RuntimeError("Noticed shape mismatch for labels.")

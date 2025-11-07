@@ -3,7 +3,7 @@ from pathlib import Path
 
 import tiberius
 
-CHECKPOINTS_DIR = Path("./checkpoints")
+CHECKPOINTS_DIR = Path(__file__).parent / "checkpoints"
 
 
 def run(args: argparse.Namespace):

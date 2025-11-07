@@ -356,6 +356,35 @@ class PredictionGTF:
             lstm_predictions = lstm_predictions['array1']
             return lstm_predictions
         
+        # decriptive error message when there is an input embedding dim mismatch 
+        # due to softmasking mismatch between training and inference 
+        expected_input_shape = self.lstm_model.input_shape
+        actual_input_shape = inp_chunks.shape
+
+        if expected_input_shape[-1] != actual_input_shape[-1]:
+            error_msg = (
+                f"Input shape mismatch: Model expects input with {expected_input_shape[-1]} features, "
+                f"but received {actual_input_shape[-1]} features.\n\n"
+            )
+            if expected_input_shape[-1] == 6 and actual_input_shape[-1] == 5:
+                error_msg += (
+                    "This appears to be a softmasking compatibility issue.\n"
+                    "The model was trained with softmasking enabled, but inference is running without softmasking.\n"
+                    "SOLUTION: Remove the '--no_softmasking' flag from your command, or use a model trained without softmasking.\n"
+                )
+            elif expected_input_shape[-1] == 5 and actual_input_shape[-1] == 6:
+                error_msg += (
+                    "This appears to be a softmasking compatibility issue.\n"
+                    "The model was trained without softmasking, but inference is running with softmasking enabled.\n"
+                    "SOLUTION: Add the '--no_softmasking' flag to your command, or use a model trained with softmasking.\n"
+                )
+            else:
+                error_msg += (
+                "Please check that your model and input data are compatible.\n"
+                )
+
+            raise ValueError(error_msg)
+
         if inp_chunks.shape[0] % batch_size > 0:
             num_batches += 1
         for i in range(num_batches):

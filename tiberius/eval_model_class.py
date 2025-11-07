@@ -367,7 +367,7 @@ class PredictionGTF:
                     clamsa_inp[start_pos:end_pos]
                 ])           
             else:
-                y = self.lstm_model(inp_chunks[start_pos:end_pos])
+                y = self.lstm_model.predict_on_batch(inp_chunks[start_pos:end_pos])
             if len(y.shape) == 1:
                 y = np.expand_dims(y,0)
             lstm_predictions.append(y)        

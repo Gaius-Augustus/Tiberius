@@ -5,7 +5,44 @@ import bricks2marble as b2m
 import numpy as np
 import tensorflow as tf
 from hidten import HMMMode
-from vipsania.xai.evaluate import predict_sequence
+
+
+@tf.function(jit_compile=True)
+def model_call(model, x: tf.Tensor) -> tf.Tensor:
+    return model(x)
+
+
+def predict_sequence(
+    model: tf.keras.Model | tf.keras.Layer,
+    sequence: b2m.struct.Sequence | b2m.struct.FASTA,
+    B: int = 32,
+    return_batched: bool = False,
+    N_token: Literal["track", "uniform"] = "track",
+    repeats_input: Literal["track", "expand", "omit"] = "track",
+    jit_compile: bool = False,
+) -> tf.Tensor:
+    data = tf.convert_to_tensor(
+        sequence.one_hot(repeats=repeats_input, N=N_token),
+        dtype=tf.float32,
+    )
+    ds = tf.data.Dataset.from_tensor_slices(data).batch(B)
+
+    output = []
+    for k, tensor in enumerate(ds):  # type: ignore
+        if jit_compile:
+            out = model_call(model, tensor)
+        else:
+            out = model(tensor)
+        if k == 0:
+            output.append(
+                tf.zeros((0, ) + tuple(out.shape[1:]), dtype=out.dtype)
+            )
+        output[0] = tf.concat((output[0], out), axis=0)
+    result = [
+        tf.reshape(output, (-1, )+tuple(output.shape[2:]))
+        if not return_batched else output
+    ]
+    return result[0]
 
 
 def _fix_intron_state_chain_labels(a: np.ndarray, isc: int) -> np.ndarray:
@@ -32,7 +69,6 @@ def _evaluate(
         B=B,
         return_batched=True,
         N_token=N_token,
-        masked=False,
         repeats_input=repeats_input,
         jit_compile=jit_compile,
     ).numpy()  # type: ignore

@@ -1,12 +1,12 @@
 {
     "model": {
-        "units": 64,
-        "filter_size": 32,
+        "n_conv": 3,
+        "filter_size": 128,
         "kernel_size": 9,
-        "numb_conv": 3,
-        "numb_lstm": 2,
+
         "pool_size": 9,
-        "output_size": 15,
+        "n_lstm": 2,
+        "units": 372,
 
         "hmm": {
             "heads": 1,
@@ -14,66 +14,63 @@
             "use_reverse_strand": true,
             "compute_heads_sequentially": false,
 
-            "embed": 32,
-            "pre_hmm_softmax": false,
-            "share_noncoding_params": false,
-            "emitter_sigmoid_activation": true,
-
             "intron_state_chain": 1,
             "intron_chain_skips": false,
             "intron_chain_loop": false,
             "initial_exon_len": 100,
             "initial_intron_len": 10000,
             "initial_ir_len": 10000,
-            "train_transitioner": false,
-
-            "dropout_heads": 0,
-            "nudge_IR": 0,
-            "nudge_repeats_noncoding": 0.0,
-            "intron_regularization": 0.0
-        },
-        "residual_conv": true,
-        "multi_loss": false
+            "train_transitioner": false
+        }
     },
 
     "dataset": {
         "train_paths": [
-            "path/to/data_*.tfrecords"
+            "path/to/data/*.tfrecords"
         ],
-        "validation_paths": [
-            "path/to/data_0.tfrecords"
-        ],
+        "validation_paths": null,
 
-        "batch_size": 32,
+        "batch_size": 500,
         "T": 9999,
-        "input_size": 6,
-        "output_size": 15,
         "repeat": true,
         "shuffle": true,
-        "shuffle_buffer": 100,
-
-        "clamsa": false,
-        "oracle": false,
-
-        "tx_filter": [],
-        "tx_filter_region": 1000,
-        "seq_weights_window": 250,
-        "seq_weights_value": 100,
-        "compression": "GZIP"
+        "shuffle_buffer": 100
     },
 
     "trainer": {
-        "epochs": 100,
-        "steps_per_epoch": 5000,
-        "batch_size": 500,
+        "epochs": 1000,
+        "train_steps": 5000,
+        "val_steps": 100,
 
         "lr": 1e-4,
-        "use_lr_scheduler": false,
-        "warmup_epochs": 1,
-        "min_lr": 1e-4,
-        "decay_rate": 0.9,
+        "weight_decay": 1e-2,
+        "beta_1": 0.9,
+        "beta_2": 0.999,
+        "gradient_clip_norm": null,
+
+        "lr_warmup": null,
+        "lr_warmup_target": 1e-2,
+        "lr_warmup_start": 1e-7,
+        "lr_decay": 0.1,
+        "lr_log_decay": null,
+        "lr_log_decay_velocity": 10.0,
 
         "loss_f1_factor": 2.0,
-        "model_save_dir": "./tiberius_training/"
+
+        "log_annotation_metrics": [{
+            "fasta": "path/to/genome.fa",
+            "reference": "path/to/reference_cds.gtf",
+            "gffcompare": "path/to/gffcompare",
+            "take_seqs": null,
+            "B": 50,
+            "T": 99990,
+            "use_head": 0,
+            "every_n_epochs": 5,
+            "use": "VITERBI",
+            "liberal": true,
+            "N_token": "track",
+            "repeats_input": "track",
+            "save_best_key": "locus/F1"
+        }]
     }
 }

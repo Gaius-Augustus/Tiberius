@@ -13,7 +13,7 @@ class HMMBlockConfig(ModelConfig):
     use_reverse_strand: bool = False
     compute_heads_sequentially: bool = False
 
-    embed: int
+    embed: int | None = None
     in_activation: Literal["softmax", "sigmoid"] = "softmax"
     emitter_sigmoid_activation: bool = False
     share_noncoding_params: bool = False
@@ -41,16 +41,17 @@ class HMMBlock(tf.keras.layers.Layer):
         self.config = HMMBlockConfig(**kwargs)
 
     def build(self, input_shape: tuple[int | None, ...]) -> None:
-        self.input_proj = tf.keras.layers.Dense(
-            self.config.embed,
-            kernel_initializer=tf.keras.initializers.RandomNormal(
-                mean=0.0,
-                stddev=0.01,
-            ),  # type: ignore
-            use_bias=False,
-            activation=self.config.in_activation,
-        )
-        self.input_proj.build(input_shape)
+        if self.config.embed is not None:
+            self.input_proj = tf.keras.layers.Dense(
+                self.config.embed,
+                kernel_initializer=tf.keras.initializers.RandomNormal(
+                    mean=0.0,
+                    stddev=0.01,
+                ),  # type: ignore
+                use_bias=False,
+                activation=self.config.in_activation,
+            )
+            self.input_proj.build(input_shape)
 
         self.hmmlayer = AnnotationHMM(
             heads=self.config.heads,
@@ -88,7 +89,8 @@ class HMMBlock(tf.keras.layers.Layer):
         mode: HMMMode = HMMMode.POSTERIOR,
         training: bool = False,
     ) -> tf.Tensor:
-        x = self.input_proj(x)  # type: ignore
+        if self.config.embed is not None:
+            x = self.input_proj(x)  # type: ignore
 
         posterior = self.hmmlayer(
             x, nuc,

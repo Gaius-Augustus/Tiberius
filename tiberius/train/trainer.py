@@ -7,12 +7,12 @@ import tensorflow as tf
 import wandb
 from hidten.config import ModelConfig
 from pydantic import BaseModel
-from vipsania.train.callback import WandbLRUEigenvalues
+# from vipsania.train.callback import WandbLRUEigenvalues
 from wandb.integration.keras import WandbMetricsLogger
 
 from ..data import DatasetConfig, build_dataset
 from ..model.base import Tiberius, TiberiusConfig
-from ..model.residual import ResidualTiberius, ResidualTiberiusConfig
+# from ..model.residual import ResidualTiberius, ResidualTiberiusConfig
 from .callback import (AnnotationMetrics, AnnotationMetricsConfig,
                        WarmUpDecayFlatSchedule)
 from .loss import CCE_F1_Loss
@@ -58,7 +58,8 @@ class Trainer:
     def __init__(
         self,
         config: TrainerConfig | Path | str,
-        model_config: TiberiusConfig | ResidualTiberiusConfig | Path | str,
+        model_config: TiberiusConfig | Path | str,
+        # model_config: TiberiusConfig | ResidualTiberiusConfig | Path | str,
         dataset_config: DatasetConfig | Path | str,
         checkpoints_dir: Path | str,
         jit_compile: bool = True,
@@ -71,8 +72,8 @@ class Trainer:
                 model_config = TiberiusConfig(**json.load(f))
         if isinstance(model_config, TiberiusConfig):
             self.model = Tiberius(**model_config.model_dump())
-        elif isinstance(model_config, ResidualTiberiusConfig):
-            self.model = ResidualTiberius(**model_config.model_dump())
+        # elif isinstance(model_config, ResidualTiberiusConfig):
+        #     self.model = ResidualTiberius(**model_config.model_dump())
         self.model.build((None, None, 6))
 
         if not isinstance(config, TrainerConfig):
@@ -222,13 +223,13 @@ class Trainer:
                     save_path=self.path,
                     **lam.model_dump(),
                 ))
-            if (
-                hasattr(self.model.config, "lru")
-                and self.model.config.lru is not None
-            ):
-                callbacks.append(WandbLRUEigenvalues(
-                    every_n_epochs=self.config.log_plot_freq,
-                ))
+            # if (
+            #     hasattr(self.model.config, "lru")
+            #     and self.model.config.lru is not None
+            # ):
+            #     callbacks.append(WandbLRUEigenvalues(
+            #         every_n_epochs=self.config.log_plot_freq,
+            #     ))
         return callbacks
 
     def train(self) -> None:

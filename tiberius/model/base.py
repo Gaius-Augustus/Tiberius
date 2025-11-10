@@ -2,26 +2,25 @@ import tensorflow as tf
 from hidten.config import ModelConfig, with_config
 from hidten.hmm import HMMMode
 
-from .util import LSTMInferenceLoss, extract_nucleotides
 from .hmm import HMMBlock, HMMBlockConfig
+from .util import extract_nucleotides
 
 
 class TiberiusConfig(ModelConfig):
 
-    units: int = 372
+    n_conv: int = 3
     filter_size: int = 128
     kernel_size: int = 9
-    numb_conv: int = 3
-    numb_lstm: int = 2
-    pool_size: int = 9
-    output_size: int = 15
 
-    multi_loss: bool = False
-    residual_conv: bool = True
+    pool_size: int = 9
+    n_lstm: int = 2
+    units: int = 372
+
+    output_size: int = 30
 
     hmm: HMMBlockConfig | None = None
 
-    model_config = {"frozen": True}
+    model_config = {"frozen": True, "extra": "forbid"}
 
 
 @with_config(TiberiusConfig)
@@ -37,15 +36,15 @@ class Tiberius(tf.keras.Model):
                 3 if i == 0 else self.config.kernel_size,
                 padding="same",
                 activation="relu",
-                name="initial_conv" if i == 0  else f"conv_{i+1}",
+                name="initial_conv" if i == 0 else f"conv_{i+1}",
             )
-            for i in range(self.config.numb_conv)
+            for i in range(self.config.n_conv)
         ]
         self.norms = [
             tf.keras.layers.LayerNormalization(
                 name=f"layer_normalization{i+1}",
             )
-            for i in range(self.config.numb_conv)
+            for i in range(self.config.n_conv-1)
         ]
         self.dense_to_lstm = tf.keras.layers.Dense(
             2*self.config.units,
@@ -56,65 +55,63 @@ class Tiberius(tf.keras.Model):
                 self.config.units,
                 return_sequences=True,
             ), name=f'biLSTM_{i+1}')
-            for i in range(self.config.numb_lstm)
+            for i in range(self.config.n_lstm)
         ]
 
-        if self.config.residual_conv:
-            self.out_dense_1 = tf.keras.layers.Dense(
-                self.config.pool_size*30,
-                activation="relu",
-            )
-            self.out_dense_2 = tf.keras.layers.Dense(
-                self.config.output_size,
-            )
-        else:
-            self.out_dense = tf.keras.layers.Dense(
-                self.config.pool_size*self.config.output_size,
-            )
-
-        if self.config.multi_loss:
-            self.lstm_loss = [
-                LSTMInferenceLoss(
-                    pool_size=self.config.pool_size,
-                    output_size=self.config.output_size,
-                )
-                for _ in range(self.config.numb_lstm - 1)
-            ]
+        self.out_dense_1 = tf.keras.layers.Dense(
+            self.config.pool_size*2*self.config.output_size,
+            activation="relu",
+        )
+        self.out_dense_2 = tf.keras.layers.Dense(
+            self.config.output_size,
+        )
 
         if self.config.hmm is not None:
             self.hmm = HMMBlock(**self.config.hmm.model_dump())
-            self.hmm_dense = tf.keras.layers.Dense(15, activation="softmax")
+            self.hmm_dense = tf.keras.layers.Dense(self.config.output_size)
+
+        self._hmm_inference = None
 
     def build(self, input_shape: tuple[int | None, ...]) -> None:
-        self.d_in = input_shape[-1]
+        d_in = input_shape[-1]
 
         self.conv[0].build(input_shape)
-        for i in range(self.config.numb_conv-1):
+        for i in range(self.config.n_conv-1):
             self.norms[i].build(input_shape[:-1] + (self.config.filter_size, ))
             self.conv[i+1].build(
                 input_shape[:-1] + (self.config.filter_size, )
             )
 
         self.d_out_cnn = self.config.pool_size * (
-            self.config.filter_size + self.d_in
+            self.config.filter_size + d_in
         )
         self.dense_to_lstm.build(input_shape[:-1] + (self.d_out_cnn, ))
 
-        for i in range(self.config.numb_lstm):
+        for i in range(self.config.n_lstm):
             self.lstm[i].build(input_shape[:-1] + (2*self.config.units, ))
 
-        if self.config.residual_conv:
-            self.out_dense_1.build(input_shape[:-1] + (2*self.config.units, ))
-            self.out_dense_2.build(
-                input_shape[:-1] + (30+self.config.filter_size, )
-            )
-        else:
-            self.out_dense.build(input_shape[:-1] + (2*self.config.units, ))
+        self.out_dense_1.build(input_shape[:-1] + (2*self.config.units, ))
+        self.out_dense_2.build(input_shape[:-1] + (
+            2*self.config.output_size + self.config.filter_size,
+        ))
 
         if self.config.hmm is not None:
-            self.hmm.build(input_shape[:-1] + (15, ))
-            hmm_out = self.hmm.compute_output_shape(input_shape[:-1]+(15, ))
-            self.hmm_dense.build(input_shape[:-1]+(hmm_out[-2]*hmm_out[-1], ))
+            self.hmm.build(input_shape[:-1] + (self.config.output_size, ))
+            hmm_out = self.hmm.compute_output_shape(input_shape[:-1] + (
+                self.config.output_size,
+            ))
+            self.hmm_dense.build(input_shape[:-1] + (hmm_out[-1], ))
+
+    def set_inference(
+        self,
+        inference: bool = False,
+        mode: HMMMode = HMMMode.VITERBI,
+    ) -> None:
+        """Sets the model to inference mode. The output of the model
+        will then be the Viterbi (or MEA) sequence of states of the
+        HMM in the model.
+        """
+        self._hmm_inference = None if not inference else mode
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         B, T, _ = tf.unstack(tf.shape(x))
@@ -122,29 +119,31 @@ class Tiberius(tf.keras.Model):
         if self.config.hmm is not None:
             nuc = extract_nucleotides(x)
         y = self.conv[0](x)
-        for i in range(self.config.numb_conv-1):
+        for i in range(self.config.n_conv-1):
             y = self.norms[i](y)
             y = self.conv[i+1](y)
         x = tf.concat([x, y], axis=-1)
         x = tf.reshape(x, (B, -1, self.d_out_cnn))
 
         x = self.dense_to_lstm(x)
-        for i in range(self.config.numb_lstm):
+        for i in range(self.config.n_lstm):
             x = self.lstm[i](x)
-            if self.config.multi_loss and i < self.config.numb_lstm-1:
-                self.lstm_loss[i](x)
 
-        if self.config.residual_conv:
-            x = self.out_dense_1(x)
-            x = tf.reshape(x, (B, -1, 30))
-            x = tf.concat([x, y], axis=-1)
-            x = self.out_dense_2(x)
-        else:
-            x = self.out_dense(x)
-            x = tf.reshape(x, (B, -1, self.config.output_size))
+        x = self.out_dense_1(x)
+        x = tf.reshape(x, (B, T, 2*self.config.output_size))
+        x = tf.concat([x, y], axis=-1)
+        x = self.out_dense_2(x)
 
-        x = tf.nn.softmax(x)
         if self.config.hmm is not None:
-            x = self.hmm(x, nuc, mode=HMMMode.POSTERIOR)
+            x = tf.nn.softmax(x, axis=-1)
+            if self._hmm_inference is not None:
+                return self.hmm(
+                    x, nuc,
+                    mode=self._hmm_inference,
+                )  # type: ignore
+            x = self.hmm(
+                x, nuc,
+                mode=HMMMode.POSTERIOR,
+            )  # type: ignore
             x = self.hmm_dense(x)
         return x

@@ -65,6 +65,7 @@ The following Python libraries are required and installed with Tiberius:
 - requests
 - gzip
 - bz2
+- rich
 
 Make sure TensorFlow is installed with GPU support. Tiberius was built on TensorFlow 2.10 and runs best with that version. If you are using conda, you can install Tensorflow 2.10 with these [instructions](docs/install_tensorflow.md).
 

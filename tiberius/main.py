@@ -15,6 +15,7 @@ from Bio.Seq import Seq
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 MAX_TF_VERSION = '2.12'
+SCRIPT_ROOT = os.path.dirname(os.path.abspath(__file__))
 seqgroup_size = 50000400
 
 class MissingConfigFieldError(RuntimeError):
@@ -45,6 +46,17 @@ def load_model_config(
     dict
         Parsed YAML contents.
     """
+    if not os.path.exists(filepath):
+        repo_config = f"{SCRIPT_ROOT}/../model_cfg/{filepath}"
+        if not repo_config.endswith(".yaml"):
+            repo_config += ".yaml"
+        if os.path.exists(repo_config):
+            filepath = repo_config
+        else:
+            raise FileNotFoundError(f"File not found: {filepath}")
+
+    
+    logging.info(f'Model Config File: {os.path.abspath(filepath)}') 
     with open(filepath, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
@@ -210,14 +222,15 @@ def run_tiberius(args):
         elif args.model:
             model_path = os.path.abspath(args.model)
         else:
-            if args.clamsa and args.no_softmasking:
-                raise InvalidArgumentCombinationError("Use either --clamsa or --no_softmasking with the default mammalian models!")
-            elif args.clamsa:
-                config = load_model_config(f"{script_dir}/../model_cfg/mammalia_clamsa_v2.yaml")
-            elif args.no_softmasking:
-                config = load_model_config(f"{script_dir}/../model_cfg/mammalia_nosoftmasking_v2.yaml")
-            else:
-                config = load_model_config(f"{script_dir}/../model_cfg/mammalia_softmasking_v2.yaml")
+            raise FileNotFoundError(f"A model config file has to be specified with --model_cfg!")
+            # if args.clamsa and args.no_softmasking:
+            #     raise InvalidArgumentCombinationError("Use either --clamsa or --no_softmasking with the default mammalian models!")
+            # elif args.clamsa:
+            #     config = load_model_config(f"{script_dir}/../model_cfg/mammalia_clamsa_v2.yaml")
+            # elif args.no_softmasking:
+            #     config = load_model_config(f"{script_dir}/../model_cfg/mammalia_nosoftmasking_v2.yaml")
+            # else:
+            #     config = load_model_config(f"{script_dir}/../model_cfg/mammalia_softmasking_v2.yaml")
         
         if model_path:        
             check_file_exists(model_path)

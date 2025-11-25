@@ -28,7 +28,7 @@ def parseCmd():
     grp.add_argument('--model', type=str,    
         help='Tiberius model with weight file (.h5) without the HMM layer.', default='')
     grp.add_argument('--model_cfg', type=str, default='',
-        help='Yaml file with model infomation, including URL for download. Can be used instead of --mode to specify a model.')
+        help='Path to Yaml file or Yaml file name that is located in model_cfg with model infomation, including URL for download. Can be used instead of --model to specify a model.')
 
     parser.add_argument('--model_hmm', type=str, default='',
         help='HMM layer file that can be used instead of the default HMM.')

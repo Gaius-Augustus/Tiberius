@@ -2,9 +2,8 @@
 
 import argparse
 import sys
-sys.path.append("/home/gabriell/Tiberius/bin/")   
-from gene_pred_hmm import GenePredHMMLayer
-from models import custom_cce_f1_loss, Cast
+from tiberius.gene_pred_hmm import GenePredHMMLayer
+from tiberius.models import custom_cce_f1_loss, Cast
 from pathlib import Path
 import json, tensorflow as tf
 from tensorflow.keras.models import Model

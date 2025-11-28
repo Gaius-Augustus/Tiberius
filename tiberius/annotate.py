@@ -38,10 +38,10 @@ def predict_sequence(
                 tf.zeros((0, ) + tuple(out.shape[1:]), dtype=out.dtype)
             )
         output[0] = tf.concat((output[0], out), axis=0)
-    result = [
+    result = (
         tf.reshape(output, (-1, )+tuple(output.shape[2:]))
         if not return_batched else output
-    ]
+    )
     return result[0]
 
 

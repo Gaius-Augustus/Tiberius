@@ -75,3 +75,55 @@ class CCE_F1_Loss(tf.keras.Loss):
             loss = loss + self.f1_factor * (f1_loss + fpr)
 
         return loss
+
+
+def two_stranded_accuracy(
+    y_true: tf.Tensor,
+    y_pred: tf.Tensor,
+    sample_weight: tf.Tensor | None = None,
+) -> tf.Tensor:
+    B, T, D = tf.unstack(tf.shape(y_pred))
+    y_true = tf.reshape(y_true, (B, T, 2, D // 2))
+    y_pred = tf.reshape(y_pred, (B, T, 2, D // 2))
+
+    y_pred = tf.argmax(y_pred, axis=-1)
+    y_true = tf.argmax(y_true, axis=-1)
+    y_true = tf.cast(y_true, dtype=y_pred.dtype)  # type: ignore
+
+    return tf.cast(
+        tf.reduce_mean(tf.cast(
+            tf.equal(y_true, y_pred), dtype=tf.float32
+        ), axis=2), y_pred.dtype,
+    )
+
+
+class TwoStrandedAccuracy(tf.keras.metrics.Metric):
+
+    def __init__(
+        self,
+        name: str = "accuracy",
+        **kwargs,
+    ) -> None:
+        super().__init__(name=name, **kwargs)
+        self.total = self.add_weight(initializer="zeros")
+        self.count = self.add_weight(initializer="zeros")
+
+    def update_state(
+        self,
+        y_true: tf.Tensor,
+        y_pred: tf.Tensor,
+        sample_weight: tf.Tensor | None = None,
+    ) -> None:
+        matches = two_stranded_accuracy(
+            y_true, y_pred,
+            sample_weight=sample_weight,
+        )
+        self.total.assign_add(tf.reduce_sum(matches))
+        self.count.assign_add(tf.cast(tf.size(matches), self.dtype))
+
+    def result(self) -> tf.Tensor:
+        return self.total / (self.count + tf.keras.backend.epsilon())
+
+    def reset_states(self) -> None:
+        self.total.assign(0.0)
+        self.count.assign(0.0)

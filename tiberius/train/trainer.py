@@ -15,7 +15,7 @@ from ..model.base import Tiberius, TiberiusConfig
 # from ..model.residual import ResidualTiberius, ResidualTiberiusConfig
 from .callback import (AnnotationMetrics, AnnotationMetricsConfig,
                        WarmUpDecayFlatSchedule)
-from .loss import CCE_F1_Loss
+from .loss import CCE_F1_Loss, TwoStrandedAccuracy
 
 
 class TrainerConfig(BaseModel):
@@ -175,7 +175,7 @@ class Trainer:
                 use_cee=self.config.use_cee,
             ),
             optimizer=optimizer,  # type: ignore
-            metrics=["accuracy"],
+            metrics=[TwoStrandedAccuracy()],
             jit_compile=self.jit_compile,  # type: ignore
         )
         if self.load is not None:

@@ -29,17 +29,18 @@ class TrainerConfig(BaseModel):
     beta_1: float = 0.9
     beta_2: float = 0.999
     gradient_clip_norm: float | None = None
+    gradient_accumulation_steps: int | None = None
 
-    lr_warmup: float | None = None
-    """Percentage of the total training steps used for cosine warmup."""
+    lr_warmup: int | None = None
+    """Number of epochs used for a cosine warmup."""
     lr_warmup_target: float = 1e-2
     """Learning rate after warmup."""
     lr_warmup_start: float = 1e-7
     """Learning rate at the start of training when using a warmup."""
-    lr_decay: float = 0.1
-    """Percentage of the total training steps used to decay to the
-    default learning rate. Only applicable when `lr_warmup` is set."""
-    lr_log_decay: float | None = None
+    lr_decay: int = 100
+    """Number of epochs used to decay to the default learning rate. Only
+    applicable when `lr_warmup` is set."""
+    lr_log_decay: int | None = None
     """Percentage of the total training steps used for an additional
     decay after the warmup. This decay brings the learning rate to zero
     with a given `lr_log_decay_velocity`."""
@@ -137,19 +138,12 @@ class Trainer:
     def compile(self) -> None:
         lr = self.config.lr
         if self.config.lr_warmup is not None:
-            ws = self.config.lr_warmup
-            if 0.0 <= ws <= 1.0:
-                ws *= self.config.train_steps * self.config.epochs
-            ws = int(ws)
-            ds = self.config.lr_decay
-            if 0.0 <= ds <= 1.0:
-                ds *= self.config.train_steps * self.config.epochs
-            ds = int(ds)
-            ls = self.config.lr_log_decay
-            if ls is not None and 0.0 <= ls <= 1.0:
-                ls *= self.config.train_steps * self.config.epochs
-            if ls is not None:
-                ls = int(ls)
+            ws = int(self.config.lr_warmup * self.config.train_steps)
+            ds = int(self.config.lr_decay * self.config.train_steps)
+            if self.config.lr_log_decay is not None:
+                ls = int(self.config.lr_log_decay * self.config.train_steps)
+            else:
+                ls = None
             lr = WarmUpDecayFlatSchedule(
                 start_lr=self.config.lr_warmup_start,  # type: ignore
                 base_lr=self.config.lr,  # type: ignore
@@ -166,6 +160,8 @@ class Trainer:
             beta_1=self.config.beta_1,
             beta_2=self.config.beta_2,
             clipnorm=self.config.gradient_clip_norm,
+            gradient_accumulation_steps=
+                self.config.gradient_accumulation_steps,
         )
         optimizer.exclude_from_weight_decay(
             var_names=["bias", "beta", "gamma"],
@@ -177,7 +173,6 @@ class Trainer:
                 batch_size=self.dataset_config.batch_size,
                 output_dim=self.dataset_config.output_size,
                 use_cee=self.config.use_cee,
-                from_logits=True,
             ),
             optimizer=optimizer,  # type: ignore
             metrics=["accuracy"],

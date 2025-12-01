@@ -78,22 +78,15 @@ To run Tiberius with `tiberius.py`, you need to provide a FASTA file containing 
 ### Choosing the model weights
 
 There are three ways in providing the model weights to Tiberius:
-1. **Automatic download**: Tiberius will automatically download the model weights from the Tiberius server if you do note provide model weights.
-2. **Model config**: You can provide a model config file with the `--model_cfg` argument. The model config file is a YAML file that contains the model weights URL and other information about the model. See [model_cfg](model_cfg/README.md) for more information on how to create a model config file and available model configurations.
-3. **Local model weights**: You can provide the path to the model weights with the `--model` argument. 
+1. **Model config**: You can provide a model config file with the `--model_cfg` argument. The model config file is a YAML file that contains the model weights URL and other information about the model. See [model_cfg](model_cfg/README.md) for more information on how to create a model config file and available model configurations.
+2. **Local model weights**: You can provide the path to the model weights with the `--model` argument. 
 
 ### Running Tiberius with softmasked genome
 If you want to run Tiberius with softmasking, model weights will be downloaded from https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_weights.tgz into `model_weights`.
-
+You can specify the model configuration file with:
 ```shell
 # Run Tiberius with softmasking
-python tiberius.py --genome input.fasta --out output.gtf 
-```
-
-Or you can specify the model configuration file with:
-```shell
-# Run Tiberius with softmasking
-python tiberius.py --genome input.fasta --out output.gtf --model_cfg model_cfg/mammalia_softmasking_v2.yaml
+python tiberius.py --genome input.fasta --out output.gtf --model_cfg mammalia_softmasking_v2.yaml
 ```
 
 You can also manually download the weights and provide the path to the weights with the `--model` argument.
@@ -103,17 +96,17 @@ python tiberius.py --genome input.fasta --out output.gtf --model tiberius_weight
 ```
 
 ### Running Tiberius without softmasked genome
-If you want to run Tiberius without softmasking, you can use the `--no_softmasking` argument. Tiberius will download the weights for the non-softmasking model automatically from https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_nosm_weights.tgz into `model_weights`. Or you can provide Tiberius with the model configuration file `model_cfg/mammalia_nosofttmasking_v2.yaml`
+If you want to run Tiberius without softmasking, you can use the `--no_softmasking` argument and provide Tiberius with a model configuration file (e.g., `model_cfg/mammalia_nosofttmasking_v2.yaml`)
 ```shell
 # Run Tiberius without softmasking
-python tiberius.py --genome input.fasta --out output.gtf --no_softmasking
+python tiberius.py --genome input.fasta --out output.gtf --no_softmasking  --model_cfg mammalia_nosofttmasking_v2.yaml
 ```
 
 ### Running Tiberius with evolutionary information
-To run Tiberius in *de novo* mode, evolutionary information data has to be generated with ClaMSA. See [docs/clamsa_data.md](docs/clamsa_data.md) for instructions on how to generate the data. Afterwards, you should have a directory with files named `$clamsa/{prefix}{seq_name}.npz` for each sequence of your FASTA file. You can then run Tiberius with the `--clamsa` argument. Note that your genome has to be softmasked for this mode and that you have to use different training weights than in *ab initio* mode. If not provided, they will automatically downloaded from https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights.tgz into `model_weights`. Or you can provide Tiberius with the model configuration file `model_cfg/mammalia_clamsa_v2.yaml`
+To run Tiberius in *de novo* mode, evolutionary information data has to be generated with ClaMSA. See [docs/clamsa_data.md](docs/clamsa_data.md) for instructions on how to generate the data. Afterwards, you should have a directory with files named `$clamsa/{prefix}{seq_name}.npz` for each sequence of your FASTA file. You can then run Tiberius with the `--clamsa` argument. Note that your genome has to be softmasked for this mode and that you have to use different training weights than in *ab initio* mode. You can downloaded the model weights from [https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights.tgz](https://bioinf.uni-greifswald.de/bioinf/tiberius/models//tiberius_denovo_weights_v2.tar.gz). Or you can provide Tiberius with the model configuration file `model_cfg/mammalia_clamsa_v2.yaml`
 ```shell
 # Run Tiberius with softmasking
-python tiberius.py --genome input.fasta --clamsa $clamsa/{prefix} --out output.gtf
+python tiberius.py --genome input.fasta --clamsa $clamsa/{prefix} --out output.gtf --model_cfg model_cfg/mammalia_clamsa_v2.yaml
 ```
 
 ### Running Tiberius on Differnet GPUs

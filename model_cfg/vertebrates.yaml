@@ -1,0 +1,99 @@
+target_species: "Vertebrata"
+ncbi_tax_id: 7742
+weights_url: "https://bioinf.uni-greifswald.de/bioinf/tiberius/models/vertebrates_weights.tar.gz"
+softmasking: False
+clamsa: False
+tiberius_version: 1.1.7
+date: "2025-11-10"
+comment: "Mario Stanke, Nov 10th 2025\n. This was trained on vertebrates including fish,
+ birds,  lizards and mammals. It should be preferred on non-mammalian vertebrates genomes over the mammalian version of Tiberius but is slightly worse on mammals:
+                 Group   Training  Mean Locus F1
+     All Species (n=9)     Mammal          33.95
+     All Species (n=9) Vertebrate          47.50
+    Mammals Only (n=3)     Mammal          48.54
+    Mammals Only (n=3) Vertebrate          47.32
+ Non-Mammal Vert (n=6)     Mammal          26.66
+ Non-Mammal Vert (n=6) Vertebrate          47.58
+
+ Vertebrate: this, Mammal: mammalia_nosofttmasking_v2.yaml
+ Tested on 9 vertebrate test species, phylogenetically separated from any training species:  
+ # 3 mammals
+ GCF_002263795.3 cow
+ GCF_000001405.40 human
+ GCF_002288925.2 beluga whale
+ # 6 non-mammalian vertebrates
+ GCF_016700215.2 chicken
+ GCF_963506605.1 lizard
+ GCF_900634795.4 Betta splendens
+ GCF_007364275.1 Hoplostethus_atlanticus
+ GCF_901000725.2 Takifugu_rubripes
+ GCF_044704955.1 Pristiophorus_japonicus
+"
+training_species:
+  # 31 mammalian species, like in the original Tiberius paper
+  - Aotus_nancymaae
+  - Camelus_bactrianus
+  - Canis_lupus_familiaris
+  - Cavia_porcellus
+  - Cebus_capucinus
+  - Ceratotherium_simum
+  - Chinchilla_lanigera
+  - Condylura_cristata
+  - Desmodus_rotundus
+  - Dipodomys_ordii
+  - Enhydra_lutris
+  - Eptesicus_fuscus
+  - Equus_caballus
+  - Heterocephalus_glaber
+  - Ictidomys_tridecemlineatus
+  - Jaculus_jaculus
+  - Loxodonta_africana
+  - Marmota_marmota
+  - Microcebus_murinus
+  - Microtus_ochrogaster
+  - Mus_musculus
+  - Mus_pahari
+  - Neomonachus_schauinslandi
+  - Ochotona_princeps
+  - Octodon_degus
+  - Odobenus_rosmarus
+  - Otolemur_garnettii
+  - Propithecus_coquereli
+  - Saimiri_boliviensis
+  - Sorex_araneus
+  - Trichechus_manatus
+  # 35 vertebrate, non-mammalian species 
+  - Acipenser_ruthenus           # GCF_902713425.1
+  - Alligator_mississippiensis   # GCF_030867095.1
+  - Alosa_sapidissima            # GCF_018492685.1
+  - Amblyraja_radiata            # GCF_010909765.2
+  - Anguilla_anguilla            # GCF_013347855.1
+  - Anolis_sagrei                # GCF_037176765.1
+  - Apus_apus                    # GCF_020740795.1
+  - Bombina_bombina              # GCF_027579735.1
+  - Carcharodon_carcharias       # GCF_017639515.1
+  - Corvus_hawaiiensis           # GCF_020740725.1
+  - Dendropsophus_ebraccatus     # GCF_027789765.1
+  - Denticeps_clupeoides         # GCF_900700375.1
+  - Elgaria_multicarinata_webbii # GCF_023053635.1
+  - Emys_orbicularis             # GCF_028017835.1
+  - Erpetoichthys_calabaricus    # GCF_900747795.2
+  - Esox_lucius                  # GCF_011004845.1
+  - Eublepharis_macularius       # GCF_028583425.1
+  - Falco_peregrinus             # GCF_023634155.1
+  - Gavia_stellata               # GCF_030936135.1
+  - Labrus_mixtus                # GCF_963584025.1
+  - Latimeria_chalumnae          # GCF_037176945.1
+  - Lepisosteus_oculatus         # GCF_040954835.1
+  - Megalops_cyprinoides         # GCF_013368585.1
+  - Mobula_birostris             # GCF_030028105.1
+  - Narcine_bancroftii           # GCF_036971445.1
+  - Osmerus_eperlanus            # GCF_963692335.1
+  - Parambassis_ranga            # GCF_900634625.1
+  - Pelobates_fuscus             # GCF_036172605.1
+  - Podarcis_raffonei            # GCF_027172205.1
+  - Rana_temporaria              # GCF_905171775.1
+  - Rhinatrema_bivittatum        # GCF_901001135.1
+  - Scleropages_formosus         # GCF_900964775.1
+  - Solea_solea                  # GCF_958295425.1
+  - Sparus_aurata                # GCF_900880675.1

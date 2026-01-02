@@ -20,6 +20,7 @@ Each file is read at runtime by Tiberius and therefore must follow the schema be
 | mammalia_clamsa_v2 | Mammalia | :white_check_mark: |  :white_check_mark:| 
 | saccharomycota | Saccharomycota | :white_check_mark: |  :x:| 
 | sordariomycota | Sordariomycota | :white_check_mark: |  :x:| 
+| vertebrates | Vertebrates | :x: |  :white_check_mark:| 
 
 
 ## 2  File naming convention

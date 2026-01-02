@@ -271,10 +271,11 @@ def run_tiberius(args):
     clamsa_prefix = args.clamsa if not config else config["clamsa"]
     
     if config:
-        model_weights_dir = f'{script_dir}/../model_weights'        
+        model_weights_dir = f'{script_dir}/../model_weights'
         if not os.path.exists(model_weights_dir):
-            os.makedirs(model_weights_dir)
-        if not is_writable(model_weights_dir):
+            if is_writable(os.path.dirname(model_weights_dir)):
+                os.makedirs(model_weights_dir)
+        if not os.path.exists(model_weights_dir) or not is_writable(model_weights_dir):
             model_weights_dir = os.getcwd()
         if not is_writable(model_weights_dir):
             logging.error(f'No model weights provided, and candidate directorys for download are not writeable. Please download the model weigths manually (see README.md) and specify them with --model!')

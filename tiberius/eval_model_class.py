@@ -165,7 +165,8 @@ class PredictionGTF:
             self.model = keras.models.load_model(self.model_path_old, 
                     custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
                         'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
-                        "Cast": Cast})
+                        "Cast": Cast}, 
+                    compile=False,)
             try:
                 lstm_output=self.model.get_layer('out').output
             except ValueError as e:

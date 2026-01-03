@@ -197,22 +197,9 @@ def load_genome(genome_path):
 
 
 def run_tiberius(args):
-    if 'tensorflow' in sys.modules:
-        tf = sys.modules['tensorflow']
-    else:
-        import tensorflow as tf
-
-    if not check_tf_version(tf.__version__) and args.seq_len > 259992:
-        logging.error(f"Error: The sequence length {args.seq_len} is too long for TensorFlow version {tf.__version__}. "
-                        "Please use a sequence length <= 259992 (--seq_len).")
-        sys.exit(1)
-
     if args.learnMSA:
         sys.path.insert(0, args.learnMSA)  
-        
-    from tiberius import Anno, make_weighted_cce_loss, PredictionGTF
 
-    start_time = time.time()
     config = None
     model_path = None
     model_path_hmm = None
@@ -273,8 +260,9 @@ def run_tiberius(args):
     if config:
         model_weights_dir = f'{script_dir}/../model_weights'        
         if not os.path.exists(model_weights_dir):
-            os.makedirs(model_weights_dir)
-        if not is_writable(model_weights_dir):
+            if is_writable(os.path.dirname(model_weights_dir)):
+                os.makedirs(model_weights_dir)
+        if not os.path.exists(model_weights_dir) or not is_writable(model_weights_dir):
             model_weights_dir = os.getcwd()
         if not is_writable(model_weights_dir):
             logging.error(f'No model weights provided, and candidate directorys for download are not writeable. Please download the model weigths manually (see README.md) and specify them with --model!')
@@ -288,6 +276,21 @@ def run_tiberius(args):
     if (model_path and not os.path.exists(model_path)):
         logging.error(f'Error: The model weights could not be downloaded. Please download the model weights manually (see README.md) and specify them with --model!')
         sys.exit(1)
+
+    # Load TensorFlow only after argument/config validation to fail fast without heavy imports
+    if 'tensorflow' in sys.modules:
+        tf = sys.modules['tensorflow']
+    else:
+        import tensorflow as tf
+
+    if not check_tf_version(tf.__version__) and args.seq_len > 259992:
+        logging.error(f"Error: The sequence length {args.seq_len} is too long for TensorFlow version {tf.__version__}. "
+                        "Please use a sequence length <= 259992 (--seq_len).")
+        sys.exit(1)
+
+    from tiberius import Anno, make_weighted_cce_loss, PredictionGTF
+
+    start_time = time.time()
 
     anno = Anno(gtf_out, f'anno')     
     tx_id=0

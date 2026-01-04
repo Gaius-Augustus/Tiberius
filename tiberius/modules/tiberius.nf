@@ -89,7 +89,7 @@ process MERGE_TIBERIUS_TRAIN_PRIO {
 process PROTEIN_FROM_GFF {
   publishDir {"${params.outdir}/"}, mode:'copy'
   
-  // label 'container'
+  label 'container'
 
   input:
       path tiberius 

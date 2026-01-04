@@ -19,10 +19,17 @@ workflow PROTEIN_EVIDENCE {
     params_map
 
     main:
-    if( !params_map.proteins )        error "params.proteins is required for protein evidence modes"
+    if( !params_map.proteins && !params_map.odb12Partitions ) {
+        error "params.proteins or params.odb12Partitions is required for protein evidence modes"
+    }
     if( !params_map.scoring_matrix )  error "params.scoring_matrix is required for protein evidence modes"
 
-    if( params_map.tiberius?.run ) {
+    def tiberiusRunVal = params_map.tiberius?.run
+    def tiberiusRun = (tiberiusRunVal instanceof Boolean) \
+        ? tiberiusRunVal \
+        : (tiberiusRunVal?.toString()?.trim()?.toLowerCase() in ['true','1','yes','y'])
+
+    if( tiberiusRun ) {
         if( params_map.tiberius?.result && file(params_map.tiberius.result).exists() ) {
             tiberius_gff_ch = Channel.fromPath(params_map.tiberius.result, checkIfExists: true)
             tiberius_gff_ch = REFORMAT_TIBERIUS(tiberius_gff_ch.toList())

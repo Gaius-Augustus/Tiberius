@@ -30,7 +30,22 @@ workflow {
     def hasPaired   = params.rnaseq_paired?.size()  > 0 || params.rnaseq_sra_paired?.size() > 0
     def hasSingle   = params.rnaseq_single?.size()  > 0 || params.rnaseq_sra_single?.size() > 0
     def hasIso      = params.isoseq?.size()         > 0 || params.isoseq_sra?.size() > 0
-    def hasProteins = params.proteins != null
+    def proteinsList = []
+    if( params.proteins ) {
+      def rawList = (params.proteins instanceof List) ? params.proteins : [params.proteins]
+      proteinsList = rawList.findAll { it }
+    }
+    def odb12List = []
+    if( params.odb12Partitions ) {
+      def rawOdb = (params.odb12Partitions instanceof List) ? params.odb12Partitions : [params.odb12Partitions]
+      odb12List = rawOdb.findAll { it }
+    }
+    def hasProteins = proteinsList.size() > 0 || odb12List.size() > 0
+
+    def tiberiusRunVal = params.tiberius?.run
+    def tiberiusRun = (tiberiusRunVal instanceof Boolean) \
+      ? tiberiusRunVal \
+      : (tiberiusRunVal?.toString()?.trim()?.toLowerCase() in ['true','1','yes','y'])
 
     def MODE = params.mode ?: inferMode(hasPaired, hasSingle, hasIso, hasProteins)
     log.info "Running mode: ${MODE}"
@@ -80,7 +95,7 @@ workflow {
         train_final = HC_FORMAT_FILTER(pe.prot_traingff, params.genome)
       }
 
-      if( params.tiberius?.run ) {
+      if( tiberiusRun ) {
         MERGE_TIBERIUS_TRAIN(pe.tiberius_gff, train_final)
         // MERGE_TIBERIUS_TRAIN_PRIO(pe.tiberius_gff, train_final)
       }

@@ -1,5 +1,42 @@
 nextflow.enable.dsl=2
 
+process CONCAT_PROTEINS {
+  tag "concat_proteins"
+
+  input:
+  path proteins, stageAs:  "?/*" 
+
+  output:
+  path "proteins_concat.faa"
+
+  shell:
+  def input_str = proteins instanceof List ? proteins.join(" ") : proteins
+  """
+    cat ${input_str} > proteins_concat.faa
+  """
+}
+
+process DOWNLOAD_ODB12_PARTITIONS {
+  tag "odb12_partitions"
+
+  input:
+  val partitions
+
+  output:
+  path "odb12_partitions.faa"
+
+  script:
+  """
+  set -euo pipefail
+  : > odb12_partitions.faa
+  for part in ${partitions}; do
+      url="https://bioinf.uni-greifswald.de/bioinf/partitioned_odb12/\${part}.fa.gz"
+      curl -fsSL "\${url}" | gunzip -c >> odb12_partitions.faa
+  done
+  """
+}
+
+
 process CONCAT_HINTS {
   publishDir "${params.outdir}", mode: 'copy'   
 

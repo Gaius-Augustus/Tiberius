@@ -98,6 +98,8 @@ def parseCmd():
     nf_params_grp.add_argument('--threads', type=int, help='Thread count for pipeline processes.')
     nf_params_grp.add_argument('--proteins', nargs='*', default=[],
         help='Protein FASTA input(s).')
+    nf_params_grp.add_argument('--odb12Partitions', nargs='*', default=[],
+        help='ODB12 partition name(s) to download and append to proteins.')
     nf_params_grp.add_argument('--rnaseq_single', nargs='*', default=[],
         help='RNA-Seq single-end FASTQ input(s).')
     nf_params_grp.add_argument('--rnaseq_paired', nargs='*', default=[],

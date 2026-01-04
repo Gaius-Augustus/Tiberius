@@ -9,7 +9,12 @@ workflow TIBERIUS_ONLY {
     params_map
 
     main:
-    if( !params_map.tiberius?.run ) {
+    def tiberiusRunVal = params_map.tiberius?.run
+    def tiberiusRun = (tiberiusRunVal instanceof Boolean) \
+        ? tiberiusRunVal \
+        : (tiberiusRunVal?.toString()?.trim()?.toLowerCase() in ['true','1','yes','y'])
+
+    if( !tiberiusRun ) {
         error "Mode 'tiberius' requires params.tiberius.run=true."
     }
 

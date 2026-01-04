@@ -59,7 +59,19 @@ isoseq_sra: [
 # ------------------------------------------------------------
 # Protein evidence (FASTA)
 # ------------------------------------------------------------
-proteins: /path/to/proteins.faa
+# Single file:
+# proteins: /path/to/proteins.faa
+# OR multiple files (will be concatenated):
+proteins: [
+#   /path/to/proteins1.faa,
+#   /path/to/proteins2.faa,
+]
+
+# Optional ODB12 partitions (downloaded, extracted, then concatenated)
+odb12Partitions: [
+#   Metazoa,
+#   Vertebrata,
+]
 
 # ------------------------------------------------------------
 # General Settings

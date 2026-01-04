@@ -14,11 +14,33 @@ genome: /path/to/genome.fa
 ```
 
 ### Protein Sequences (Required Input)
-Path to the FASTA file with a set of protein sequences that are aligned to the target genome. 
+Path to one or more FASTA files with protein sequences aligned to the target genome.
+Multiple files are concatenated in input order.
 
 Example:
 ```bash
 proteins: /path/to/proteins.faa
+```
+
+Or a list:
+```bash
+proteins: [
+  /path/to/proteins1.faa,
+  /path/to/proteins2.faa,
+]
+```
+
+### ODB12 Partitions (Optional)
+Provide one or more named partitions to download and merge into the protein evidence.
+Available partitions: `Metazoa`, `Vertebrata`, `Viridiplantae`, `Arthropoda`, `Fungi`,
+`Alveolata`, `Stramenopiles`, `Amoebozoa`, `Euglenozoa`, `Eukaryota`.
+
+Example:
+```bash
+odb12Partitions: [
+  Metazoa,
+  Fungi,
+]
 ```
 
 ### RNA-Seq/Iso-Seq (Local)

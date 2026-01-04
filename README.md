@@ -9,9 +9,12 @@ For more information, see the [Tiberius paper](https://academic.oup.com/bioinfor
 
 
 Tiberius is a deep learning-based *ab initio* gene structure prediction tool that end-to-end integrates convolutional
-and long short-term memory layers with a differentiable HMM layer. It can be used to predict gene structures from **genomic sequences only**, while matching the accuracy of tool that use extrinsic evidence.
+and long short-term memory layers with a differentiable HMM layer. It can be used to predict gene structures from **genomic sequences only** (*ab initio*), while matching the accuracy of tool that use extrinsic evidence. 
 
-![Accuracy comparison for the human genome](figures/acc_hsap.png)
+Additionally, Tiberius provides an evidence mode that generates highly precise gene structures from extrinsic evidence, which are then combined with Tiberius *ab inito* predictions. Tiberius can also be parallized on HPC systems using Nextflow.
+
+
+![Accuracy comparison for Tiberius *ab initio* predicitons for the human genome](figures/acc_hsap.png)
 
 
 
@@ -19,6 +22,7 @@ We are providing different models for following species (see model_cfg/README.md
 - Diatoms 
 - Eudicotyledons
 - Lepidoptera
+- Insects
 - Monocotyledonae
 - Mucoromycota
 - Mammalia 
@@ -26,28 +30,26 @@ We are providing different models for following species (see model_cfg/README.md
 - Sordariomycota
 - Vertebrates
 
+
 ## Installation
 
-Tiberius can either be installed from source or can be run with a **Singularity** container
-
-### Installation with Singularity container
-Build Singularity container with:
-```
-singularity build tiberius.sif docker://larsgabriel23/tiberius:latest
-```
-
-Run Tiberius with the Singularity container (use `-nv` for GPU support):
-```
- singularity run --cleanenv --env PYTHONNOUSERSITE=1 --nv tiberius.sif tiberius.py [options]
-```
-
-### Installation from Source
-
-Install Tiberius and its dependencies:
+This repository must always be cloned locally, as Tiberius relies on a local launcher script that manages execution and that can pull the Singularity image.
 ```
 git clone https://github.com/Gaius-Augustus/Tiberius
 cd Tiberius
 pip install .
+```
+
+The command above installs the Tiberius Python package itself and is required in all cases, including when running Tiberius via Singularity.
+
+Tiberius can be executed either using Singularity or with a local installation with all dependencies.
+
+
+### Installation from Source
+
+If Singularity is **not** used, Tiberius must be installed together with its dependencies as defined in the `from_source` dependencies in pyproject.toml:
+```
+pip install .[from_source]
 ```
 
 **Note:**  
@@ -63,50 +65,76 @@ The following Python libraries are required and installed with Tiberius:
 - biopython 
 - bcbio-gff
 - requests
-- gzip
-- bz2
 - rich
 
 Make sure TensorFlow is installed with GPU support. Tiberius was built on TensorFlow 2.10 and runs best with that version. If you are using conda, you can install Tensorflow 2.10 with these [instructions](docs/install_tensorflow.md).
 
 Tiberius does also work with TensorFlow >2.10, however, **it will produce an error if you use a `--seq_len` parameter > 259.992 during inference!**  
 
-## Running Tiberius for Gene Prediction
 
-To run Tiberius with `tiberius.py`, you need to provide a FASTA file containing the genomic sequences. The sequence can either include repeat softmasking (recommended) or be run without softmasking. See [softmasking_workflow](docs/softmasking_workflow.md) for recommandations on how to mask repeats for Tiberius.
+## Running Tiberius for *Ab Initio* Gene Prediction
 
-### Choosing the model weights
+To run Tiberius with `tiberius.py`, you need to provide a FASTA file containing the genomic sequences and a model config file. The sequence can either include repeat softmasking (recommended) or be run without softmasking. See [softmasking_workflow](docs/softmasking_workflow.md) for recommandations on how to mask repeats for Tiberius.
 
-There are three ways in providing the model weights to Tiberius:
-1. **Model config**: You can provide a model config file with the `--model_cfg` argument. The model config file is a YAML file that contains the model weights URL and other information about the model. See [model_cfg](model_cfg/README.md) for more information on how to create a model config file and available model configurations.
-2. **Local model weights**: You can provide the path to the model weights with the `--model` argument. 
 
-### Running Tiberius with softmasked genome
-If you want to run Tiberius with softmasking, model weights will be downloaded from https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_weights.tgz into `model_weights`.
-You can specify the model configuration file with:
+### Choosing the Model Weights
+
+Tiberius requires a model config file (`--model_cfg`). The model config is a YAML file that contains the model weights URL and other information about the model. See [model_cfg](model_cfg/README.md) for available configurations and how to create custom ones. You can pass either a full path or a short name (e.g., `diatoms` or `diatoms.yaml`).
+
+### Running Tiberius
+Tiberius can be run using **Singularity** for example for a mammalian species with softmasking with following command:
 ```shell
-# Run Tiberius with softmasking
-python tiberius.py --genome input.fasta --out output.gtf --model_cfg mammalia_softmasking_v2.yaml
+# Run Tiberius for a softmasked mammalian genome
+python tiberius.py --singularity --genome input.fasta \
+    --out output.gtf --model_cfg mammalia_softmasking_v2.yaml
 ```
 
-You can also manually download the weights and provide the path to the weights with the `--model` argument.
+In order to run Tiberius with a local installation omit `--singularity`.
+
+
+Tiberius produces a GTF file containing the predicted gene structures. It can also generate FASTA-formatted files of coding sequences and protein sequences when locations are specified using the `--codingseq` and `--protseq` options, respectively.
+
+If you want to write custom code for Tiberius gene prediction, see [example_prediction.ipynb](test_data/Panthera_pardus/example_prediction.ipynb) for an example on how to write a custom prediction script.
+
+
+## Running Tiberius with Nextflow
+
+Tiberius can launch also be parallized across multiple GPU nodes on an HPC with Nextflow. For this, you have to set up a nextflow configuration for your specific cluster and extend [conf/base.config](conf/base.config). As an example, see [conf/slurm_generic.config](conf/slurm_generic.config) and see section *Adapting Tiberius to an HPC* in [conf/README.md](conf/README.md).
+
+You can start Tiberius with Nextflow by providing it with your Nextflow config file:
 ```shell
-wget https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_weights_v2.tar.gz
-python tiberius.py --genome input.fasta --out output.gtf --model tiberius_weights_v2.tar.gz
+# Nextflow for a Diatom genome
+python tiberius.py --nf_config conf/slurm_generic.config --genome input.fasta --model_cfg diatoms
 ```
 
-### Running Tiberius without softmasked genome
-If you want to run Tiberius without softmasking, you can use the `--no_softmasking` argument and provide Tiberius with a model configuration file (e.g., `model_cfg/mammalia_nosofttmasking_v2.yaml`)
+
+
+## Running Tiberius with Extrinsic Evidence (Nextflow-only)
+You can also run the Tiberius Evidence Pipeline. A set of high confidence genes is generated and added to the Tiberius prediction that improves its accuracy, it adds some alternative splicing forms and it includes UTR regions for the evidence-only predictions. 
+
+To provide Tiberius with the files and required parameters, it is recommended to generate a parameter file `params.yaml`. See [conf/README.md](conf/README.md) for details about the parameter file and [conf/params.yaml](conf/params.yaml) for a template. 
+
+
 ```shell
-# Run Tiberius without softmasking
-python tiberius.py --genome input.fasta --out output.gtf --no_softmasking  --model_cfg mammalia_nosofttmasking_v2.yaml
+# Evidence pipeline with an existing params file
+python tiberius.py --params_yaml params.yaml --nf_config conf/slurm_generic.config
 ```
+
+Parameters in the params.yaml file can be overwritten with command line arguments
+
+```shell
+# Nextflow with params file and commandline overwrites
+python tiberius.py --nf_config conf/base.config --genome input.fasta --model_cfg diatoms --outdir results
+```
+![Workflow of the Tiberius Evidence Pipeline](figures/evi_wflow.png)
+
+
 
 ### Running Tiberius with evolutionary information
 To run Tiberius in *de novo* mode, evolutionary information data has to be generated with ClaMSA. See [docs/clamsa_data.md](docs/clamsa_data.md) for instructions on how to generate the data. Afterwards, you should have a directory with files named `$clamsa/{prefix}{seq_name}.npz` for each sequence of your FASTA file. You can then run Tiberius with the `--clamsa` argument. Note that your genome has to be softmasked for this mode and that you have to use different training weights than in *ab initio* mode. You can downloaded the model weights from [https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights.tgz](https://bioinf.uni-greifswald.de/bioinf/tiberius/models//tiberius_denovo_weights_v2.tar.gz). Or you can provide Tiberius with the model configuration file `model_cfg/mammalia_clamsa_v2.yaml`
 ```shell
 # Run Tiberius with softmasking
-python tiberius.py --genome input.fasta --clamsa $clamsa/{prefix} --out output.gtf --model_cfg model_cfg/mammalia_clamsa_v2.yaml
+python tiberius.py --genome input.fasta --clamsa $clamsa/{prefix} --out output.gtf --model_cfg mammalia_clamsa_v2.yaml
 ```
 
 ### Running Tiberius on Differnet GPUs
@@ -118,9 +146,6 @@ Here is a list of GPUs to batch siezes:
 - **RTX 2070 (8GB):** batch size of 2
 
 
-Tiberius produces a GTF file containing the predicted gene structures. It can also generate FASTA-formatted files of coding sequences and protein sequences when locations are specified using the `--codingseq` and `--protseq` options, respectively.
-
-If you want to write custom code for Tiberius gene prediction, see [example_prediction.ipynb](test_data/Panthera_pardus/example_prediction.ipynb) for an example on how to write a custom prediction script.
 
 ## Training Tiberius
 We recommend using one of the provided trained models. However, if you want to train Tiberius on your own data, you need at least a genomic seqeunce file (FASTA) and reference annotations (GTF) for each species. **Note that you can only train on genes with one transcript isoform per gene.** Please remove alternative splicing variants before training. There two ways to train Tiberius:

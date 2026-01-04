@@ -1,0 +1,93 @@
+# ============================================================
+# EvidencePipeline Parameters Template (parameters.yaml)
+# ============================================================
+# Copy this file and edit paths according to your project.
+# All fields are optional unless stated otherwise.
+# ============================================================
+
+# ------------------------------------------------------------
+# Required input
+# ------------------------------------------------------------
+genome: /path/to/genome.fa   # REQUIRED
+
+# ------------------------------------------------------------
+# RNA-Seq short reads (FASTQ)
+# ------------------------------------------------------------
+
+# Single-end RNA-Seq reads (list of FASTQ files)
+rnaseq_single: [
+  # /path/to/sample1.fastq.gz,
+  # /path/to/sample2.fastq.gz,
+]
+
+# Paired-end RNA-Seq reads (glob, string, or explicit list)
+rnaseq_paired: "/path/to/rnaseq/*_{1,2}.fastq.gz"
+# OR:
+# rnaseq_paired: [
+#   /path/to/sample_R1.fastq.gz,
+#   /path/to/sample_R2.fastq.gz,
+# ]
+
+# ------------------------------------------------------------
+# Iso-Seq long reads (FASTQ)
+# ------------------------------------------------------------
+isoseq: "/path/to/isoseq/*.fastq.gz"
+# OR:
+# isoseq: [
+#   /path/to/isoseq1.fastq.gz,
+#   /path/to/isoseq2.fastq.gz,
+# ]
+
+# ------------------------------------------------------------
+# SRA download 
+# ------------------------------------------------------------
+
+# Paired-end RNA-Seq SRA run IDs
+rnaseq_sra_paired: [
+  # SRRXXXXXX,
+  # SRRYYYYYY,
+]
+
+# Single-end RNA-Seq SRA run IDs
+rnaseq_sra_single: []
+
+# Iso-Seq SRA run IDs
+isoseq_sra: [
+  # DRRXXXXX,
+]
+
+# ------------------------------------------------------------
+# Protein evidence (FASTA)
+# ------------------------------------------------------------
+# Single file:
+# proteins: /path/to/proteins.faa
+# OR multiple files (will be concatenated):
+proteins: [
+#   /path/to/proteins1.faa,
+#   /path/to/proteins2.faa,
+]
+
+# Optional ODB12 partitions (downloaded, extracted, then concatenated)
+odb12Partitions: [
+#   Metazoa,
+#   Vertebrata,
+]
+
+# ------------------------------------------------------------
+# General Settings
+# ------------------------------------------------------------
+threads: 32
+outdir: results
+restart: false
+
+# ------------------------------------------------------------
+# Tiberius Integration (optional)
+# ------------------------------------------------------------
+tiberius:
+  run: true
+  min_split_size: 5000000
+  max_files: 20
+  # name of the Tiberius configuration available at  
+  # https://github.com/Gaius-Augustus/Tiberius/tree/main/model_cfg
+  # or path to a local configuration file
+  model_cfg: model_cfg.yaml

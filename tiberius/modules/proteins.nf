@@ -94,8 +94,8 @@ process PREPROCESS_PROTEINDB {
           --max-target-seqs 200 \
           --very-sensitive \
           --threads ${params.threads} 
-
-        python3 ${projectDir}/scripts/rank_species_from_diamond.py diamond_hits.tsv 13 > species_rank.tsv
+        
+        rank_species_from_diamond.py diamond_hits.tsv 13 > species_rank.tsv
 
         awk '
         BEGIN {

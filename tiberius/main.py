@@ -258,7 +258,7 @@ def run_tiberius(args):
     clamsa_prefix = args.clamsa if not config else config["clamsa"]
     
     if config:
-        model_weights_dir = f'{script_dir}/../model_weights'        
+        model_weights_dir = f'{script_dir}/../model_weights'
         if not os.path.exists(model_weights_dir):
             if is_writable(os.path.dirname(model_weights_dir)):
                 os.makedirs(model_weights_dir)

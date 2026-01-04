@@ -1,7 +1,7 @@
 ![Docker Pulls](https://img.shields.io/docker/pulls/larsgabriel23/tiberius) 
 
 ### ⚠️ Important Update — October 2025 
-#### Tiberius models for Mammals, Eudicots, Insects, Vertebrates, Monocots, Fungi and Diatoms are now available.  
+#### Tiberius models for Mammals, Eudicots, Monocots, Fungi, Diatoms and Vertebrates are now available.  
 
 # Tiberius: End-to-End Deep Learning with an HMM for Gene Prediction
 

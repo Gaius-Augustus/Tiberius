@@ -71,10 +71,6 @@ To enable Tiberius set `tiberius.run: true` and choose the correct model paramet
 For the Tiberius prediction, the genome is split into smaller FASTA files so that it can run on multiple GPUs. You can set the upper limit of parallel Tiberius tasks with `tiberius.max_files` and the minimal size of a file with `tiberius.min_split_size`.
 You can also provide the result of Tiberius to the pipeline so that it is used but not rerun, user here `tiberius.result`.
 
-
-
-
-
 # Adapting Tiberius to an HPC
 
 This section explains how to configure the nextflow config file for a specific HPC environment (queues, scratch paths, GPU settings, etc.).

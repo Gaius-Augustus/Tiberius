@@ -36,9 +36,6 @@ from_source = [
   "pyBigWig",
   "bcbio-gff",
   "requests",
-  "gzip",
-  "bz2",
-
   ]
 [project.urls]
 Homepage = "https://github.com/Gaius-Augustus/Tiberius"

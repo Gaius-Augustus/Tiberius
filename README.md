@@ -65,8 +65,6 @@ The following Python libraries are required and installed with Tiberius:
 - biopython 
 - bcbio-gff
 - requests
-- gzip
-- bz2
 - rich
 
 Make sure TensorFlow is installed with GPU support. Tiberius was built on TensorFlow 2.10 and runs best with that version. If you are using conda, you can install Tensorflow 2.10 with these [instructions](docs/install_tensorflow.md).
@@ -128,7 +126,7 @@ Parameters in the params.yaml file can be overwritten with command line argument
 # Nextflow with params file and commandline overwrites
 python tiberius.py --nf_config conf/base.config --genome input.fasta --model_cfg diatoms --outdir results
 ```
-![Workflow of the Tiberius Evidence Pipeline](figures/evi_wflow.png){ width=100 }
+![Workflow of the Tiberius Evidence Pipeline](figures/evi_wflow.png)
 
 
 

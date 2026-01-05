@@ -15,7 +15,7 @@ from rich.table import Table
 
 console = Console()
 SCRIPT_ROOT = Path(__file__).resolve().parent
-SINGULARITY_IMAGE_URI = "docker://larsgabriel23/tiberius:dev"
+SINGULARITY_IMAGE_URI = "docker://larsgabriel23/tiberius:latest"
 SINGULARITY_IMAGE_PATH = SCRIPT_ROOT / "singularity" / "tiberius.sif"
 DEFAULT_PARAMS = {
     "threads": 48,

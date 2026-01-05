@@ -230,7 +230,7 @@ def validate_mode(args) -> str:
     missing = []
     if not args.genome:
         missing.append("--genome")
-    if not args.model_cfg:
+    if not args.model_cfg and not args.model_lstm_old and not args.model_old and not args.model:
         missing.append("--model_cfg")
     if missing:
         console.print(f"[bold red]Missing required argument(s): {', '.join(missing)}[/bold red]")

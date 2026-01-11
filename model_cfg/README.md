@@ -11,6 +11,7 @@ Each file is read at runtime by Tiberius and therefore must follow the schema be
 | ----------------|------------------|-------------------|------------------|
 | diatoms | Diatoms | :white_check_mark: |  :x:| 
 | eudicotyledons | Eudicotyledons | :white_check_mark: |  :x:| 
+| insecta | Insecta | :white_check_mark: |  :x:| 
 | lepidoptera | Lepidoptera | :white_check_mark: |  :x:| 
 | monocotyledonae | Monocotyledonae | :white_check_mark: |  :x:| 
 | mucoromycota | Mucoromycota | :white_check_mark: |  :x:| 

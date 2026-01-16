@@ -34,9 +34,70 @@ workflow RNASEQ_EVIDENCE {
     }
 
     // Build channels (local + SRA)
-    CH_PAIRED = Channel.empty()
+    CH_PAIRED_LOCAL = Channel.empty()
     if( DO_PE ) {
-        CH_PAIRED_LOCAL = DO_PE_LOCAL ? Channel.fromFilePairs(params_map.rnaseq_paired, flat:true, checkIfExists:true) : Channel.empty()
+        def pe = params_map.rnaseq_paired
+
+        /*
+        * Case 1: glob pattern or string → use fromFilePairs (NON-flat)
+        *   "/path/*_{1,2}.fastq.gz"
+        */
+        if( pe instanceof CharSequence ) {
+
+            CH_PAIRED_LOCAL =
+                Channel.fromFilePairs(pe, size: 2, checkIfExists: true)
+                // emits: tuple(id, [r1, r2])
+        }
+
+        /*
+        * Case 2: list of explicit PAIRS
+        *   - [r1, r2]
+        *   - [r1, r2]
+        */
+        else if(
+            pe instanceof List &&
+            pe.every { it instanceof List && it.size() == 2 }
+        ) {
+
+            CH_PAIRED_LOCAL =
+                Channel.from(pe)
+                .map { pair ->
+                    def r1 = file(pair[0])
+                    def r2 = file(pair[1])
+
+                    def id = r1.baseName
+                        .replaceFirst(/([._-]R?1|[._-]1)$/, '')
+
+                    tuple(id, [r1, r2])
+                }
+        }
+        else if (DO_PE_LOCAL) {
+            error "Invalid rnaseq_paired format. Expected glob string, list of pairs, or exactly two files."
+        }
+
+        /*
+        * Case 3: user accidentally gives a flat list of two files
+        *   - r1
+        *   - r2
+        * → treat as ONE library (fail-safe)
+        */
+        else if(
+            pe instanceof List &&
+            pe.size() == 2 &&
+            pe.every { it instanceof CharSequence }
+        ) {
+
+            def r1 = file(pe[0])
+            def r2 = file(pe[1])
+
+            def id = r1.baseName
+                .replaceFirst(/([._-]R?1|[._-]1)$/, '')
+
+            CH_PAIRED_LOCAL =
+                Channel.of( tuple(id, [r1, r2]) )
+        }
+        
+        // CH_PAIRED_LOCAL = DO_PE_LOCAL ? Channel.fromFilePairs(params_map.rnaseq_paired, flat:true, checkIfExists:true) : Channel.empty()
         if( params_map.rnaseq_sra_paired ) {
             CH_RNASEQ_SRA_IDS_PAIRED = Channel.from(params_map.rnaseq_sra_paired)
             CH_RNASEQ_PAIRED_SRA = DOWNLOAD_SRA_PAIRED(CH_RNASEQ_SRA_IDS_PAIRED)

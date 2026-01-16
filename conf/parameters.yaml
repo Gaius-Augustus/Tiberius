@@ -24,8 +24,8 @@ rnaseq_single: [
 rnaseq_paired: "/path/to/rnaseq/*_{1,2}.fastq.gz"
 # OR:
 # rnaseq_paired: [
-#   /path/to/sample_R1.fastq.gz,
-#   /path/to/sample_R2.fastq.gz,
+#   [/path/to/sample_R1.fastq.gz, /path/to/sample_R2.fastq.gz]
+#   
 # ]
 
 # ------------------------------------------------------------

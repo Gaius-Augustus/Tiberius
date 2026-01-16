@@ -30,6 +30,7 @@ process STRINGTIE_ASSEMBLE_ISO {
 
 
 process STRINGTIE_MERGE {
+    label 'container'
     input:
     path gtfs, stageAs: "?/*"
 

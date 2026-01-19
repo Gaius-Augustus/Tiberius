@@ -1,7 +1,7 @@
 ![Docker Pulls](https://img.shields.io/docker/pulls/larsgabriel23/tiberius) 
 
 ### ⚠️ Important Update — October 2025 
-#### Tiberius models for Mammals, Eudicots, Monocots, Fungi, Diatoms and Vertebrates are now available.  
+#### Tiberius models for Mammals, Eudicots, Monocots, Fungi, Diatoms, Insecta and Vertebrates are now available.  
 
 # Tiberius: End-to-End Deep Learning with an HMM for Gene Prediction
 
@@ -21,8 +21,7 @@ Additionally, Tiberius provides an evidence mode that generates highly precise g
 We are providing different models for following species (see model_cfg/README.md for more information):
 - Diatoms 
 - Eudicotyledons
-- Lepidoptera
-- Insects
+- Insecta
 - Monocotyledonae
 - Mucoromycota
 - Mammalia 

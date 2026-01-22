@@ -1,7 +1,8 @@
 nextflow.enable.dsl=2
 
 process HC_SUPPORTED {
-  // publishDir "${params.outdir}", pattern: "hc/*", mode: 'copy'
+    label 'container'
+// publishDir "${params.outdir}", pattern: "hc/*", mode: 'copy'
   
   input:
     path diamond_revised

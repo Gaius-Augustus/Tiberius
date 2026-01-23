@@ -1,0 +1,62 @@
+target_species: "Basidiomycota"
+ncbi_tax_id: 5204
+weights_url: "https://bioinf.uni-greifswald.de/bioinf/tiberius/models/basidiomycota.tar.gz"
+softmasking: False
+clamsa: False
+tiberius_version: 1.1.7
+date: "2026-01-23"
+comment: "Basidiomycota training weights trained by Katharina Hoff.
+
+          Accuracy results according to gffcompare 0.12.6 on test species
+          never seen during training of Tiberius:
+
+          Tool     | Exon level     | Intron chain   | Locus level    |
+          --- Coprinopsis_cinerea_okayama7#130 GCF_000182895.1 --
+                   | Sens   | Prec  | Sens   | Prec  | Sens   | Prec  |
+          Tiberius | 72.2   | 80.7  | 77.1   | 84.8  | 41.2   | 49.5  |
+          ANNEVO   | 74.8   | 73.6  | 42.4   | 43.7  | 38.7   | 40.4  |
+          Helixer  | 72.4   | 67.5  | 35.1   | 31.8  | 33.5   | 31.8  |
+          --- Mycosarcoma_maydis GCF_000328475.2 ----------------
+          Tiberius | 77.7   | 79.7  | 67.0   | 66.1  | 77.3   | 80.8  |
+          ANNEVO   | 76.0   | 76.1  | 65.1   | 62.7  | 74.7   | 76.4  |
+          Helixer  | 73.9   | 67.5  | 56.0   | 47.9  | 72.5   | 71.0  |
+          --- Puccinia_graminis_f._sp._tritici_CRL_75-36-700-3 GCF_000149925.1 -
+          Tiberius | 65.7   | 70.9  | 73.0   | 77.1  | 35.1   | 40.8  |
+          ANNEVO   | 57.1   | 56.1  | 26.5   | 26.6  | 24.6   | 23.5  |
+          Helixer  | 62.1   | 46.9  | 27.1   | 21.7  | 26.3   | 19.6  |
+
+          Mycosarcoma_maydis GCF_000328475.2 was a training species for ANNEVO.
+          Coprinopsis_cinerea was a training/validation species for Helixer.
+"
+training_species: [
+   Favolaschia_claudopus
+   Lentinula_aciculospora
+   Pisolithus_croceorrhizus
+   Lactarius_indigo
+   Lyophyllum_atratum
+   Exidia_glandulosa_HHB12029
+   Amanita_rubescens
+   Calocera_viscosa_TUFC12733
+   Schizophyllum_amplum
+   Phellopilus_nigrolimitatus
+   Ramaria_rubella
+   Fomitopsis_serialis
+   Sistotremastrum_suecicum_HHB10207_ss-3
+   Hymenopellis_radicata
+   Pholiota_molesta
+   Meira_miltonrushii
+   Violaceomyces_palustris
+   Testicularia_cyperi
+   Ustilago_nuda
+   Moesziomyces_aphidis
+   Melanopsichium_pennsylvanicum
+   Mixia_osmundae_IAM_14324
+   Melampsora_larici-populina_98AG31
+   Melampsora_americana
+   Cronartium_quercuum_f._sp._fusiforme_G11
+   Microbotryomycetes_sp._JL221
+   Microbotryomycetes_sp._JL201
+   Microbotryum_saponariae
+   Microbotryum_silenes-dioicae
+   Microbotryum_lychnidis-dioicae_p1A1_Lamole
+]

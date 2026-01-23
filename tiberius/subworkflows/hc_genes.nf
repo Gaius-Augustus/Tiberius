@@ -5,6 +5,16 @@ include { TD_ALL; SHORTEN_INCOMPLETE_ORFS; CDS_CLASSIFY_AND_REVISE } from '../mo
 include { DIAMOND_MAKEDB; DIAMOND_BLASTP as DIAMOND_BLASTP_NORM; DIAMOND_BLASTP as DIAMOND_BLASTP_SHORT; DIAMOND_BLASTP as DIAMOND_BLASTP_REV } from '../modules/diamond.nf'
 include { HC_SUPPORTED; HC_FORMAT_FILTER } from '../modules/hc.nf'
 
+process EMPTY_TSV {
+  output:
+  path "empty.tsv", emit: tsv
+  script:
+  """
+  : > empty.tsv
+  """
+}
+
+
 workflow HC_GENES {
 
     take:

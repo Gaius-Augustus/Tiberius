@@ -199,7 +199,7 @@ def run_tiberius_in_singularity(args):
             check=True,
         )
 
-    cmd = ["singularity", "exec", str(image_path), "python3", str(Path(__file__).resolve())]
+    cmd = ["singularity", "exec", "--nv", str(image_path), "python3", str(Path(__file__).resolve())]
     passthrough = [arg for arg in sys.argv[1:] if arg != "--singularity"]
     cmd.extend(passthrough)
 

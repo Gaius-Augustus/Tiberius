@@ -2,7 +2,7 @@ nextflow.enable.dsl=2
 
 process HC_SUPPORTED {
   // publishDir "${params.outdir}", pattern: "hc/*", mode: 'copy'
-  
+  label 'container'
   input:
     path diamond_revised
     path revised_pep
@@ -20,7 +20,7 @@ process HC_SUPPORTED {
   script:
   """
   mkdir -p hc
-  python3 ${projectDir}/scripts/generate_hc_genes.py \
+  python3 generate_hc_genes.py \
     --diamond_revised ${diamond_revised} \
     --revised_pep     ${revised_pep} \
     --proteins        ${proteins} \
@@ -36,7 +36,7 @@ process HC_SUPPORTED {
 
 process HC_FORMAT_FILTER {
   publishDir "${params.outdir}", pattern: "training.gff", mode: 'copy'
-
+  label 'container'
   input: 
     path traingff,  stageAs: 'training_original.gff'
     path genome
@@ -46,8 +46,8 @@ process HC_FORMAT_FILTER {
 
   script:
   """
-  python3 ${projectDir}/scripts/extend_cds_with_stop_codon.py ${traingff} > training_extended.gff
-  python3 ${projectDir}/scripts/check_stop_codons.py \
+  python3 extend_cds_with_stop_codon.py ${traingff} > training_extended.gff
+  python3 check_stop_codons.py \
     training_extended.gff ${genome} \
     --write-passing-gff training.gff > filter.tsv
   """

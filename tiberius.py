@@ -2,8 +2,8 @@
 import os
 import sys
 import yaml
-import argparse
 import subprocess
+import shutil
 from copy import deepcopy
 from pathlib import Path
 from tiberius.tiberius_args import parseCmd
@@ -37,6 +37,27 @@ DEFAULT_PARAMS = {
     "scoring_matrix": str((SCRIPT_ROOT / "conf" / "blosum62.csv").resolve()),
     "prothint_conflict_filter": False,
 }
+
+
+def has_nvidia_container_cli() -> bool:
+    if not shutil.which("nvidia-smi"):
+        return False
+
+    if not shutil.which("nvidia-container-cli"):
+        return False
+
+    try:
+        subprocess.run(
+            ["nvidia-container-cli", "info"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+    except Exception:
+        return False
+
+    return True
+
 
 def load_params_yaml(params_path: str) -> tuple[Path, dict]:
     """Load a params YAML file and return (path, data)."""
@@ -198,11 +219,17 @@ def run_tiberius_in_singularity(args):
             ["singularity", "pull", str(image_path), SINGULARITY_IMAGE_URI],
             check=True,
         )
-
-    cmd = ["singularity", "exec", "--nv", str(image_path), "python3", str(Path(__file__).resolve())]
+    cmd = ["singularity", "exec"]
+    if has_nvidia_container_cli():
+        cmd += ["--nvccli"]
+    cmd += [
+        "--nv",
+        str(image_path), "python3", 
+        str(Path(__file__).resolve())
+        ]
+    
     passthrough = [arg for arg in sys.argv[1:] if arg != "--singularity"]
     cmd.extend(passthrough)
-
     env = os.environ.copy()
     env["TIBERIUS_IN_SINGULARITY"] = "1"
     console.print("[INFO] Launching Tiberius inside Singularity.")

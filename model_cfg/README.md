@@ -9,6 +9,7 @@ Each file is read at runtime by Tiberius and therefore must follow the schema be
 
 | Model name | Target species | Softmasking required | ClaMSA input required| 
 | ----------------|------------------|-------------------|------------------|
+| basidiomycota | Basidiomycota | :x: |  :white_check_mark:| 
 | diatoms | Diatoms | :white_check_mark: |  :x:| 
 | eudicotyledons | Eudicotyledons | :white_check_mark: |  :x:| 
 | insecta | Insecta | :white_check_mark: |  :x:| 

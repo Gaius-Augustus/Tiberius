@@ -1,0 +1,36 @@
+target_species: "Chlorophyta"
+ncbi_tax_id: 3041
+weights_url: "https://bioinf.uni-greifswald.de/bioinf/tiberius/models/chlorophyta.tar.gz"
+softmasking: False
+clamsa: False
+tiberius_version: 1.1.7
+date: "2026-01-26"
+comment: "Chlorophyta training weights trained by Katharina Hoff.
+
+          Accuracy results according to gffcompare 0.12.6 on test species
+          never seen during training of Tiberius:
+
+          Tool     | Exon level     | Intron chain   | Locus level    |
+          | Sens   | Prec  | Sens   | Prec  | Sens   | Prec  |
+          --- Bathycoccus_prasinos GCF_002220235.1 --------------------
+          Tiberius | 47.2   | 49.9  | 38.9   | 33.9  | 46.8   | 50.6  |
+          Helixer  | 51.5   | 51.0  | 32.6   | 22.9  | 51.0   | 57.3  |
+          --- Edaphochlamys_debaryana GCA_016858145.1 -----------------
+          Tiberius | 84.0   | 82.2  | 47.5   | 44.3  | 40.9   | 37.7  |
+          Helixer  | 86.0   | 76.1  | 40.5   | 33.8  | 33.7   | 27.6  |
+
+          None of the test genomes was used for training Tiberius or Helixer.
+          ANNEVO has no dedicated model for Chlorophyta.
+
+"
+training_species: [
+   Ostreococcus_lucimarinus_CCE9901
+   Chlamydomonas_reinhardtii
+   Volvox_carteri_f._nagariensis
+   Picochlorum_sp._BPE2
+   Astrephomene_gubernaculifera
+   Nannochloris_sp._desiccata
+   Dunaliella_primolecta
+   Chloropicon_primus
+   Tetradesmus_obliquus
+]

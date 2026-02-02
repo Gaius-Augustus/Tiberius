@@ -1,0 +1,107 @@
+target_species: "Fungi incertae sedis"
+ncbi_tax_id: 112252
+weights_url: "https://bioinf.uni-greifswald.de/bioinf/tiberius/models/fungi_incertae_sedis.tar.gz"
+softmasking: False
+clamsa: False
+tiberius_version: 1.1.7
+date: "2026-02-01"
+comment: "Fungi incertae sedis training weights trained by Katharina Hoff.
+
+          Accuracy results according to gffcompare 0.12.6 on test species
+          never seen during training of Tiberius:
+
+          Tool     | Exon level  | Intron chain| Locus level |
+          - Phycomyces_blakesleeanus_NRRL_1555_minus GCF_001638985.1
+                   | Sens | Prec | Sens | Prec | Sens | Prec |
+          Tiberius | 57.9 | 69.9 | 34.9 | 46.5 | 34.4 | 42.2 |
+          ANNEVO   | 59.1 | 54.0 | 30.4 | 29.0 | 29.3 | 26.3 |
+          Helixer  | 52.9 | 53.1 | 23.6 | 25.0 | 25.2 | 23.2 |
+          - Coemansia_reversa_NRRL_1564 GCA_002705745.1 ------
+          Tiberius | 55.5 | 49.2 | 39.7 | 36.6 | 55.5 | 49.2 |
+          ANNEVO   | 49.1 | 44.4 | 31.4 | 29.2 | 50.2 | 44.4 |
+          Helixer  | 49.6 | 34.1 | 25.8 | 18.5 | 50.4 | 39.3
+          - Spizellomyces_punctatus_DAOM_BR117 GCF_000182565.1
+          Tiberius | 85.7 | 88.2 | 66.7 | 68.1 | 62.3 | 64.0 |
+          ANNEVO   | 83.2 | 79.8 | 54.7 | 53.2 | 51.0 | 49.8 |
+          Helixer  | 82.5 | 78.8 | 54.2 | 50.4 | 52.5 | 48.0 |
+          - Encephalitozoon_cuniculi_GB-M1 GCF_000091225.2 ---
+          Tiberius | 57.4 | 58.9 | 34.4 |  4.2 | 57.5 | 69.2 |
+          ANNEVO   | 57.1 | 64.3 |  3.1 |  1.3 | 58.1 | 67.1 |
+          Helixer  | 50.6 | 47.7 |  0.0 |  0.0 | 51.2 | 59.9 |
+
+          Phycomyces_blakesleeanus_NRRL_1555_minus and 
+          Spizellomyces_punctatus_DAOM_BR117 were training 
+          species for ANNEVO.
+          Phycomyces_blakesleeanus_NRRL_1555_minus, 
+          Spizellomyces_punctatus_DAOM_BR117, and
+          Encephalitozoon_cuniculi_GB-M1 were training/validation
+          species for Helixer.
+
+          Helixer was used via the web service at 
+          https://www.plabipd.de/helixer_main.html on 
+          February 1st 2026.
+
+          ANNEVO v2.2.
+"
+training_species: [
+   Apophysomyces_sp._BC1021
+   Astathelohania_contejeani
+   Benjaminiella_poitrasii
+   Benniella_sp.
+   Blakeslea_trispora
+   Borealophlyctis_nickersoniae
+   Chytridium_lagenaria
+   Chytriomyces_cf._hyalinus_JEL632
+   Cunninghamella_echinulata
+   Dichotomocladium_elegans
+   Dimargaris_cristalligena
+   Dimargaris_xerosporica
+   Dispira_parvispora
+   Edhazardia_aedis_USNM_41457
+   Entophlyctis_helioformis
+   Fimicolochytrium_jonesii
+   Gaertneriomyces_semiglobifer
+   Gigaspora_margarita
+   Globomyces_pollinis-pini
+   Gonapodya_prolifera_JEL478
+   Gongronella_butleri
+   Gorgonomyces_haynaldii
+   Halteromyces_radiatus
+   Hamiltosporidium_magnivora
+   Kickxella_alabastrina
+   Lichtheimia_hyalospora_FSU_10163
+   Lobulomyces_angularis
+   Mycoemilia_scoparia
+   Mycotypha_africana
+   Neoconidiobolus_thromboides_FSU_785
+   Nosema_granulosis
+   Ordospora_colligata_OC4
+   Phascolomyces_articulosus
+   Phlyctochytrium_arcticum
+   Pilobolus_umbonatus
+   Piptocephalis_tieghemiana
+   Polychytrium_aggregatum
+   Polyrhizophydium_stewartii
+   Radiomyces_spectabilis
+   Ramicandelaber_brevisporus
+   Rhizophlyctis_rosea
+   Smittium_angustum
+   Smittium_megazygosporum
+   Smittium_mucronatum
+   Smittium_simulii
+   Spinellus_fusiger
+   Spiromyces_aspiralis
+   Sporodiniella_umbellata
+   Syncephalastrum_racemosum
+   Syncephalis_plumigaleata
+   Synchytrium_microbalum
+   Thamnocephalis_sphaerospora
+   Thoreauomyces_humboldtii
+   Trachipleistophora_hominis
+   Umbelopsis_sp._AD052
+   Vairimorpha_bombi
+   Vairimorpha_ceranae
+   Vavraia_culicis_subsp._floridensis
+   Vittaforma_corneae_ATCC_50505
+   Zopfochytrium_polystomum
+]

@@ -23,6 +23,7 @@ We are providing different models for following species (see model_cfg/README.md
 - Chlorophyta
 - Diatoms 
 - Eudicotyledons
+- Fungi incertae sedis
 - Insecta
 - Monocotyledonae
 - Mucoromycota

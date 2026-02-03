@@ -28,17 +28,19 @@ process TD_ALL {
 }
 
 process SHORTEN_INCOMPLETE_ORFS {
+  label 'container'
   input:
     path pep
   output:
     path "shortened_candidates.pep", emit: pep_short
   script:
   """
-  python ${projectDir}/scripts/shorten_incomplete.py ${pep} -o shortened_candidates.pep
+  shorten_incomplete.py ${pep} -o shortened_candidates.pep
   """
 }
 
 process CDS_CLASSIFY_AND_REVISE {
+  label 'container'
   input:
     path diamond_normal,  stageAs: 'diamond_normal.tsv'
     path diamond_short,   stageAs: 'diamond_short.tsv'
@@ -51,7 +53,7 @@ process CDS_CLASSIFY_AND_REVISE {
 
   script:
   """
-  python ${projectDir}/scripts/revise_pep.py \
+  revise_pep.py \
     --diamond_normal diamond_normal.tsv \
     --diamond_short  diamond_short.tsv  \
     --transdecoder_pep ${transdecoder_pep} \

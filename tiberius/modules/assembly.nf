@@ -51,7 +51,7 @@ process STRINGTIE_MERGE {
         echo "WARNING: stringtie --merge failed with code \$exitcode, using custom merge." >&2
 
         # your script: outputs GFF3 to stdout
-        python3 ${projectDir}/scripts/merge_annotations.py --mode full \\
+        merge_annotations.py --mode full \\
             ${gtfs.join(' ')} > merged.gff3
 
         # convert to GTF for TD_ALL

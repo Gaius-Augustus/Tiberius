@@ -20,7 +20,7 @@ process HC_SUPPORTED {
   script:
   """
   mkdir -p hc
-  python3 generate_hc_genes.py \
+  generate_hc_genes.py \
     --diamond_revised ${diamond_revised} \
     --revised_pep     ${revised_pep} \
     --proteins        ${proteins} \
@@ -46,8 +46,8 @@ process HC_FORMAT_FILTER {
 
   script:
   """
-  python3 extend_cds_with_stop_codon.py ${traingff} > training_extended.gff
-  python3 check_stop_codons.py \
+  extend_cds_with_stop_codon.py ${traingff} > training_extended.gff
+  check_stop_codons.py \
     training_extended.gff ${genome} \
     --write-passing-gff training.gff > filter.tsv
   """

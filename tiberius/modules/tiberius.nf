@@ -11,7 +11,7 @@ process RUN_TIBERIUS {
 
     script:
     """
-     python3 /home/gabriell/evidence_pipeline/Tiberius/tiberius.py \
+    tiberius.py \
         --genome ${genome} \
         --model_cfg ${model_cfg}\
         --out tiberius.${genome.name}.gtf
@@ -19,6 +19,7 @@ process RUN_TIBERIUS {
 }
 
 process SPLIT_GENOME {
+    label 'container'
     input:
       path genome
 
@@ -28,7 +29,7 @@ process SPLIT_GENOME {
     script:
     """
     mkdir -p chunks
-    python3 ${projectDir}/scripts/split_genome_fasta.py \\
+    split_genome_fasta.py \\
         --genome ${genome} \\
         --outdir chunks \\
         --prefix genome_chunk \\
@@ -38,6 +39,7 @@ process SPLIT_GENOME {
 }
 
 process MERGE_TIBERIUS {
+    label 'container'
     publishDir {"${params.outdir}/"}, mode:'copy'
 
     input:
@@ -48,12 +50,13 @@ process MERGE_TIBERIUS {
 
     script:
     """
-    python3 ${projectDir}/scripts/merge_annotations.py --mode full \\
+    merge_annotations.py --mode full \\
         ${gff_files} > tiberius.gff3
     """
 }
 
 process MERGE_TIBERIUS_TRAIN {
+    label 'container'
     publishDir {"${params.outdir}/"}, mode:'copy'
 
     input:
@@ -65,12 +68,13 @@ process MERGE_TIBERIUS_TRAIN {
 
     script:
     """
-    python3 ${projectDir}/scripts/merge_annotations.py --mode full \\
+    merge_annotations.py --mode full \\
         ${tiberius} ${traingenes} > tiberius_train.gff3
     """
 }
 
 process MERGE_TIBERIUS_TRAIN_PRIO {
+    label 'container'
     publishDir {"${params.outdir}/"}, mode:'copy'
 
     input:
@@ -82,7 +86,7 @@ process MERGE_TIBERIUS_TRAIN_PRIO {
 
     script:
     """
-    python3 ${projectDir}/scripts/merge_annotations.py --mode priority \\
+    merge_annotations.py --mode priority \\
         --priority-file ${traingenes} ${tiberius} ${traingenes} > tiberius_train_prio.gff3
     """
 }

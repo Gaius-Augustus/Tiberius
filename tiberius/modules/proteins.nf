@@ -51,11 +51,11 @@ process MINIPROTHINT_CONVERT {
 
 process ALN2HINTS {
   input: path gtf
-
+  label 'container'
   output: path "hints_protein.gff", emit: hints
   
   script: """
-  ${projectDir}/scripts/aln2hints.pl --in=${gtf} --out=prot_hintsfile.aln2hints.temp.gff --prg=miniprot --priority=4
+  aln2hints.pl --in=${gtf} --out=prot_hintsfile.aln2hints.temp.gff --prg=miniprot --priority=4
   cp prot_hintsfile.aln2hints.temp.gff hints_protein.gff
   """
 }

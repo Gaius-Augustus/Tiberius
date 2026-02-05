@@ -72,9 +72,9 @@ def load_model_config(
 # Function to compare TensorFlow version
 def check_tf_version(tf_version):
     if tf_version > MAX_TF_VERSION:
-        print(f"WARNING: You are using TensorFlow version {tf_version}, "
-                      f"which is newer than the recommended maximum version {MAX_TF_VERSION}. "
-                      "It will produce an error if you use a sequence length > 259,992 during inference!")
+        # print(f"WARNING: You are using TensorFlow version {tf_version}, "
+        #               f"which is newer than the recommended maximum version {MAX_TF_VERSION}. "
+        #               "It can produce an error if you use a sequence length > 259,992 during inference!")
         return False
     return True
 
@@ -284,9 +284,9 @@ def run_tiberius(args):
         import tensorflow as tf
 
     if not check_tf_version(tf.__version__) and args.seq_len > 259992:
-        logging.error(f"Error: The sequence length {args.seq_len} is too long for TensorFlow version {tf.__version__}. "
-                        "Please use a sequence length <= 259992 (--seq_len).")
-        sys.exit(1)
+        logging.error(f"\nWARNING: The sequence length {args.seq_len} can be too long for TensorFlow version {tf.__version__}. "
+                        "If it fails, please use a sequence length <= 259992 (--seq_len).\n")
+        
 
     from tiberius import Anno, make_weighted_cce_loss, PredictionGTF
 

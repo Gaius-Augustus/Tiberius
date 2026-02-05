@@ -9,12 +9,9 @@ import subprocess as sp
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras as keras
-from learnMSA.msa_hmm.Viterbi import viterbi
 from tensorflow.keras.models import Model
-from tiberius import (GenePredHMMLayer, 
-                    make_5_class_emission_kernel, 
+from tiberius import (GenePredHMMLayer,  
                     make_aggregation_matrix, 
-                    make_15_class_emission_kernel,
                     GenomeSequences,
                     GeneStructure, Anno,
                     custom_cce_f1_loss, lstm_model, Cast)
@@ -113,7 +110,7 @@ class PredictionGTF:
                     with open(f"{self.model_path}/model_config.json", 'r') as f:
                         config = json.load(f)
             except Exception as e:
-                print(f"Error could not find config of the model. It should be located at {self.model_path}/model_config.json: {e}")
+                print(f"Error could not find config of the model. It should be located at {self.model_path}/model_config.json: {e}", file=sys.stderr)
                 sys.exit(1)
             relevant_keys = ['units', 'filter_size', 'kernel_size', 
                 'numb_conv', 'numb_lstm', 'dropout_rate', 
@@ -179,7 +176,7 @@ class PredictionGTF:
 
             if self.parallel_factor is not None:
                 self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
-            print(f"Running gene pred hmm layer with parallel factor {self.gene_pred_hmm_layer.parallel_factor}")
+            print(f"Running gene pred hmm layer with parallel factor {self.gene_pred_hmm_layer.parallel_factor}", file=sys.stderr)
             self.gene_pred_hmm_layer.cell.recurrent_init()
         if summary:
             self.lstm_model.summary()
@@ -334,6 +331,30 @@ class PredictionGTF:
         
         return outp
    
+    def predict_lstm_batch(self, batch):
+        def _is_cudnn_lstm_not_supported(err: BaseException) -> bool:
+            msg = str(err)
+            return (
+                "CUDNN_STATUS_NOT_SUPPORTED" in msg
+                or "CudnnRNNV3" in msg
+                or "cudnnSetRNNDataDescriptor" in msg
+            )
+        try:
+            return self.lstm_model.predict_on_batch(batch)
+        except (tf.errors.OpError, tf.errors.InternalError, RuntimeError) as e:
+            if _is_cudnn_lstm_not_supported(e):
+                print(
+                    f"""\nERROR: cuDNN failed at a prediction step. \n
+                    This is a known issue with TensorFlow versions > 2.12 ,\n
+                    when using defaul sequence lengths. You are using\n
+                    Tensorflow version {tf.__version__}. Please use a \n
+                    sequence length <= 259992 (--seq_len).""",                    
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            raise
+
+
     def lstm_prediction(self, inp_chunks, clamsa_inp=None, trans_emb=None, save=True, batch_size=None):    
         """Generates predictions using a LSTM model.
 
@@ -351,7 +372,7 @@ class PredictionGTF:
         num_batches = inp_chunks.shape[0] // batch_size
         lstm_predictions = []
     
-        print('### LSTM prediction')
+        print('### LSTM prediction', file=sys.stderr)
         if save and self.temp_dir and os.path.exists(f'{self.temp_dir}/lstm_predictions.npz'):
             lstm_predictions = np.load(f'{self.temp_dir}/lstm_predictions.npz')
             lstm_predictions = lstm_predictions['array1']
@@ -392,12 +413,12 @@ class PredictionGTF:
             start_pos = i * batch_size
             end_pos = (i+1) * batch_size
             if clamsa_inp is not None:
-                y = self.lstm_model.predict_on_batch([
+                y = self.predict_lstm_batch([
                     inp_chunks[start_pos:end_pos],
                     clamsa_inp[start_pos:end_pos]
                 ])           
             else:
-                y = self.lstm_model.predict_on_batch(inp_chunks[start_pos:end_pos])
+                y = self.predict_lstm_batch(inp_chunks[start_pos:end_pos])
             if len(y.shape) == 1:
                 y = np.expand_dims(y,0)
             lstm_predictions.append(y)        
@@ -421,7 +442,7 @@ class PredictionGTF:
             batch_size = self.adapted_batch_size
         num_batches = nuc_seq.shape[0] // batch_size
         hmm_predictions = []
-        print('### HMM Viterbi')
+        print('### HMM Viterbi', file=sys.stderr)
         if save and self.temp_dir and os.path.exists(f'{self.temp_dir}/hmm_predictions.npy'):
             hmm_predictions = np.load(f'{self.temp_dir}/hmm_predictions.npy')
             return hmm_predictions
@@ -436,7 +457,6 @@ class PredictionGTF:
             if len(y_hmm.shape) == 1:
                 y_hmm = np.expand_dims(y_hmm,0)
             hmm_predictions.append(y_hmm)
-            #print(len(hmm_predictions), '/', num_batches, file=sys.stderr)  
         hmm_predictions = np.concatenate(hmm_predictions, axis=0)
         if save and self.temp_dir:
             np.save(f'{self.temp_dir}/hmm_predictions.npy', hmm_predictions)
@@ -462,7 +482,7 @@ class PredictionGTF:
         if not batch_size:
             batch_size = self.adapted_batch_size
             
-        print('### HMM Viterbi')
+        print('### HMM Viterbi', file=sys.stderr)
         
         def sliding_window_avg(array, window_size):
             shape = array.shape[:-2] + (array.shape[-2] - window_size + 1, window_size) + array.shape[-1:]
@@ -531,7 +551,7 @@ class PredictionGTF:
         self.lstm_pred = encoding_layer_pred
         lstm_end = time.time()
         duration = lstm_end - start_time
-        print(f"LSTM took {duration/60:.4f} minutes to execute.")
+        print(f"LSTM took {duration/60:.4f} minutes to execute.", file=sys.stderr)
         if not self.hmm:   
             encoding_layer_pred = np.argmax(encoding_layer_pred, axis=-1)
             return encoding_layer_pred
@@ -544,7 +564,7 @@ class PredictionGTF:
                                                       batch_size=batch_size)
         hmm_end = time.time()
         duration = hmm_end - lstm_end
-        print(f"HMM took {duration/60:.4f} minutes to execute.")
+        print(f"HMM took {duration/60:.4f} minutes to execute.", file=sys.stderr)
         return hmm_predictions
             
     def get_tp_fn_fp (self, predictions, true_labels):

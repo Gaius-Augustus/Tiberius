@@ -23,7 +23,8 @@ import tiberius.models as models
 from tiberius.models import (weighted_categorical_crossentropy, custom_cce_f1_loss, BatchLearningRateScheduler, 
                     add_hmm_only, add_hmm_layer, ValidationCallback,
                     BatchSave, EpochSave, lstm_model, add_constant_hmm, 
-                    make_weighted_cce_loss, Cast)
+                    make_weighted_cce_loss, Cast, custom_unsupervised_loss
+                    )
 from tensorflow.keras.callbacks import LearningRateScheduler
 
 gpus = tf.config.list_physical_devices('GPU')
@@ -341,7 +342,7 @@ def train_lstm_model(dataset, model_save_dir, config, val_data=None, model_load=
                          'numb_conv', 'numb_lstm', 'dropout_rate', 
                          'pool_size', 'stride', 'lstm_mask', 'clamsa',
                          'output_size', 'residual_conv', 'softmasking',
-                        'clamsa_kernel', 'lru_layer']
+                        'clamsa_kernel', 'lru_layer', "unsupervised_loss"] # TODO: add here special output layer maybe? not needed output_size
 
         relevant_args = {key: config[key] for key in relevant_keys if key in config}        
         if model_load:
@@ -473,6 +474,7 @@ def main():
             "numb_conv": 3,
             "dropout_rate": 0.0,
             "lstm_mask": False,
+            "unsupervised_loss": False,
             # pool size is the reduction factor for the sequence before the LSTM,
             # number of adjacent nucleotides that are one position for the LSTM
             "pool_size": 9,
@@ -535,6 +537,9 @@ def main():
     species_file = f'{args.train_species_file}'
     species = read_species(species_file)
     file_paths = [f'{data_path}/{s}_{i}.tfrecords' for s in species for i in range(100)]
+    
+    if args.unsupervsied_loss:
+        config_dict["output_size"] = 20
 
     # init tfrecord generator
     generator = DataGenerator(file_path=file_paths, 
@@ -550,12 +555,13 @@ def main():
           oracle=False if 'oracle' not in config_dict else config_dict['oracle'],
           threads=config_dict["threads"],
           tx_filter=mask_tx_list,
-          tx_filter_region=config_dict["mask_flank"]
+          tx_filter_region=config_dict["mask_flank"],
+          unsupervised_loss=args.unsupervised_loss,
       )
     
     dataset = generator.get_dataset()
 
-    if args.val_data:
+    if args.val_data:               # TODO: needs to be adjusted for new data format?
         val_data = load_val_data(args.val_data, 
                     hmm_factor=0, 
                     output_size=config_dict["output_size"],

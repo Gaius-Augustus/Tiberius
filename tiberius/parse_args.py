@@ -19,6 +19,8 @@ def parseCmd():
         help='')
     parser.add_argument('--hmm', action='store_true',
         help='')
+    parser.add_argument('--unsupervised_loss', action='store_true',
+        help='')
     parser.add_argument('--clamsa', action='store_true',
         help='')
     # parser.add_argument('--nuc_trans', action='store_true',

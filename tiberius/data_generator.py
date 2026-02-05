@@ -43,7 +43,8 @@ class DataGenerator:
                 oracle=False, 
                 threads=96,
                 tx_filter=[],
-                tx_filter_region=1000):
+                tx_filter_region=1000,
+                unsupervised_loss=False):
         self.file_path = file_path
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -65,6 +66,7 @@ class DataGenerator:
 
         self.dataset = self._read_tfrecord_file(repeat=repeat)
         self.iterator = iter(self.dataset)
+        self.unsupervised_loss = unsupervised_loss
     
     def _parse_fn(self, example):
         features = {
@@ -189,6 +191,28 @@ class DataGenerator:
             
             w = tf.expand_dims(w, axis=-1)                           
             w.set_shape([None, 1])
+            
+            """
+            """
+            if self.unsupervised_loss:
+                intergenetic_regions = (Y[:, 0] == 1).astype(int)
+                transcript_regions = 1 - intergenetic_regions
+                possible_mask_positions = (1 - (transcript_regions * w) )
+
+                mask_positions = (np.random.rand(seq_len) < 0.15) * possible_mask_positions
+                w_unsupervised = mask_positions.astype(int)
+                
+                X_masked = x.copy()
+                X_masked[mask_positions == 1, 0:5] = 0
+                
+                Y_extended = tf.concat([
+                    Y,
+                    x[:, :4],
+                    w_unsupervised[:, None]
+                ], axis=-1)
+                
+                return X_masked, Y_extended, w
+                
             return X, Y, w
 
         dataset = dataset.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
@@ -418,6 +442,8 @@ class DataGenerator:
             simp_array = tf.where(simp_array < 4, 0, 1)  # 0-3 -> 0; 4-6 -> 1
         elif self.output_size == 3:
             simp_array = simp_array  # Already binary-ish, assuming 0=non-coding, 1=coding, 2=other
+        elif self.output_size == 4:
+            simp_array = tf.where(simp_array == 0, 0, 1)    # TODO: not sure?
 
         # Initialize weights as ones
         seq_weights = tf.ones_like(simp_array, dtype=tf.float32)  # Shape: (batch_size, seq_len)

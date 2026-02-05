@@ -134,6 +134,27 @@ def custom_cce_f1_loss(f1_factor, batch_size,
 
         # Combine CCE loss and F1 score
         combined_loss = cce_loss + f1_factor * (f1_loss + fpr)
+
+        """
+        Description ..
+        """
+        if tf.shape(y_true)[-1] == 20:
+            y_nuc_true = y_true[:, :, 15:19]
+            y_nuc_pred = y_pred[:, :, 15:19]
+            w_unsup = y_true[:, :, 20]
+        
+            loss_all_positions = tf.keras.losses.categorical_crossentropy(y_nuc_pred, y_nuc_true)
+            loss_masked = loss_all_positions * w_unsup
+
+            loss = tf.reduce_sum(loss_masked) / tf.reduce_sum(w_unsup)
+            #loss = tf.reduce_sum(loss_masked) / (tf.reduce_sum(w_unsup) + 1e-8)
+            
+            # loss tracking needed!
+            tf.print("combined_loss:", combined_loss, "Loss_nuc:", loss)
+            tf.print("number masked nucleotides", tf.reduce_sum(w_unsup))
+            
+            total_loss = combined_loss + loss
+            return total_loss
         return combined_loss
     return loss_       
        
@@ -143,7 +164,8 @@ def lstm_model(units=200, filter_size=64,
                pool_size=10, stride=0, 
                lstm_mask=False, output_size=7,
                multi_loss=False, residual_conv=False,
-               clamsa=False, clamsa_kernel=6, softmasking=True, lru_layer=False
+               clamsa=False, clamsa_kernel=6, softmasking=True, lru_layer=False,
+               unsupervised_loss=False
               ):
     """
     Constructs a hybrid model that combines CNNs and bLSTM layers for gene prediction.

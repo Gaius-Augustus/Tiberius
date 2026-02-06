@@ -10,11 +10,13 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.keras as keras
 from tensorflow.keras.models import Model
-from tiberius import (GenePredHMMLayer,  
-                    make_aggregation_matrix, 
+from tiberius import (make_aggregation_matrix,
                     GenomeSequences,
                     GeneStructure, Anno,
                     custom_cce_f1_loss, lstm_model, Cast)
+from hidten import HMMMode
+from tiberius.hmm import HMMBlock
+
 
 class PredictionGTF:
     """Class for generating GTF predictions based on a model's output.
@@ -22,15 +24,15 @@ class PredictionGTF:
         Attributes:
             model_path (str): Path to the pre-trained model.
             seq_len (int): Length of the sequences to process.
-            batch_size (int): Batch size for prediction.        
+            batch_size (int): Batch size for prediction.
             hmm (bool): Flag to indicate whether to use HMM for prediction.
             model (keras.Model): Loaded Keras model for predictions.
     """
-    def __init__(self, model_path='', model_path_old='', model_path_lstm_old='', 
-                 seq_len=500004, batch_size=200, 
-                 hmm=False,  model_path_hmm='', 
+    def __init__(self, model_path='', model_path_old='', model_path_lstm_old='',
+                 seq_len=500004, batch_size=200,
+                 hmm=False,  model_path_hmm='',
                  temp_dir='', num_hmm=1,
-                 hmm_factor=None, 
+                 hmm_factor=None,
                  annot_path='', genome_path='', genome=None, softmask=True,
                  strand='+', parallel_factor=1, oracle=False,
                  lstm_cfg='',):
@@ -43,7 +45,7 @@ class PredictionGTF:
             - batch_size (int): The size of the batches to be used.
             - hmm (bool): A flag to indicate whether Hidden Markov Models (HMM) should be used. Defaults to False.
             - model_path_hmm (str): Path to the HMM model file.
-            - temp_dir (str): Temporary directory path for intermediate files. 
+            - temp_dir (str): Temporary directory path for intermediate files.
             - num_hmm (int): Number of HMMs to be used.
             - hmm_factor: Parallelization factor of HMM (deprecated, remove in a later version)
             - transformer (bool): A flag to indicate whether a transformer model should be used. (depprecated!)
@@ -51,7 +53,7 @@ class PredictionGTF:
             - annot_path (str): Path to the reference annotation file (GTF).
             - genome_path (str): Path to the genome file (FASTA).
             - genome: dictionary of SeqRecords, (overriding) alternative to genome_path
-            - softmask (bool): Whether to use softmasking. 
+            - softmask (bool): Whether to use softmasking.
             - strand (str): Indicates the strand ('+' for positive, '-' for negative).
             - parallel_factor (int): The parallel factor used for Viterbi.
             - lstm_cfg (str): path to lstm cfg to load weights instead of the whole model
@@ -80,24 +82,24 @@ class PredictionGTF:
         self.lstm_pred = None
         self.parallel_factor = parallel_factor
         self.lstm_model = None
-    
+
     def reduce_label(self, arr, num_hmm=1):
         """Reduces intron and exon labels.
-        
+
         Args:
             arr (np.ndarray): Array containing the labels to be reduced.
-            
+
         Returns:
             np.ndarray: Array with reduced label space.
-        """ 
+        """
         A = make_aggregation_matrix(k=num_hmm)
         new_arr = A.argmax(1)[arr]
         new_arr[(new_arr > 1)] = 2
         return new_arr
-    
+
     def load_model(self, summary=True):
         """Loads the model from the given model path.
-        
+
         Args:
             summary (bool, optional): If True, prints the model summary. Defaults to True.
         """
@@ -112,10 +114,10 @@ class PredictionGTF:
             except Exception as e:
                 print(f"Error could not find config of the model. It should be located at {self.model_path}/model_config.json: {e}", file=sys.stderr)
                 sys.exit(1)
-            relevant_keys = ['units', 'filter_size', 'kernel_size', 
-                'numb_conv', 'numb_lstm', 'dropout_rate', 
+            relevant_keys = ['units', 'filter_size', 'kernel_size',
+                'numb_conv', 'numb_lstm', 'dropout_rate',
                 'pool_size', 'stride', 'lstm_mask', 'clamsa',
-                'output_size', 'residual_conv', 
+                'output_size', 'residual_conv',
                 'clamsa_kernel', 'lru_layer']
             relevant_args = {key: config[key] for key in relevant_keys if key in config}
             sm = True
@@ -127,12 +129,12 @@ class PredictionGTF:
             self.lstm_model.load_weights(f"{self.model_path}/weights.h5")
 
             if self.model_path_hmm:
-                model_hmm = keras.models.load_model(self.model_path_hmm, 
+                model_hmm = keras.models.load_model(self.model_path_hmm,
                                                     custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
                                                             'loss_': custom_cce_f1_loss(2, self.adapted_batch_size)})
                 self.gene_pred_hmm_layer = model_hmm.get_layer('gene_pred_hmm_layer')
                 self.gene_pred_hmm_layer.parallel_factor = self.parallel_factor
-                self.gene_pred_hmm_layer.cell.recurrent_init() 
+                self.gene_pred_hmm_layer.cell.recurrent_init()
             elif config["hmm"]:
                 try:
                     self.gene_pred_hmm_layer = self.lstm_model.get_layer('gene_pred_hmm_layer')
@@ -143,33 +145,33 @@ class PredictionGTF:
                 except ValueError as e:
                     lstm_output=self.lstm_model.get_layer('lstm_out').output
                 self.lstm_model = Model(
-                                inputs=self.lstm_model.input, 
+                                inputs=self.lstm_model.input,
                                 outputs=lstm_output
                                 )
             else:
                 self.make_default_hmm(inp_size=self.lstm_model.output_shape[-1])
         # loading full models for training or old models
         elif self.model_path_lstm_old:
-            self.lstm_model = keras.models.load_model(self.model_path_lstm_old, 
+            self.lstm_model = keras.models.load_model(self.model_path_lstm_old,
                     custom_objects={
                     'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
                     'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
-                    "Cast": Cast}, 
+                    "Cast": Cast},
                     compile=False,
                     )
             self.make_default_hmm(inp_size=self.lstm_model.output.shape[-1])
         elif self.model_path_old:
-            self.model = keras.models.load_model(self.model_path_old, 
+            self.model = keras.models.load_model(self.model_path_old,
                     custom_objects={'custom_cce_f1_loss': custom_cce_f1_loss(2, self.adapted_batch_size),
                         'loss_': custom_cce_f1_loss(2, self.adapted_batch_size),
-                        "Cast": Cast}, 
+                        "Cast": Cast},
                     compile=False,)
             try:
                 lstm_output=self.model.get_layer('out').output
             except ValueError as e:
                 lstm_output=self.model.get_layer('lstm_out').output
             self.lstm_model = Model(
-                            inputs=self.model.input, 
+                            inputs=self.model.input,
                             outputs=lstm_output
                             )
             self.gene_pred_hmm_layer = self.model.get_layer('gene_pred_hmm_layer')
@@ -180,8 +182,8 @@ class PredictionGTF:
             self.gene_pred_hmm_layer.cell.recurrent_init()
         if summary:
             self.lstm_model.summary()
-        
-    
+
+
     def adapt_batch_size(self, adapted_chunksize):
         """Adapts the batch size based on the chunk size.
         """
@@ -199,26 +201,26 @@ class PredictionGTF:
         if chunk_len is None:
             chunk_len = self.seq_len
         if (self.genome):
-            fasta = GenomeSequences(genome=self.genome, chunksize=chunk_len, 
+            fasta = GenomeSequences(genome=self.genome, chunksize=chunk_len,
                 overlap=0, min_seq_len=min_seq_len)
         else:
-            fasta = GenomeSequences(fasta_file=genome_path, chunksize=chunk_len, 
+            fasta = GenomeSequences(fasta_file=genome_path, chunksize=chunk_len,
                 overlap=0, min_seq_len=min_seq_len)
         return fasta
-    
+
     def load_genome_data(self, fasta_object, seq_names, strand='', softmask=True):
         if strand is None:
             strand = self.strand
-        
+
         fasta_object.encode_sequences(seq=seq_names)
 
-        f_chunk, coords, adapted_chunksize = fasta_object.get_flat_chunks(strand=strand, coords=True, 
-                                                       sequence_names=seq_names, adapt_chunksize=True, 
+        f_chunk, coords, adapted_chunksize = fasta_object.get_flat_chunks(strand=strand, coords=True,
+                                                       sequence_names=seq_names, adapt_chunksize=True,
                                                        parallel_factor = self.parallel_factor)
         if not softmask:
             f_chunk = f_chunk[:,:,:5]
         return f_chunk, coords, adapted_chunksize
-     
+
     def load_clamsa_data(self, clamsa_prefix, seq_names, strand='', chunk_len=None, pad=False):
         if strand is None:
             strand = self.strand
@@ -236,18 +238,18 @@ class PredictionGTF:
                 padding = np.zeros((1,chunk_len, 4),dtype=np.uint8)
                 padding[0,0:last_chunksize] = clamsa_array[-last_chunksize:]
                 clamsa_chunks.append(padding)
-            
+
         clamsa_chunks = np.concatenate(clamsa_chunks, axis=0)
         if strand == '-':
             clamsa_chunks = clamsa_chunks[::-1,::-1, [1,0,3,2]]
         return clamsa_chunks
-    
+
     def load_inp_data(self, annot_path=None, genome_path=None,
-                      chunk_coords=True, softmask=True, 
+                      chunk_coords=True, softmask=True,
                       chunk_len=None, use_file=True, strand=None, clamsa_path=None,
                      pad=True):
         """Loads input data, encodes genome sequences, and gets reference annotations.
-        
+
         Args:
             annot_path (str): Path to the annotation file.
             genome_path (str): Path to the genome fasta file.
@@ -257,9 +259,9 @@ class PredictionGTF:
             softmask (bool): Adds softmask track to input.
             chunk_len (int): Sequence length of training examples, if it differs from self.seq_len.
             use_file (bool): Load data from file or save it to a file
-            strand (str): Indicates the strand ('+' for positive, '-' for negative). 
+            strand (str): Indicates the strand ('+' for positive, '-' for negative).
             clamsa_path (str): Clamsa file for additional clamsa track
-        
+
         Returns:
             Tuple[np.ndarray, np.ndarray, ...]: Output arrays with input data, labels, and coordinates
         """
@@ -279,13 +281,13 @@ class PredictionGTF:
                 coords = data['array3']
                 return f_chunk, r_chunk, coords
             return f_chunk, r_chunk
-        
+
         if (self.genome):
             fasta = GenomeSequences(genome=self.genome, chunksize=chunk_len, overlap=0)
         else:
             fasta = GenomeSequences(fasta_file=genome_path, chunksize=chunk_len, overlap=0)
-        
-        fasta.encode_sequences() 
+
+        fasta.encode_sequences()
         f_chunk, coords, _ = fasta.get_flat_chunks(strand=strand, coords=chunk_coords, pad=pad)
         seq_len = [len(s) for s in fasta.sequences]
         self.fasta_seq_lens = dict(zip(fasta.sequence_names, seq_len))
@@ -301,7 +303,7 @@ class PredictionGTF:
                 clamsa_chunks.append(clamsa_array)
                 last_chunksize = clamsa_array_load.shape[0]-(numb_chunks*chunk_len)
                 if pad and last_chunksize>0:
-                    padding = np.zeros((1, chunk_len, 4),dtype=np.uint8)                
+                    padding = np.zeros((1, chunk_len, 4),dtype=np.uint8)
                     padding[0,0:last_chunksize] = clamsa_array_load[-last_chunksize:]
                     clamsa_chunks.append(padding)
             clamsa_chunks = np.concatenate(clamsa_chunks, axis=0)
@@ -311,26 +313,26 @@ class PredictionGTF:
             f_chunk[:,:,5] = 0
         del fasta.sequences
         del fasta.one_hot_encoded
-        
-        if annot_path:
-            ref_anno = GeneStructure(annot_path, 
-                                chunksize=chunk_len, 
-                                overlap=0)    
 
-            ref_anno.translate_to_one_hot_hmm(fasta.sequence_names, 
+        if annot_path:
+            ref_anno = GeneStructure(annot_path,
+                                chunksize=chunk_len,
+                                overlap=0)
+
+            ref_anno.translate_to_one_hot_hmm(fasta.sequence_names,
                                     seq_len, transition=True)
-        
+
             r_chunk = ref_anno.get_flat_chunks_hmm(
                 fasta.sequence_names, strand=strand, coords=False)
             outp = [f_chunk, r_chunk, coords]
         else:
             outp = [f_chunk, np.array([]), coords]
-        
+
         if clamsa_path:
             outp.append(clamsa_chunks)
-        
+
         return outp
-   
+
     def predict_lstm_batch(self, batch):
         def _is_cudnn_lstm_not_supported(err: BaseException) -> bool:
             msg = str(err)
@@ -348,14 +350,14 @@ class PredictionGTF:
                     This is a known issue with TensorFlow versions > 2.12 ,\n
                     when using defaul sequence lengths. You are using\n
                     Tensorflow version {tf.__version__}. Please use a \n
-                    sequence length <= 259992 (--seq_len).""",                    
+                    sequence length <= 259992 (--seq_len).""",
                     file=sys.stderr,
                 )
                 sys.exit(1)
             raise
 
 
-    def lstm_prediction(self, inp_chunks, clamsa_inp=None, trans_emb=None, save=True, batch_size=None):    
+    def lstm_prediction(self, inp_chunks, clamsa_inp=None, trans_emb=None, save=True, batch_size=None):
         """Generates predictions using a LSTM model.
 
         Arguments:
@@ -371,15 +373,15 @@ class PredictionGTF:
             batch_size = self.adapted_batch_size
         num_batches = inp_chunks.shape[0] // batch_size
         lstm_predictions = []
-    
+
         print('### LSTM prediction', file=sys.stderr)
         if save and self.temp_dir and os.path.exists(f'{self.temp_dir}/lstm_predictions.npz'):
             lstm_predictions = np.load(f'{self.temp_dir}/lstm_predictions.npz')
             lstm_predictions = lstm_predictions['array1']
             return lstm_predictions
-        
-        # decriptive error message when there is an input embedding dim mismatch 
-        # due to softmasking mismatch between training and inference 
+
+        # decriptive error message when there is an input embedding dim mismatch
+        # due to softmasking mismatch between training and inference
         expected_input_shape = self.lstm_model.input_shape
         actual_input_shape = inp_chunks.shape
 
@@ -416,17 +418,17 @@ class PredictionGTF:
                 y = self.predict_lstm_batch([
                     inp_chunks[start_pos:end_pos],
                     clamsa_inp[start_pos:end_pos]
-                ])           
+                ])
             else:
                 y = self.predict_lstm_batch(inp_chunks[start_pos:end_pos])
             if len(y.shape) == 1:
                 y = np.expand_dims(y,0)
-            lstm_predictions.append(y)        
+            lstm_predictions.append(y)
         lstm_predictions = np.concatenate(lstm_predictions, axis=0)
-        if save and self.temp_dir:            
+        if save and self.temp_dir:
             np.savez(f'{self.temp_dir}/lstm_predictions.npz', array1=lstm_predictions)
         return lstm_predictions
-    
+
     def hmm_prediction(self, nuc_seq, lstm_predictions, save=True, batch_size=None):
         """Generates predictions using a HMM model and the viterbi algorithm.
 
@@ -446,13 +448,13 @@ class PredictionGTF:
         if save and self.temp_dir and os.path.exists(f'{self.temp_dir}/hmm_predictions.npy'):
             hmm_predictions = np.load(f'{self.temp_dir}/hmm_predictions.npy')
             return hmm_predictions
-        
+
         if nuc_seq.shape[0] % batch_size > 0:
             num_batches += 1
         for i in range(num_batches):
             start_pos = i * batch_size
-            end_pos = (i+1) * batch_size            
-            y_hmm = self.predict_vit(nuc_seq[start_pos:end_pos], 
+            end_pos = (i+1) * batch_size
+            y_hmm = self.predict_vit(nuc_seq[start_pos:end_pos],
                 lstm_predictions[start_pos:end_pos]).numpy().squeeze()
             if len(y_hmm.shape) == 1:
                 y_hmm = np.expand_dims(y_hmm,0)
@@ -461,19 +463,19 @@ class PredictionGTF:
         if save and self.temp_dir:
             np.save(f'{self.temp_dir}/hmm_predictions.npy', hmm_predictions)
         return hmm_predictions
-    
+
     def hmm_predictions_filtered(self, inp_chunks, lstm_predictions, save=True, batch_size=None):
         """Generates predictions using a HMM model and the viterbi algorithm.
-        It first analyzes the class probabilities from LSTM predictions over 
-        windows of 200 base pairs (bp) in length. The HMM makes predictions on 
-        an example only if there's at least one window where the average class 
-        probability for the CDS class is 0.8 or higher. If no such window exists, 
-        the HMM will skip making predictions for that example, and all positions 
+        It first analyzes the class probabilities from LSTM predictions over
+        windows of 200 base pairs (bp) in length. The HMM makes predictions on
+        an example only if there's at least one window where the average class
+        probability for the CDS class is 0.8 or higher. If no such window exists,
+        the HMM will skip making predictions for that example, and all positions
         within it are labeled as intergenic region.
-        
+
         Arguments:
             inp_chunks (np.array): One hot encoded representation of the input nucleotide sequence.
-            lstm_predictions (np.array): Class label predictions from a LSTM model 
+            lstm_predictions (np.array): Class label predictions from a LSTM model
             save (bool): A flag to indicate whether the predictions should be saved/loaded to/from a file.
 
         Returns:
@@ -481,26 +483,26 @@ class PredictionGTF:
         """
         if not batch_size:
             batch_size = self.adapted_batch_size
-            
+
         print('### HMM Viterbi', file=sys.stderr)
-        
+
         def sliding_window_avg(array, window_size):
             shape = array.shape[:-2] + (array.shape[-2] - window_size + 1, window_size) + array.shape[-1:]
             strides = array.strides[:-2] + (array.strides[-2], array.strides[-2]) + array.strides[-1:]
             windows = np.lib.stride_tricks.as_strided(array, shape=shape, strides=strides)
             return np.nanmean(windows, axis=-2)
-        
+
         hmm_predictions = []
-        
+
         if save and self.temp_dir and os.path.exists(f'{self.temp_dir}/hmm_predictions.npy'):
             hmm_predictions = np.load(f'{self.temp_dir}/hmm_predictions.npy')
             return hmm_predictions
-        
+
         if self.hmm_factor > 1:
             inp_chunks = inp_chunks.reshape((inp_chunks.shape[0]*self.hmm_factor, inp_chunks.shape[1]//self.hmm_factor, -1))
             lstm_predictions[0] = lstm_predictions[0].reshape((lstm_predictions[0].shape[0]*self.hmm_factor, lstm_predictions[0].shape[1]//self.hmm_factor, -1))
             lstm_predictions[1] = lstm_predictions[1].reshape((lstm_predictions[1].shape[0]*self.hmm_factor, lstm_predictions[1].shape[1]//self.hmm_factor, -1))
-            
+
         batch_i = []
         hmm_predictions = np.zeros((inp_chunks.shape[0],inp_chunks.shape[1]), int)
         for i in range(inp_chunks.shape[0]):
@@ -510,20 +512,20 @@ class PredictionGTF:
             else:
                 hmm_predictions[i] = lstm_predictions[0][i].argmax(-1)
 
-            if len(batch_i) == batch_size*self.hmm_factor or i == inp_chunks.shape[0]-1:                
-                y_hmm = self.predict_vit(inp_chunks[batch_i], 
+            if len(batch_i) == batch_size*self.hmm_factor or i == inp_chunks.shape[0]-1:
+                y_hmm = self.predict_vit(inp_chunks[batch_i],
                         lstm_predictions[batch_i]).numpy().squeeze()
                 if len(y_hmm.shape) == 1:
                     y_hmm = np.expand_dims(y_hmm,0)
                 for j1, j2 in enumerate(batch_i):
                     hmm_predictions[j2] = y_hmm[j1]
                 batch_i = []
-        
+
         if save and self.temp_dir:
             np.save(f'{self.temp_dir}/hmm_predictions.npy', hmm_predictions)
         return hmm_predictions
-    
-    def get_predictions(self, inp_chunks, clamsa_inp=None, hmm_filter=False, 
+
+    def get_predictions(self, inp_chunks, clamsa_inp=None, hmm_filter=False,
                 save=True, encoding_layer_oracle=None, batch_size=None):
         """Gets predictions for input chunks.
 
@@ -531,15 +533,15 @@ class PredictionGTF:
             inp_chunks (np.ndarray): Input chunks for which to get predictions.
             clamsa_inp (np.array): Optional clamsa input with same size as inp_chunks.
             hmm_filter (bool): Use faster hmm_filter method for HMM prediction.
-            save (bool): A flag to indicate whether the predictions should be saved/loaded to/from a file.       
-            encoding_layer_oracle (bool): Can be used to skip the encoding layer and use the provided predictions. Use for debugging.     
+            save (bool): A flag to indicate whether the predictions should be saved/loaded to/from a file.
+            encoding_layer_oracle (bool): Can be used to skip the encoding layer and use the provided predictions. Use for debugging.
 
         Returns:
             np.ndarray: HMM predictions for all chunks.
         """
         if not batch_size:
             batch_size = self.adapted_batch_size
-            
+
         start_time = time.time()
         if encoding_layer_oracle is not None:
             encoding_layer_pred = encoding_layer_oracle
@@ -547,15 +549,15 @@ class PredictionGTF:
             # LSTM prediction
             encoding_layer_pred = self.lstm_prediction(inp_chunks, clamsa_inp=clamsa_inp, save=save,
                                                       batch_size=batch_size)
-        
+
         self.lstm_pred = encoding_layer_pred
         lstm_end = time.time()
         duration = lstm_end - start_time
         print(f"LSTM took {duration/60:.4f} minutes to execute.", file=sys.stderr)
-        if not self.hmm:   
+        if not self.hmm:
             encoding_layer_pred = np.argmax(encoding_layer_pred, axis=-1)
             return encoding_layer_pred
-        
+
         if hmm_filter:
             hmm_predictions = self.hmm_predictions_filtered(inp_chunks, encoding_layer_pred, save=save,
                                                       batch_size=batch_size)
@@ -566,9 +568,9 @@ class PredictionGTF:
         duration = hmm_end - lstm_end
         print(f"HMM took {duration/60:.4f} minutes to execute.", file=sys.stderr)
         return hmm_predictions
-            
+
     def get_tp_fn_fp (self, predictions, true_labels):
-        """Calculates true positives, false positives, 
+        """Calculates true positives, false positives,
         and false negatives for given predictions and true labels.
 
         Args:
@@ -576,7 +578,7 @@ class PredictionGTF:
             true_labels (np.ndarray): Array of true labels.
 
         Returns:
-            dict: A dictionary with counts of true positives, 
+            dict: A dictionary with counts of true positives,
                     false positives, and false negatives for each class.
         """
         classes = [0, 1, 2]
@@ -591,19 +593,19 @@ class PredictionGTF:
             metrics[c]["FN"] = np.sum(fn_mask)
             for k in ["TP", "FP", "FN"]:
                 metrics['all'][k] += metrics[c][k]
-        
+
         return metrics
 
     def calculate_metrics(self, data_dict):
-        """Calculates precision, recall, and F1 score from 
+        """Calculates precision, recall, and F1 score from
         a dictionary of TP, FP, and FN values.
 
         Args:
-            data_dict (dict): A dictionary containing 
+            data_dict (dict): A dictionary containing
                 'TP', 'FP', 'FN' keys with their counts as values.
 
         Returns:
-            dict: A dictionary containing 'precision', 
+            dict: A dictionary containing 'precision',
                 'recall', and 'F1' keys with their calculated values.
         """
         metrics_dict = {}
@@ -627,19 +629,19 @@ class PredictionGTF:
     @tf.function
     def predict_vit(self, x, y_lstm):
         """Perform prediction using the Viterbi algorithm on the output of an LSTM model.
-        
+
         This method applies the Viterbi algorithm to the sequence probabilities output by
         the LSTM model to find the most likely sequence of hidden states.
-        
+
         Args:
             x (tf.Tensor): Input sequence tensor for which the predictions are to be made.
             y_lstm (np.array): LSTM predictions used as input for viterbi.
-            
+
         Returns:
             tf.Tensor: The predicted state sequence tensor after applying Viterbi decoding.
         """
         if self.lstm_model and self.hmm:
-            if y_lstm.shape[-1] ==7:          
+            if y_lstm.shape[-1] ==7:
                 new_y_lstm = tf.concat([y_lstm[:,:,0:1],
                         tf.reduce_sum(y_lstm[:,:,1:4], axis=-1, keepdims=True),
                         y_lstm[:,:,4:]], axis=-1)
@@ -664,13 +666,13 @@ class PredictionGTF:
             else:
                 new_y_lstm = y_lstm
             nuc = Cast()(x)
-            y_vit = self.gene_pred_hmm_layer.viterbi(new_y_lstm, nucleotides=nuc)
+            y_vit = self.gene_pred_hmm_layer(new_y_lstm, nuc)
         else:
             nuc = tf.cast(x[:,:,:5], tf.float32)
-            y_vit = self.gene_pred_hmm_layer.viterbi(y_lstm, nucleotides=nuc)
+            y_vit = self.gene_pred_hmm_layer(y_lstm, nuc)
         return y_vit
-        
-    def merge_re_prediction(self, all_tx, new_tx, breakpoint): 
+
+    def merge_re_prediction(self, all_tx, new_tx, breakpoint):
         """Merges two sets of transcript predictions (`all_tx` and `new_tx`) at a specified breakpoint.
 
         This function integrates predictions from two different prediction sets by considering their overlaps and the
@@ -724,11 +726,11 @@ class PredictionGTF:
         else:
             # tx from new_tx is larger so keep it instead of the one from all_tx
             return all_tx[:overlap1] + new_tx[overlap2:]
-        
+
     def get_tx_from_range(self, range_):
         """
         Extracts transcript regions from a given tuples of class ranges. It extracts for each transcript
-        the regions of their CDS. Additionally, it reports fragmented txs add the start or end of the 
+        the regions of their CDS. Additionally, it reports fragmented txs add the start or end of the
         input ranges.
 
         Parameters:
@@ -740,8 +742,8 @@ class PredictionGTF:
         - initial_tx (list): List of exon ranges of the first fragmented transcript.
         - txs (list of lists): List of transcripts with their CDS ranges.
         - current_tx (list): Last fragmented Transcript
-        """        
-        
+        """
+
         txs = []
         current_tx = []
         initial_tx = []
@@ -752,24 +754,24 @@ class PredictionGTF:
                     txs.append(current_tx)
                     current_tx = []
             else:
-                current_tx.append(region)                
+                current_tx.append(region)
         if range_[0][0] != 'intergenic' and txs:
             initial_tx = txs[0]
             txs = txs[1:]
         return initial_tx, txs, current_tx
-        
-    def create_gtf(self, y_label, coords, f_chunks, out_file='', clamsa_inp=None, 
+
+    def create_gtf(self, y_label, coords, f_chunks, out_file='', clamsa_inp=None,
                    strand='+', correct_y_label=None, anno=None, tx_id=0,
                   filt=True):
         """Create a GTF file with the gene annotations from predictions.
-        
+
         This method translates HMM predictions into a GTF format which contains the annotations
-        of the genomic features such as CDS (Coding Sequences) and introns. For regions where 
-        predictions from consecutive chunks don't align (or are both IR) the method performs 
-        re-predictions. This is done by concatenating the input data of the misaligned chunks 
-        and generating a new prediction for this combined segment, aiming for a consistent 
+        of the genomic features such as CDS (Coding Sequences) and introns. For regions where
+        predictions from consecutive chunks don't align (or are both IR) the method performs
+        re-predictions. This is done by concatenating the input data of the misaligned chunks
+        and generating a new prediction for this combined segment, aiming for a consistent
         annotation across breakpoints.
-        
+
         Args:
             y_label (np.ndarray): The array of encoded labels predicted by the model.
             coords (np.ndarray): The array of genomic coordinates: [seq_name, strand, chunk_start, chunk_end].
@@ -785,22 +787,22 @@ class PredictionGTF:
             y_label = y_label[::-1, ::-1]
             f_chunks = f_chunks[::-1]
             coords = coords[::-1]
-        
+
         # coordinates of ranges connected gene features in y_label
         ranges = {}
         # Anno object for gtf file
         if not anno:
-            anno = Anno(out_file, f'anno')        
-        
+            anno = Anno(out_file, f'anno')
+
         re_pred_inp = []
         re_clamsa_inp = []
         # index of previous element in coords]
         re_pred_index = []
         re_correct_y_label = []
-        
+
         for i in range(y_label.shape[0]-1):
-            # add overlap of i-th and i+1-th chunk to repred 
-            # if they are from the same seq and if at least 
+            # add overlap of i-th and i+1-th chunk to repred
+            # if they are from the same seq and if at least
             # one of the borders is not IR
             if coords[i][0] == coords[i+1][0] \
                 and not (y_label[i,-1] ==  y_label[i+1,0]):
@@ -828,35 +830,35 @@ class PredictionGTF:
                             re_correct_y_label.append(
                                 np.concatenate([correct_y_label[i+1],
                                                 correct_y_label[i]], axis=0))
-                    re_pred_index.append(i)                        
-        
-        re_pred_inp = np.array(re_pred_inp) 
+                    re_pred_index.append(i)
+
+        re_pred_inp = np.array(re_pred_inp)
         re_clamsa_inp = np.array(re_clamsa_inp)
         re_correct_y_label = np.array(re_correct_y_label)
         # get new predictions for overlap regions
         if re_pred_inp.any():
             if clamsa_inp is not None:
-                re_pred = self.get_predictions(re_pred_inp, 
+                re_pred = self.get_predictions(re_pred_inp,
                                                clamsa_inp=re_clamsa_inp, save=False, batch_size=batch_size,
                                                encoding_layer_oracle=re_correct_y_label if correct_y_label is not None else None)
             else:
                 re_pred = self.get_predictions(re_pred_inp, save=False, batch_size=batch_size,
                                                encoding_layer_oracle=re_correct_y_label if correct_y_label is not None else None)
-        
+
         current_re_index = -1
         re_txs = None
         end_fragment = []
-        
+
         for i, (y, c) in enumerate(zip(y_label, coords)):
             y_ranges = self.get_ranges(y, c[2])
-            is_ir = 'intergenic' in [r[0] for r in y_ranges]       
+            is_ir = 'intergenic' in [r[0] for r in y_ranges]
             coord_diff = 0 if i == 0 else int(c[3])-int(coords[i-1][2])
             start_fragment, txs, new_end_fragment = self.get_tx_from_range(y_ranges)
-            
+
             # new seq
             if c[0] not in ranges:
                 ranges[c[0]] = []
-            
+
             # if the start of the first fragmented tx matches the fragment from the last chunk
             # combine them
             if not re_txs and is_ir and end_fragment and start_fragment and y_label[i-1,-1] == y_label[i,0]:
@@ -877,8 +879,8 @@ class PredictionGTF:
                 current_re = re_pred[0]
                 re_pred = re_pred[1:]
                 if c_re[1] == '-':
-                    current_re = current_re[::-1]  
-                re_ranges = self.get_ranges(current_re, c_re[2])       
+                    current_re = current_re[::-1]
+                re_ranges = self.get_ranges(current_re, c_re[2])
                 start_fragment, re_txs, new_end_fragment = self.get_tx_from_range(re_ranges)
                 if not is_ir and end_fragment and start_fragment \
                     and y_label[i-1,-1] == current_re[0]:
@@ -887,35 +889,35 @@ class PredictionGTF:
                     ranges[c[0]] += [end_fragment]
                 if re_txs:
                     ranges[c[0]] = self.merge_re_prediction(
-                        ranges[c[0]], re_txs, c_re[2] + coord_diff//2)                
-                
+                        ranges[c[0]], re_txs, c_re[2] + coord_diff//2)
+
                 end_fragment = new_end_fragment
-            
+
         for seq in ranges:
             new_tx = False
             phase = -1
-            for tx in ranges[seq]:                
+            for tx in ranges[seq]:
                 tx_id += 1
                 t_id = f'g{tx_id}.t1'
                 g_id = f'g{tx_id}'
                 phase = 0
                 anno.transcript_update(t_id, g_id, seq, strand)
-                anno.genes_update(g_id, t_id)  
+                anno.genes_update(g_id, t_id)
                 for r in tx:
-                    line = [seq, 'Tiberius', r[0], r[1], r[2], '.', strand, phase, 
+                    line = [seq, 'Tiberius', r[0], r[1], r[2], '.', strand, phase,
                            f'gene_id "{g_id}"; transcript_id "{t_id}";']
                     anno.transcripts[t_id].add_line(line)
                     if r[0] == 'CDS':
                         phase = (3 - (r[2] - r[1] + 1 - phase)%3)%3
-        
-        remove_tx = []                
+
+        remove_tx = []
         for tx in anno.transcripts.values():
             tx.check_splits()
             if filt and tx.get_cds_len() < 201:
                 remove_tx.append(tx.id)
-            else:                
+            else:
                 tx.redo_phase()
-            
+
         for tx in remove_tx:
             anno.transcripts.pop(tx)
 
@@ -923,16 +925,16 @@ class PredictionGTF:
             anno.norm_tx_format()
             anno.find_genes()
             anno.write_anno(out_file)
-            
+
         return anno, tx_id
-    
-    def create_gtf_single_batch(self, nuc_seq, lstm_predictions, coords, out_file, strand='+'):        
+
+    def create_gtf_single_batch(self, nuc_seq, lstm_predictions, coords, out_file, strand='+'):
         anno = Anno(out_file, f'anno')
         tx_id = 0
         inp_nuc = [[nuc_seq[0]]]
         inp_lstm = [[lstm_predictions[0]]]
         seq_names = [coords[0][0]]
-        
+
         for i in range(1, nuc_seq.shape[0]-1):
             if not coords[i][0] == coords[i-1][0]:
                 inp_nuc.append([])
@@ -940,30 +942,30 @@ class PredictionGTF:
                 seq_names.append(coords[i][0])
             inp_nuc[-1].append(nuc_seq[i])
             inp_lstm[-1].append(lstm_predictions[i])
-            
+
         for i in range(len(inp_nuc)):
             y_hmm = self.predict_vit(
                     np.expand_dims(np.concatenate(inp_nuc[i], axis=0), 0),
                     np.expand_dims(np.concatenate(inp_lstm[i], axis=0), 0),
                     ).numpy().squeeze()
             y_ranges = self.get_ranges(y_hmm, 1)
-            start_fragment, txs, end_fragment = self.get_tx_from_range(y_ranges)            
+            start_fragment, txs, end_fragment = self.get_tx_from_range(y_ranges)
             phase = -1
-            for tx in txs:                
+            for tx in txs:
                 tx_id += 1
                 t_id = f'g{tx_id}.t1'
                 g_id = f'g{tx_id}'
                 phase = 0
                 anno.transcript_update(t_id, g_id, seq_names[i], strand)
-                anno.genes_update(g_id, t_id)  
+                anno.genes_update(g_id, t_id)
                 for r in tx:
-                    line = [seq_names[i], 'Tiberius', r[0], r[1], r[2], '.', strand, phase, 
+                    line = [seq_names[i], 'Tiberius', r[0], r[1], r[2], '.', strand, phase,
                            f'gene_id "{g_id}"; transcript_id "{t_id}";']
                     anno.transcripts[t_id].add_line(line)
                     if r[0] == 'CDS':
-                        phase = (3 - (r[2] - r[1] + 1 - phase)%3)%3            
-            
-        remove_tx = []                
+                        phase = (3 - (r[2] - r[1] + 1 - phase)%3)%3
+
+        remove_tx = []
         for tx in anno.transcripts.values():
             if 'CDS' not in tx.transcript_lines:
                 continue
@@ -978,28 +980,28 @@ class PredictionGTF:
         anno.norm_tx_format()
         anno.find_genes()
         anno.write_anno(out_file)
-    
-    
+
+
     def get_ranges(self, encoded_labels, offset=0):
         """Obtain the genomic feature ranges from encoded labels.
-        
+
         This method processes an array of encoded labels to identify continuous ranges of the same label
         and categorizes them into genomic features such as intergenic regions, introns, and CDS.
-        
+
         Args:
             encoded_labels (Iterable[int]): Encoded labels representing genomic features.
-            
+
         Returns:
             List[Tuple[str, int, int]]: A list of tuples where each tuple contains the feature type
             as a string and the start and end points as integers.
         """
         arr = np.array(encoded_labels)
-        
+
 #         if arr.max() > 3:
         arr = self.reduce_label(arr, self.num_hmm)
-            
+
         # Find where the array changes
-        change_points = np.where(np.diff(arr) != 0)[0]        
+        change_points = np.where(np.diff(arr) != 0)[0]
 
         # Start points are one position after each change point
         start_points = np.insert(change_points + 1, 0, 0)
@@ -1014,7 +1016,9 @@ class PredictionGTF:
 
 
     def make_default_hmm(self, inp_size=5):
-        self.gene_pred_hmm_layer = GenePredHMMLayer(
-            parallel_factor=self.parallel_factor
+        self.gene_pred_hmm_layer = HMMBlock(
+            parallel=self.parallel_factor,
+            mode=HMMMode.VITERBI,
+            training=False,
         )
         self.gene_pred_hmm_layer.build([self.adapted_batch_size, self.seq_len, inp_size])

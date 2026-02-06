@@ -1,16 +1,17 @@
-import sys 
+import sys
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import (Conv1D, Conv1DTranspose, LSTM, 
-                                Dense, Bidirectional, Dropout, Activation, Input, 
+from tensorflow.keras.layers import (Conv1D, Conv1DTranspose, LSTM,
+                                Dense, Bidirectional, Dropout, Activation, Input,
                                 Reshape, LayerNormalization)
 from tensorflow import keras
 from tensorflow.keras import backend as K
-from tiberius import (GenePredHMMLayer, make_5_class_emission_kernel, 
-                            make_15_class_emission_kernel, ReduceOutputSize)
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
 from learnMSA.msa_hmm.Training import Identity
+from tiberius.hmm import HMMBlock
+from hidten import HMMMode
+
 
 class Cast(tf.keras.layers.Layer):
     def call(self, x):
@@ -68,7 +69,7 @@ class ValidationCallback(tf.keras.callbacks.Callback):
                 self.best_val_loss = loss
                 self.model.save(self.save_path, save_traces=False)
                 #self.model.save_weights(self.save_path)
-                
+
 class BatchSave(tf.keras.callbacks.Callback):
     def __init__(self, save_path, batch_number):
         super(BatchSave, self).__init__()
@@ -85,7 +86,7 @@ class BatchSave(tf.keras.callbacks.Callback):
             else:
                 self.model.save(self.save_path.format(self.prev_batch_numb) +".keras")
 
-def custom_cce_f1_loss(f1_factor, batch_size, 
+def custom_cce_f1_loss(f1_factor, batch_size,
                     include_reading_frame=True, use_cce=True, from_logits=False):
     @tf.function
     def loss_(y_true, y_pred):
@@ -105,14 +106,14 @@ def custom_cce_f1_loss(f1_factor, batch_size,
                 cds_pred = y_pred[:, :, -3:]
                 cds_true = y_true[:, :, -3:]
             else:
-                cds_pred = tf.reduce_sum(y_pred[:, :, -3:], axis=-1, keepdims=True) 
+                cds_pred = tf.reduce_sum(y_pred[:, :, -3:], axis=-1, keepdims=True)
                 cds_true = tf.reduce_sum(y_true[:, :, -3:], axis=-1, keepdims=True)
         else:
             if include_reading_frame:
                 cds_pred = y_pred[:, :, 4:]
                 cds_true = y_true[:, :, 4:]
             else:
-                cds_pred = tf.reduce_sum(y_pred[:, :, 4:], axis=-1, keepdims=True) 
+                cds_pred = tf.reduce_sum(y_pred[:, :, 4:], axis=-1, keepdims=True)
                 cds_true = tf.reduce_sum(y_true[:, :, 4:], axis=-1, keepdims=True)
 
         # Compute precision and recall for the specified class
@@ -135,12 +136,12 @@ def custom_cce_f1_loss(f1_factor, batch_size,
         # Combine CCE loss and F1 score
         combined_loss = cce_loss + f1_factor * (f1_loss + fpr)
         return combined_loss
-    return loss_       
-       
-def lstm_model(units=200, filter_size=64, 
-              kernel_size=9, numb_conv=2, 
-               numb_lstm=3, dropout_rate=0.0, 
-               pool_size=10, stride=0, 
+    return loss_
+
+def lstm_model(units=200, filter_size=64,
+              kernel_size=9, numb_conv=2,
+               numb_lstm=3, dropout_rate=0.0,
+               pool_size=10, stride=0,
                lstm_mask=False, output_size=7,
                multi_loss=False, residual_conv=False,
                clamsa=False, clamsa_kernel=6, softmasking=True, lru_layer=False
@@ -164,29 +165,29 @@ def lstm_model(units=200, filter_size=64,
         clamsa (bool): If True, clamsa track is added to class labels of the LSTM.
 
     Returns:
-        tf.keras.Model: A compiled Keras model that is ready for training, featuring a mix of 
+        tf.keras.Model: A compiled Keras model that is ready for training, featuring a mix of
                         convolutional layers and bidirectional LSTM layers.
-                        
-    The model takes sequence data as input, processes it through convolutional and LSTM layers, 
-    and outputs a prediction vector. The architecture supports customization through various 
+
+    The model takes sequence data as input, processes it through convolutional and LSTM layers,
+    and outputs a prediction vector. The architecture supports customization through various
     parameters, enabling it to adapt to different types of sequential data and learning tasks.
     """
     if lru_layer:
         import LRU_tf as lru
-    
+
     # Input
     outputs = []
     if softmasking:
         inp_size=6
     else:
         inp_size=5
-    
-    input_shape = (None, inp_size)    
+
+    input_shape = (None, inp_size)
     main_input = Input(shape=input_shape)
     if clamsa:
         inp_clamsa = Input(shape=(None, 4), name='clamsa_input')
         inp = [main_input, inp_clamsa]
-        
+
         # main_input = tf.concat([main_input, inp_clamsa], axis=-1)
         main_input = keras.layers.Concatenate(axis=-1)([main_input, inp_clamsa])
         inp_size+=4
@@ -196,34 +197,34 @@ def lstm_model(units=200, filter_size=64,
 
     if stride > 1:
         x = Conv1D(filter_size, kernel_size, strides=stride, padding='valid',
-            activation="relu", name='initial_conv')(main_input) 
+            activation="relu", name='initial_conv')(main_input)
         inp_embedding = x
     else:
         # First convolution
         inp_embedding = main_input
         x = Conv1D(filter_size, 3, padding='same',
-                        activation="relu", name='initial_conv')(main_input)     
-    
+                        activation="relu", name='initial_conv')(main_input)
+
     # Convolutional layers
     for i in range(numb_conv-1):
         x = LayerNormalization(name=f'layer_normalization{i+1}')(x)
         x = Conv1D(filter_size, kernel_size, padding='same',
                        activation="relu", name=f'conv_{i+1}')(x)
-    
+
     # Add input to the convolutions
     cnn_out = x
     # x = tf.concat([inp_embedding, cnn_out], axis=-1)
     x = keras.layers.Concatenate(axis=-1)([inp_embedding, cnn_out])
-    
+
     if multi_loss:
         y_cnn = Dense(output_size, activation='relu', name='cnn_dense')(x)
         y_cnn = Activation('softmax', name='out_cnn')(y_cnn)
         outputs.append(y_cnn)
-        
+
     # Reshape layer
     if pool_size > 1:
         x = Reshape((-1, pool_size * (filter_size+inp_size)), name='R1')(x)
-    
+
     # Dense layer to match unit size of LSTM
     x = Dense(2*units, name='pre_lstm_dense')(x)
     pi = 3.141
@@ -244,27 +245,27 @@ def lstm_model(units=200, filter_size=64,
             # lru_block.build(input_shape=x.shape)
             x_next = lru_block(x)
         else:
-            x_next = Bidirectional(LSTM(units, return_sequences=True), 
+            x_next = Bidirectional(LSTM(units, return_sequences=True),
                     name=f'biLSTM_{i+1}')(x)
         if dropout_rate:
             x_next = Dropout(dropout_rate, name=f'dropout_{i+1}')(x_next)
             x = LayerNormalization(name=f'layer_normalization_lstm{i+1}')(x_next + x)
         else:
             x = x_next
-            
-        if multi_loss and i < numb_lstm-1:   
+
+        if multi_loss and i < numb_lstm-1:
             x_loss = Dense(pool_size * output_size, activation='relu', name=f'dense_lstm_{i+1}')(x)
             if pool_size > 1:
                 x_loss = Reshape((-1, output_size), name=f'Reshape_loss_{i+1}')(x_loss)
             outputs.append(Activation('softmax', name=f'out_lstm_{i+1}')(x_loss))
-    
+
     if lstm_mask:
         mask = Dense(1, activation='sigmoid', name='mask')(x)
         mask = tf.greater(mask[:, :, 0], 0.5)
         for i in range(2):
-            x = Bidirectional(LSTM(units, return_sequences=True), 
+            x = Bidirectional(LSTM(units, return_sequences=True),
                 name=f'biLSTM_mask_{i+1}')(inputs=x, mask=mask)
-       
+
     if residual_conv:
         x = Dense(pool_size * 30, activation='relu', name='dense')(x)
         x = Reshape((-1, 30), name='Reshape2')(x)
@@ -274,15 +275,15 @@ def lstm_model(units=200, filter_size=64,
     else:
         if stride > 1:
             x = Conv1DTranspose(output_size, kernel_size, strides=stride, padding='valid',
-                activation="relu", name='transpose_conv')(x) 
+                activation="relu", name='transpose_conv')(x)
         else:
             x = Dense(pool_size * output_size, activation='relu', name='out_dense')(x)
 
         if pool_size > 1:
             x = Reshape((-1, output_size), name='Reshape2')(x)
-    
+
     y_end = Activation('softmax', name='out')(x)
-    
+
     outputs.append(y_end)
 
     return Model(inputs=inp, outputs=outputs)
@@ -292,20 +293,20 @@ def reduce_lstm_output_7(x, new_size=5):
     assert(x.shape[-1] == 7)
     if new_size == 5:
         x_out = tf.concat([
-                x[:,:,0:1], 
-                tf.reduce_sum(x[:, :, 1:4], axis=-1, 
-                              keepdims=True, name='reduce_inp_introns'), 
+                x[:,:,0:1],
+                tf.reduce_sum(x[:, :, 1:4], axis=-1,
+                              keepdims=True, name='reduce_inp_introns'),
                 x[:,:,4:]
-                ], 
+                ],
                 axis=-1)
     elif new_size == 3:
-        x_out = tf.concat([x[:,:,0:1], 
-                tf.reduce_sum(x[:,:,1:4], axis=-1, keepdims=True, name='reduce_output_introns'), 
-                tf.reduce_sum(x[:,:,4:], axis=-1, keepdims=True, name='reduce_output_exons')], 
+        x_out = tf.concat([x[:,:,0:1],
+                tf.reduce_sum(x[:,:,1:4], axis=-1, keepdims=True, name='reduce_output_introns'),
+                tf.reduce_sum(x[:,:,4:], axis=-1, keepdims=True, name='reduce_output_exons')],
                 axis=-1)
     elif new_size ==2:
         x_out = tf.concat([tf.reduce_sum(x[:,:,:4], axis=-1, keepdims=True, name='reduce_output_non_coding'),
-                tf.reduce_sum(x[:,:,4:], axis=-1, keepdims=True, name='reduce_output_coding')], 
+                tf.reduce_sum(x[:,:,4:], axis=-1, keepdims=True, name='reduce_output_coding')],
                 axis=-1)
     else:
         raise ValueError("Invalid new_size")
@@ -315,12 +316,12 @@ def reduce_lstm_output_5(x, new_size=3):
     """Reduces the output a legacy LSTM that was trained with 5 output classes."""
     assert(x.shape[-1] == 5)
     if new_size == 3:
-        x_out = tf.concat([x[:,:,0:2], 
-                tf.reduce_sum(x[:,:,2:], axis=-1, keepdims=True, name='reduce_output_exons')], 
+        x_out = tf.concat([x[:,:,0:2],
+                tf.reduce_sum(x[:,:,2:], axis=-1, keepdims=True, name='reduce_output_exons')],
                 axis=-1)
     elif new_size ==2:
         x_out = tf.concat([tf.reduce_sum(x[:,:,:2], axis=-1, keepdims=True, name='reduce_output_non_coding'),
-                tf.reduce_sum(x[:,:,2:], axis=-1, keepdims=True, name='reduce_output_coding')], 
+                tf.reduce_sum(x[:,:,2:], axis=-1, keepdims=True, name='reduce_output_coding')],
                 axis=-1)
     else:
         raise ValueError("Invalid new_size")
@@ -343,7 +344,7 @@ def add_hmm_layer(model,
 
     Parameters:
         model (tf.keras.Model): The initial model to which the layers will be added.
-        gene_pred_layer (GenePredHMMLayer): The Gene Prediction HMM layer to add to the model. 
+        gene_pred_layer (GenePredHMMLayer): The Gene Prediction HMM layer to add to the model.
                                             If None, a new layer will be created with the parameters passed to this method.
         output_size (int): The size of the output layer of the model. Will try to adapt if the model has 7 or 5 outputs but output_size is smaller.
         num_hmm (int): Number of semi-independent HMMs (see GenePredHMMLayer for more details).
@@ -376,49 +377,55 @@ def add_hmm_layer(model,
     x = Identity(name='lstm_out')(x)
     nuc = Cast()(inputs)
 
-    if output_size == 5:
-        emitter_init = make_5_class_emission_kernel(smoothing=1e-6, introns_shared=share_intron_parameters, 
-                                                    num_copies=num_copy, noise_strength=emission_noise_strength)
-    elif output_size == 15:
-        assert not share_intron_parameters, "Can not share intron parameters if output size is 15."
-        emitter_init = make_15_class_emission_kernel(smoothing=1e-2, num_copies=num_copy, 
-                                                     noise_strength=emission_noise_strength)
-        
-    # while HMM copies (num_copies > 1) are initialized with noise,
-    # the (semi-)independent HMMs (num_hmm > 1) are initialized with the same kernel here
-    emitter_init = np.repeat(emitter_init, num_hmm, axis=0)
-    
-    if gene_pred_layer is None:
-        gene_pred_layer = GenePredHMMLayer(
-            num_models=num_hmm,
-            num_copies=num_copy,
-            emitter_init=ConstantInitializer(emitter_init),
-            share_intron_parameters=share_intron_parameters,
-            trainable_emissions=trainable_emissions,
-            trainable_transitions=trainable_transitions,
-            trainable_starting_distribution=trainable_starting_distribution,
-            trainable_nucleotides_at_exons=trainable_nucleotides_at_exons,
-            parallel_factor=hmm_factor
-        )
+    # if output_size == 5:
+    #     emitter_init = make_5_class_emission_kernel(smoothing=1e-6, introns_shared=share_intron_parameters,
+    #                                                 num_copies=num_copy, noise_strength=emission_noise_strength)
+    # elif output_size == 15:
+    #     assert not share_intron_parameters, "Can not share intron parameters if output size is 15."
+    #     emitter_init = make_15_class_emission_kernel(smoothing=1e-2, num_copies=num_copy,
+    #                                                  noise_strength=emission_noise_strength)
 
-    y_hmm = gene_pred_layer(x, nuc)
+    # # while HMM copies (num_copies > 1) are initialized with noise,
+    # # the (semi-)independent HMMs (num_hmm > 1) are initialized with the same kernel here
+    # emitter_init = np.repeat(emitter_init, num_hmm, axis=0)
 
-    if output_size < 15:
-        y = ReduceOutputSize(output_size, num_copies=num_copy, name='hmm_out')(y_hmm)
-    else:
-        y = Reshape((-1, output_size) if num_hmm == 1 else (-1, num_hmm, output_size),
-                    name='hmm_out')(y_hmm) #make sure the last dimension is not None
-        
-    model_hmm = Model(inputs=inputs,
-                    outputs=[x, y] if include_lstm_in_output else y)
-    
+    # if gene_pred_layer is None:
+    #     gene_pred_layer = GenePredHMMLayer(
+    #         num_models=num_hmm,
+    #         num_copies=num_copy,
+    #         emitter_init=ConstantInitializer(emitter_init),
+    #         share_intron_parameters=share_intron_parameters,
+    #         trainable_emissions=trainable_emissions,
+    #         trainable_transitions=trainable_transitions,
+    #         trainable_starting_distribution=trainable_starting_distribution,
+    #         trainable_nucleotides_at_exons=trainable_nucleotides_at_exons,
+    #         parallel_factor=hmm_factor
+    #     )
+    #
+    # y_hmm = gene_pred_layer(x, nuc)
+
+    gene_pred_layer = HMMBlock(
+        parallel=hmm_factor,
+        mode=HMMMode.POSTERIOR,
+        training=True,
+    )
+    y_hmm = gene_pred_layer(x, nuc, training=True)
+
+    y = Reshape((-1, output_size) if num_hmm == 1 else (-1, num_hmm, output_size),
+                name='hmm_out')(y_hmm) #make sure the last dimension is not None
+
+    model_hmm = Model(
+        inputs=inputs,
+        outputs=[x, y] if include_lstm_in_output else y,
+    )
+
     return model_hmm
 
 
 
 def add_constant_hmm(model, seq_len=9999, batch_size=450, output_size=3):
     """Extends a given model with a Hidden Markov Model (HMM) layer that has constant emission probabilities.
-    The HMM layer is configured with fixed emission probabilities for three classes. The seven output labels of 
+    The HMM layer is configured with fixed emission probabilities for three classes. The seven output labels of
     the LSTM are reduced to the three emission labels
 
     Parameters:
@@ -434,13 +441,13 @@ def add_constant_hmm(model, seq_len=9999, batch_size=450, output_size=3):
     emb = model.layers[-1].output
     emb = tf.concat([
                     emb[:,:,0:1],
-                    tf.reduce_sum(emb[:, :, 1:4], axis=-1, keepdims=True, name='reduce_inp_introns'), 
+                    tf.reduce_sum(emb[:, :, 1:4], axis=-1, keepdims=True, name='reduce_inp_introns'),
                     emb[:,:,4:]
                     ],
                     axis=-1, name='concat_inps')
-    
+
     nuc = tf.cast(inputs[:,:,:5], tf.float32, name='cast_inp')
-    
+
     gene_pred_layer = GenePredHMMLayer(
                         emitter_init=ConstantInitializer(make_5_class_emission_kernel(smoothing=0.01)),
                         initial_exon_len=150,
@@ -453,20 +460,20 @@ def add_constant_hmm(model, seq_len=9999, batch_size=450, output_size=3):
                         starting_distribution_init="zeros",
                         starting_distribution_trainable=True,
                         simple=False)
-    
+
     gene_pred_layer.build(emb.shape)
     x = gene_pred_layer(emb, nuc)
     y = Activation('softmax', name='out_hmm')(x)
     #y.trainable = False
     if output_size == 3:
         y = tf.concat([y[:,:,0:1],
-                tf.reduce_sum(y[:,:,1:4], axis=-1, keepdims=True, name='reduce_output_introns'), 
-                tf.reduce_sum(y[:,:,4:], axis=-1, keepdims=True, name='reduce_output_exons')], 
+                tf.reduce_sum(y[:,:,1:4], axis=-1, keepdims=True, name='reduce_output_introns'),
+                tf.reduce_sum(y[:,:,4:], axis=-1, keepdims=True, name='reduce_output_exons')],
               axis=-1, name='concat_output')
     elif output_size == 5:
         y = tf.concat([
                 y[:,:,0:1],
-                tf.reduce_sum(y[:, :, 1:4], axis=-1, keepdims=True, name='reduce_inp_introns'), 
+                tf.reduce_sum(y[:, :, 1:4], axis=-1, keepdims=True, name='reduce_inp_introns'),
                 tf.reduce_sum(tf.gather(y, [4, 7, 10, 12], axis=-1, name='gather_inp_e0'),
                               axis=-1, keepdims=True, name='reduce_inp_e0'),
                 tf.reduce_sum(tf.gather(y, [5, 8, 13], axis=-1, name='gather_inp_e1'),
@@ -475,7 +482,7 @@ def add_constant_hmm(model, seq_len=9999, batch_size=450, output_size=3):
                               axis=-1, keepdims=True, name='reduce_inp_e2'),
                 ],
                 axis=-1, name='concat_inps')
-    
+
     model_hmm = Model(inputs=inputs, outputs=y)
     return model_hmm
 
@@ -483,12 +490,12 @@ def add_constant_hmm(model, seq_len=9999, batch_size=450, output_size=3):
 
 def add_hmm_only(model):
     inputs = model.input
-    x = model.layers[-1].output         
-    y = GenePredHMMLayer(initial_exon_len=172, 
+    x = model.layers[-1].output
+    y = GenePredHMMLayer(initial_exon_len=172,
                         initial_intron_len=4648,
                         initial_ir_len=177657,)(x)
     model_hmm = Model(inputs=inputs, outputs=y)
-    
+
     return model_hmm
 
 
@@ -505,27 +512,27 @@ def get_positional_encoding(seq_len, d_model):
 
 
 def weighted_categorical_crossentropy(class_weights, overall_weight):
-    def loss(y_true, y_pred):        
+    def loss(y_true, y_pred):
         # Apply class weights to true labels
         class_weights = tf.constant(class_weights, dtype=tf.float32)
         weighted_true = tf.argmax(tf.multiply(y_true, class_weights),-1)
-        
+
         # Check if the true label has more than one class
         example_weight =  tf.constant([tf.unique(tf.argmax(y, axis=.1))[0].shape[0] \
                                        for y in y_true], dtype=tf.float32)
         example_weight = tf.maximum(tf.ones(example_weight.shape[0], dtype=tf.float32),
             (example_weight-1)*overall_weight)
-        
+
         weighted_true = tf.transpose(tf.multiply(tf.transpose(weighted_true), example_weight))
-        
+
         # Compute crossentropy loss
         loss = tf.keras.losses.categorical_crossentropy(y_true, y_pred)
-        
+
         # Apply weights to the loss
         weighted_loss = tf.multiply(loss, weighted_true)
-        
+
         # Calculate mean loss across all classes
-        return tf.reduce_mean(weighted_loss)    
+        return tf.reduce_mean(weighted_loss)
     return loss
 
 
@@ -533,7 +540,7 @@ def weighted_categorical_crossentropy(class_weights, overall_weight):
 #Felix: added to make my code run
 #do you have your own weighted loss? lets merge/remove one later
 def make_weighted_cce_loss(weights=[1.]*5, batch_size=32):
-    cce_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False, 
+    cce_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=False,
                                                         reduction=tf.keras.losses.Reduction.NONE)
     def weighted_cce_loss(y_true, y_pred):
             y_true = tf.cast(y_true, dtype=y_pred.dtype)

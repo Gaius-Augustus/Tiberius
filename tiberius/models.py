@@ -87,76 +87,89 @@ class BatchSave(tf.keras.callbacks.Callback):
 
 def custom_cce_f1_loss(f1_factor, batch_size, 
                     include_reading_frame=True, use_cce=True, from_logits=False):
+    """
+    loss function is h
+    """
     @tf.function
     def loss_(y_true, y_pred):
         y_true = tf.cast(y_true, y_pred.dtype)
+        # better not hard coded y dimensions
+        if tf.shape(y_true)[-1] >= 20:
+            y_true_features = y_true[:, :, :15]
+        else:
+            y_true_features = y_true 
+        
+        y_pred_features = y_pred[:, :, :15]
+        
         if use_cce:
             # Compute the categorical cross-entropy loss
-            cce_loss = tf.keras.losses.categorical_crossentropy(y_true, y_pred, from_logits=from_logits)
-            cce_loss = tf.reduce_mean(cce_loss, -1) #mean over sequence length
-            cce_loss = tf.reduce_sum(cce_loss) / batch_size #mean over batch with global batch size
+            cce_loss = tf.keras.losses.categorical_crossentropy(
+                y_true_features, y_pred_features, from_logits=from_logits
+            )
+            cce_loss = tf.reduce_mean(cce_loss, -1)
+            cce_loss = tf.reduce_sum(cce_loss) / batch_size
         else:
             cce_loss = 0
+        
         if from_logits:
-            y_pred = tf.nn.softmax(y_pred, axis=-1)
+            y_pred_features = tf.nn.softmax(y_pred_features, axis=-1)
+        
         # Compute the f1 loss
-        if tf.shape(y_true)[-1] == 5:
+        if tf.shape(y_true_features)[-1] == 5:
             if include_reading_frame:
-                cds_pred = y_pred[:, :, -3:]
-                cds_true = y_true[:, :, -3:]
+                cds_pred = y_pred_features[:, :, -3:]
+                cds_true = y_true_features[:, :, -3:]
             else:
-                cds_pred = tf.reduce_sum(y_pred[:, :, -3:], axis=-1, keepdims=True) 
-                cds_true = tf.reduce_sum(y_true[:, :, -3:], axis=-1, keepdims=True)
+                cds_pred = tf.reduce_sum(y_pred_features[:, :, -3:], axis=-1, keepdims=True)
+                cds_true = tf.reduce_sum(y_true_features[:, :, -3:], axis=-1, keepdims=True)
         else:
             if include_reading_frame:
-                cds_pred = y_pred[:, :, 4:]
-                cds_true = y_true[:, :, 4:]
+                cds_pred = y_pred_features[:, :, 4:15]
+                cds_true = y_true_features[:, :, 4:15]
             else:
-                cds_pred = tf.reduce_sum(y_pred[:, :, 4:], axis=-1, keepdims=True) 
-                cds_true = tf.reduce_sum(y_true[:, :, 4:], axis=-1, keepdims=True)
-
-        # Compute precision and recall for the specified class
+                cds_pred = tf.reduce_sum(y_pred_features[:, :, 4:15], axis=-1, keepdims=True)
+                cds_true = tf.reduce_sum(y_true_features[:, :, 4:15], axis=-1, keepdims=True)
+        
+        # Compute precision and recall
         true_positives = tf.reduce_sum(cds_pred * cds_true, axis=1)
         predicted_positives = tf.reduce_sum(cds_pred, axis=1)
         possible_positives = tf.reduce_sum(cds_true, axis=1)
         any_positives = tf.cast(possible_positives > 0, possible_positives.dtype)
-
+        
         precision = true_positives / (predicted_positives + K.epsilon())
-        recall = true_positives  / (possible_positives + K.epsilon())
-
-        # For the examples with positive class, maximize the F1 score
-        f1_score = 2 * (precision * recall) / (precision + recall + K.epsilon()) #f1 score per sequence
-        f1_loss = tf.reduce_sum((1 - f1_score) * any_positives) / batch_size #mean over batch with global batch size
-
-        # For the examples with no positive class, minimize the false positive rate
+        recall = true_positives / (possible_positives + K.epsilon())
+        
+        # F1 score
+        f1_score = 2 * (precision * recall) / (precision + recall + K.epsilon())
+        f1_loss = tf.reduce_sum((1 - f1_score) * any_positives) / batch_size
+        
+        # False positive rate
         L = tf.cast(tf.shape(cds_pred)[1], cds_pred.dtype)
         fpr = tf.reduce_sum(cds_pred * (1-any_positives)[:,tf.newaxis]) / (L * batch_size)
-
+        
         # Combine CCE loss and F1 score
         combined_loss = cce_loss + f1_factor * (f1_loss + fpr)
-
-        """
-        Description ..
-        """
-        if tf.shape(y_true)[-1] == 20:
+        
+        # Unsupervised nucleotide loss
+        if tf.shape(y_true)[-1] >= 20:
             y_nuc_true = y_true[:, :, 15:19]
             y_nuc_pred = y_pred[:, :, 15:19]
-            w_unsup = y_true[:, :, 20]
-        
-            loss_all_positions = tf.keras.losses.categorical_crossentropy(y_nuc_pred, y_nuc_true)
+            w_unsup = y_true[:, :, 19]
+            
+            loss_all_positions = tf.keras.losses.categorical_crossentropy(
+                y_nuc_true, y_nuc_pred
+            )
             loss_masked = loss_all_positions * w_unsup
-
-            loss = tf.reduce_sum(loss_masked) / tf.reduce_sum(w_unsup)
-            #loss = tf.reduce_sum(loss_masked) / (tf.reduce_sum(w_unsup) + 1e-8)
+            loss_nuc = tf.reduce_sum(loss_masked) / (tf.reduce_sum(w_unsup) + 1e-8)
             
-            # loss tracking needed!
-            tf.print("combined_loss:", combined_loss, "Loss_nuc:", loss)
-            tf.print("number masked nucleotides", tf.reduce_sum(w_unsup))
+            # debug
+            tf.print("Loss_features:", combined_loss, "Loss_nuc:", loss_nuc,
+                     "Num_masked:", tf.reduce_sum(w_unsup))
             
-            total_loss = combined_loss + loss
+            total_loss = combined_loss + (2 * loss_nuc)
             return total_loss
         return combined_loss
-    return loss_       
+    return loss_
        
 def lstm_model(units=200, filter_size=64, 
               kernel_size=9, numb_conv=2, 

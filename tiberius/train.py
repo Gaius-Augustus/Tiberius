@@ -23,7 +23,7 @@ import tiberius.models as models
 from tiberius.models import (weighted_categorical_crossentropy, custom_cce_f1_loss, BatchLearningRateScheduler, 
                     add_hmm_only, add_hmm_layer, ValidationCallback,
                     BatchSave, EpochSave, lstm_model, add_constant_hmm, 
-                    make_weighted_cce_loss, Cast, custom_unsupervised_loss
+                    make_weighted_cce_loss, Cast,
                     )
 from tensorflow.keras.callbacks import LearningRateScheduler
 
@@ -538,8 +538,8 @@ def main():
     species = read_species(species_file)
     file_paths = [f'{data_path}/{s}_{i}.tfrecords' for s in species for i in range(100)]
     
-    if args.unsupervsied_loss:
-        config_dict["output_size"] = 20
+    if args.unsupervised_loss:
+        config_dict["output_size"] = 19
 
     # init tfrecord generator
     generator = DataGenerator(file_path=file_paths, 

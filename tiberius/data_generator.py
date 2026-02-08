@@ -60,13 +60,13 @@ class DataGenerator:
             self.input_shape = 5
         self.clamsa = clamsa
         self.oracle = oracle
+        self.unsupervised_loss = unsupervised_loss
         self.threads = threads
         self.tx_filter = tf.constant(tx_filter, dtype=tf.string)
         self.tx_filter_region = tx_filter_region
 
         self.dataset = self._read_tfrecord_file(repeat=repeat)
         self.iterator = iter(self.dataset)
-        self.unsupervised_loss = unsupervised_loss
     
     def _parse_fn(self, example):
         features = {
@@ -150,9 +150,15 @@ class DataGenerator:
         def preprocess(x, y, t=tf.constant([], dtype=tf.string)):            
             tf.debugging.assert_rank(y, 2, message="y must be [seq_len, output_size]")
             x = tf.reshape(x, [-1, tf.shape(x)[-1]]) 
-            y = tf.reshape(y, [-1, self.output_size])
+            y = tf.reshape(y, [-1, 15]) 
             x.set_shape([None, self.input_shape])
-            y.set_shape([None, self.output_size])
+            y.set_shape([None, 15])
+
+            # TODO
+            #x = tf.reshape(x, [-1, tf.shape(x)[-1]]) 
+            #y = tf.reshape(y, [-1, self.output_size])
+            #x.set_shape([None, self.input_shape])
+            #y.set_shape([None, self.output_size])
             if tf.greater(tf.size(t), 0):
                 t = tf.reshape(t, [-1, 3])
             if not self.softmasking:
@@ -193,25 +199,38 @@ class DataGenerator:
             w.set_shape([None, 1])
             
             """
+            Description ...
             """
             if self.unsupervised_loss:
-                intergenetic_regions = (Y[:, 0] == 1).astype(int)
-                transcript_regions = 1 - intergenetic_regions
-                possible_mask_positions = (1 - (transcript_regions * w) )
+                intergenic_regions = tf.cast(tf.equal(Y[:, 0], 1), tf.float32)
+                transcript_regions = 1.0 - intergenic_regions
+                transcript_regions = 1.0 - intergenic_regions
+                w_squeezed = tf.squeeze(w, axis=-1)
+                possible_mask_positions = 1.0 - (transcript_regions * w_squeezed)
+                random_mask = tf.random.uniform([seq_len]) < 0.15   # bool array
+                mask_positions = tf.cast(random_mask, tf.float32) * possible_mask_positions
+                
+                mask_bool = tf.cast(mask_positions, tf.bool)  # (seq_len,)
+                mask_expanded = tf.expand_dims(mask_bool, axis=-1)  # (seq_len, 1)
+                mask_4d = tf.tile(mask_expanded, [1, 4])  # (seq_len, 4) - für erste 4 dims
 
-                mask_positions = (np.random.rand(seq_len) < 0.15) * possible_mask_positions
-                w_unsupervised = mask_positions.astype(int)
+                nucleotides = x[:, :4]
+                rest = x[:, 4:]
+
+                nucleotides_masked = tf.where(mask_4d, 
+                                               tf.zeros_like(nucleotides), 
+                                               nucleotides)
+
+                X_masked = tf.concat([nucleotides_masked, rest], axis=-1)
+                w_unsupervised = tf.expand_dims(mask_positions, axis=-1)
                 
-                X_masked = x.copy()
-                X_masked[mask_positions == 1, 0:5] = 0
-                
-                Y_extended = tf.concat([
-                    Y,
-                    x[:, :4],
-                    w_unsupervised[:, None]
+                Y = tf.concat([
+                    tf.cast(Y[:, :15], tf.float32),
+                    tf.cast(x[:, :4], tf.float32),
+                    tf.cast(w_unsupervised, tf.float32)
                 ], axis=-1)
                 
-                return X_masked, Y_extended, w
+                return X_masked, Y, w
                 
             return X, Y, w
 

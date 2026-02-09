@@ -1,7 +1,7 @@
-![Docker Pulls](https://img.shields.io/docker/pulls/larsgabriel23/tiberius) 
+![Docker Pulls](https://img.shields.io/docker/pulls/larsgabriel23/tiberius)
 
-### ⚠️ Important Update — October 2025 
-#### Tiberius models for Mammals, Eudicots, Monocots, Fungi, Diatoms, Insecta, Basidiomycota, Chlorophyta and Vertebrates are now available.  
+### ⚠️ Important Update — October 2025
+#### Tiberius models for many new clades are now available!
 
 # Tiberius: End-to-End Deep Learning with an HMM for Gene Prediction
 
@@ -9,7 +9,7 @@ For more information, see the [Tiberius paper](https://academic.oup.com/bioinfor
 
 
 Tiberius is a deep learning-based *ab initio* gene structure prediction tool that end-to-end integrates convolutional
-and long short-term memory layers with a differentiable HMM layer. It can be used to predict gene structures from **genomic sequences only** (*ab initio*), while matching the accuracy of tool that use extrinsic evidence. 
+and long short-term memory layers with a differentiable HMM layer. It can be used to predict gene structures from **genomic sequences only** (*ab initio*), while matching the accuracy of tool that use extrinsic evidence.
 
 Additionally, Tiberius provides an evidence mode that generates highly precise gene structures from extrinsic evidence, which are then combined with Tiberius *ab inito* predictions. Tiberius can also be parallized on HPC systems using Nextflow.
 
@@ -21,13 +21,14 @@ Additionally, Tiberius provides an evidence mode that generates highly precise g
 We are providing different models for following species (see model_cfg/README.md for more information):
 - Basidiomycota
 - Chlorophyta
-- Diatoms 
+- Diatoms
 - Eudicotyledons
 - Fungi incertae sedis
+- Fungi
 - Insecta
 - Monocotyledonae
 - Mucoromycota
-- Mammalia 
+- Mammalia
 - Saccharomycota
 - Sordariomycota
 - Vertebrates
@@ -54,7 +55,7 @@ If Singularity is **not** used, Tiberius must be installed together with its dep
 pip install .[from_source]
 ```
 
-**Note:**  
+**Note:**
 If TensorFlow is *not* installed beforehand, `pip install .` installs the latest available TensorFlow version. This version may restrict the usable `--seq_len` to **≤ 259 992**, which can slightly reduce prediction accuracy.
 
 If you want to use a longer sequence length, install **TensorFlow 2.10** manually by following the [instructions](docs/install_tensorflow.md) or use the Singularity container.
@@ -64,14 +65,14 @@ If you want to use a longer sequence length, install **TensorFlow 2.10** manuall
 The following Python libraries are required and installed with Tiberius:
 - tensorflow
 - pyBigWig
-- biopython 
+- biopython
 - bcbio-gff
 - requests
 - rich
 
 Make sure TensorFlow is installed with GPU support. Tiberius was built on TensorFlow 2.10 and runs best with that version. If you are using conda, you can install Tensorflow 2.10 with these [instructions](docs/install_tensorflow.md).
 
-Tiberius does also work with TensorFlow >2.10, however, **it will produce an error if you use a `--seq_len` parameter > 259.992 during inference!**  
+Tiberius does also work with TensorFlow >2.10, however, **it will produce an error if you use a `--seq_len` parameter > 259.992 during inference!**
 
 
 ## Running Tiberius for *Ab Initio* Gene Prediction
@@ -112,9 +113,9 @@ python tiberius.py --nf_config conf/slurm_generic.config --genome input.fasta --
 
 
 ## Running Tiberius with Extrinsic Evidence (Nextflow-only)
-You can also run the Tiberius Evidence Pipeline. A set of high confidence genes is generated and added to the Tiberius prediction that improves its accuracy, it adds some alternative splicing forms and it includes UTR regions for the evidence-only predictions. 
+You can also run the Tiberius Evidence Pipeline. A set of high confidence genes is generated and added to the Tiberius prediction that improves its accuracy, it adds some alternative splicing forms and it includes UTR regions for the evidence-only predictions.
 
-To provide Tiberius with the files and required parameters, it is recommended to generate a parameter file `params.yaml`. See [conf/README.md](conf/README.md) for details about the parameter file and [conf/params.yaml](conf/params.yaml) for a template. 
+To provide Tiberius with the files and required parameters, it is recommended to generate a parameter file `params.yaml`. See [conf/README.md](conf/README.md) for details about the parameter file and [conf/params.yaml](conf/params.yaml) for a template.
 
 
 ```shell
@@ -156,15 +157,15 @@ We recommend using one of the provided trained models. However, if you want to t
 
 ## Tiberius Model
 
-Tiberius' model consists of a model that consist of CNN, biLSTM, and a differentiable HMM layer. 
-  
+Tiberius' model consists of a model that consist of CNN, biLSTM, and a differentiable HMM layer.
+
 ![Tiberius Architecture](figures/tiberius_architecture.png)
 
 
 ## Annotations from Tiberius
 
  [Tiberius predictions for 1314 mamalian assemblies](https://bioinf.uni-greifswald.de/bioinf/tiberius/genes/tib-tbl.html)
- 
+
 We also provide example annotations for *Homo sapiens* (genome assembly GCF_000001405.40), *Bos taurus* (genome assembly GCF_000003205.7) and *Delphinapterus leucas* (genome assembly GCF_002288925.1) that were generated at the time of writing the paper with Tiberius using the default weights:
 ```shell
 wget https://bioinf.uni-greifswald.de/bioinf/tiberius/anno/Homo_sapiens.gtf.gz
@@ -177,5 +178,5 @@ wget https://bioinf.uni-greifswald.de/bioinf/tiberius/anno/Delphinapterus_leucas
 ## References
   - Gabriel, Lars, et al. "Tiberius: End-to-End Deep Learning with an HMM for Gene Prediction." 2024, [*Bioinformatics*](https://academic.oup.com/bioinformatics/article/40/12/btae685/7903281), [bioRxiv](https://www.biorxiv.org/content/early/2024/07/23/2024.07.21.604459)
   - [Popular science podcast on this paper generated with NotebookLM](https://bioinf.uni-greifswald.de/bioinf/tiberius/pod/Tiberius.wav)
-  - Processed RefSeq annotations used for training, validation and evaluation as described in the paper.  
+  - Processed RefSeq annotations used for training, validation and evaluation as described in the paper.
 `wget https://bioinf.uni-greifswald.de/bioinf/tiberius/anno/ref_annot.tar.gz`

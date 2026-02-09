@@ -1,0 +1,642 @@
+target_species: "Fungi"
+ncbi_tax_id: 4751
+weights_url: "https://bioinf.uni-greifswald.de/bioinf/tiberius/models/fungi.tar.gz"
+softmasking: False
+clamsa: False
+tiberius_version: 1.1.7
+date: "2026-02-06"
+comment: "Fungi training weights trained by Katharina Hoff.
+
+          This training was performed on data from RefSeq originally selected and
+          documented by Ye et al. (2025), the authors of ANNEVO
+          (https://doi.org/10.21203/rs.3.rs-6402260/v1). Different from that
+          data split, we did not use any genomes for validation and testing,
+          simultaneously. Details are listed below.
+
+          Average accuracy results according to gffcompare 0.12.6 on test species
+          never seen during training of Tiberius:
+
+          Level                         | Sensitivity |  Precision |       F1 |
+          ---------------------------------------------------------------------
+          Tiberius CDS Exon level       |        73.9 |       72.9 |     73.4 |
+          ANNEVO CDS Exon level         |        69.6 |       65.2 |     67.3 |
+          Tiberius Intron chain level   |        56.9 |       55.1 |     56.0 |
+          ANNEVO Intron chain level     |        49.8 |       45.7 |     47.7 |
+          Tiberius Locus level          |        60.8 |       59.8 |     60.3 |
+          ANNEVO Locus level            |        53.1 |       51.1 |     52.1 |
+          ---------------------------------------------------------------------
+
+          On Basidiomycota, this Fungi parameter set achieves more accurate results
+          than the originally released Basidiomycota data set. Average accuracy
+          results across 39 Basidiomycota test species with Tiberius parameter
+          sets for basidiomycota and fungi:
+
+                               | basidiomycota        |     fungi            |          delta       |
+          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+          -------------------------------------------------------------------------------------------
+          CDS Exon level       |   63.3   65.7   64.5 |   69.8   69.0   69.4 |   +6.5   +3.3   +4.9 |
+          Intron chain level   |   41.5   42.7   42.1 |   48.2   47.6   47.9 |   +6.7   +4.9   +5.8 |
+          Locus level          |   40.5   43.1   41.8 |   46.7   46.5   46.6 |   +6.2   +3.3   +4.8 |
+          -------------------------------------------------------------------------------------------
+
+          Test species:
+
+          - Acaromyces_ingoldii
+          - Agaricus_bisporus
+          - Alternaria_arbusti
+          - Alternaria_conjuncta
+          - Alternaria_ethzedia
+          - Alternaria_hordeiaustralica
+          - Alternaria_incomplexa
+          - Alternaria_infectoria
+          - Alternaria_metachromatica
+          - Alternaria_novae-zelandiae
+          - Alternaria_postmessia
+          - Alternaria_triticimaculans
+          - Alternaria_ventricosa
+          - Alternaria_viburni
+          - Apiospora_hydei
+          - Apiospora_kogelbergensis
+          - Apiospora_phragmitis
+          - Arthroderma_uncinatum
+          - Arxiozyma_heterogenica
+          - Ascoidea_rubescens
+          - Aspergillus_affinis
+          - Aspergillus_bombycis
+          - Aspergillus_flavus
+          - Aspergillus_fumigatus
+          - Aspergillus_luchuensis
+          - Aspergillus_melleus
+          - Aspergillus_mulundensis
+          - Aspergillus_nidulans
+          - Aspergillus_niger
+          - Aspergillus_nomiae
+          - Aspergillus_novofumigatus
+          - Aspergillus_ochraceoroseus
+          - Aspergillus_oryzae
+          - Aspergillus_pseudotamarii
+          - Aspergillus_tanneri
+          - Aspergillus_terreus
+          - Aspergillus_thermomutatus
+          - Aspergillus_welwitschiae
+          - Bacidia_gigantensis
+          - Baudoinia_panamericana
+          - Bipolaris_maydis
+          - Blastomyces_dermatitidis
+          - Blastomyces_gilchristii
+          - Brettanomyces_bruxellensis
+          - Brettanomyces_nanus
+          - Cadophora_gregata
+          - Candida_dubliniensis
+          - Candida_margitis
+          - Candida_oxycetoniae
+          - Candida_theae
+          - Candida_tropicalis
+          - Cantharellus_anzutake
+          - Ceraceosorus_guamensis
+          - Chaetomium_globosum
+          - Cladophialophora_immunda
+          - Coccidioides_posadasii
+          - Colletotrichum_aenigma
+          - Colletotrichum_fioriniae
+          - Colletotrichum_gloeosporioides
+          - Colletotrichum_higginsianum
+          - Colletotrichum_lupini
+          - Colletotrichum_scovillei
+          - Colletotrichum_siamense
+          - Colletotrichum_spaethianum
+          - Colletotrichum_truncatum
+          - Coniophora_puteana
+          - Cordyceps_fumosorosea
+          - Cordyceps_militaris
+          - Cryphonectria_parasitica
+          - Cryptococcus_depauperatus
+          - Cutaneotrichosporon_oleaginosum
+          - Dacryopinax_primogenitus
+          - Daldinia_childiae
+          - Diaporthe_batatas
+          - Didymosphaeria_variabile
+          - Diplodia_seriata
+          - Dissoconium_aciculare
+          - Diutina_rugosa
+          - Emericellopsis_cladophorae
+          - Endocarpon_pusillum
+          - Eremomyces_bilateralis
+          - Eremothecium_cymbalariae
+          - Exophiala_bonariae
+          - Exophiala_mesophila
+          - Exserohilum_turcicum
+          - Fibroporia_radiculosa
+          - Filobasidium_floriforme
+          - Fomitopsis_serialis
+          - Fonsecaea_monophora
+          - Fonsecaea_nubica
+          - Fusarium_coffeatum
+          - Fusarium_falciforme
+          - Fusarium_graminearum
+          - Fusarium_keratoplasticum
+          - Fusarium_oxysporum
+          - Fusarium_solani
+          - Fusarium_tjaetaba
+          - Henningerozyma_blattae
+          - Hirsutella_rhossiliensis
+          - Histoplasma_capsulatum
+          - Huiozyma_naganishii
+          - Hyaloscypha_bicolor
+          - Jaminaea_rosea
+          - Knufia_obscura
+          - Lachancea_lanzarotensis
+          - Lachnellula_hyalina
+          - Leptographium_clavigerum
+          - Letharia_columbiana
+          - Letharia_lupina
+          - Lithohypha_guttulata
+          - Lodderomyces_beijingensis
+          - Lodderomyces_elongisporus
+          - Malassezia_globosa
+          - Malassezia_japonica
+          - Malassezia_pachydermatis
+          - Malassezia_restricta
+          - Malassezia_sympodialis
+          - Malassezia_vespertilionis
+          - Maudiozyma_barnettii
+          - Meira_miltonrushii
+          - Melampsora_laricis-populina
+          - Metarhizium_acridum
+          - Metarhizium_album
+          - Metarhizium_anisopliae
+          - Metschnikowia_bicuspidata
+          - Meyerozyma_guilliermondii
+          - Microsporum_canis
+          - Mixia_osmundae
+          - Mycena_indigotica
+          - Neurospora_tetrasperma
+          - Ogataea_angusta
+          - Ogataea_haglerorum
+          - Ogataea_parapolymorpha
+          - Ogataea_philodendri
+          - Ogataea_polymorpha
+          - Ophidiomyces_ophidiicola
+          - Orbilia_oligospora
+          - Paracoccidioides_brasiliensis
+          - Parastagonospora_nodorum
+          - Penicillium_arizonense
+          - Penicillium_canescens
+          - Penicillium_chermesinum
+          - Penicillium_citrinum
+          - Penicillium_cosmopolitanum
+          - Penicillium_lagena
+          - Penicillium_maclennaniae
+          - Penicillium_manginii
+          - Penicillium_mononematosum
+          - Penicillium_riverlandense
+          - Penicillium_samsonianum
+          - Penicillium_waksmanii
+          - Pestalotiopsis_fici
+          - Phaeoacremonium_minimum
+          - Phanerochaete_carnosa
+          - Phialemonium_atrogriseum
+          - Phialophora_attinorum
+          - Pichia_kudriavzevii
+          - Pichia_membranifaciens
+          - Pneumocystis_carinii
+          - Pneumocystis_jirovecii
+          - Pneumocystis_murina
+          - Pochonia_chlamydosporia
+          - Podospora_anserina
+          - Podospora_bellae-mahoneyi
+          - Podospora_pseudoanserina
+          - Podospora_pseudocomata
+          - Podospora_pseudopauciseta
+          - Protomyces_lactucae-debilis
+          - Pseudogymnoascus_destructans
+          - Pseudomicrostroma_glucosiphilum
+          - Pseudovirgaria_hyperparasitica
+          - Puccinia_graminis
+          - Puccinia_striiformis
+          - Puccinia_triticina
+          - Punctularia_strigosozonata
+          - Pyrenophora_tritici-repentis
+          - Rasamsonia_emersonii
+          - Recurvomyces_mirabilis
+          - Rhizoctonia_solani
+          - Rhodotorula_graminis
+          - Saccharomyces_eubayanus
+          - Saccharomycodes_ludwigii
+          - Saccharomycopsis_crataegensis
+          - Saxophila_tyrrhenica
+          - Scedosporium_apiospermum
+          - Scheffersomyces_coipomensis
+          - Scheffersomyces_spartinae
+          - Sclerotinia_sclerotiorum
+          - Serpula_lacrymans
+          - Spathaspora_passalidarum
+          - Sporisorium_graminicola
+          - Sporothrix_brasiliensis
+          - Sporothrix_schenckii
+          - Sugiyamaella_lignohabitans
+          - Talaromyces_amestolkiae
+          - Talaromyces_atroroseus
+          - Talaromyces_marneffei
+          - Talaromyces_rugulosus
+          - Thermochaetoides_thermophila
+          - Thermothelomyces_thermophilus
+          - Thermothielavioides_terrestris
+          - Thyridium_curvatum
+          - Tilletiaria_anomala
+          - Tilletiopsis_washingtonensis
+          - Tremella_mesenterica
+          - Tricharina_praecox
+          - Trichoderma_asperellum
+          - Trichoderma_atroviride
+          - Trichoderma_citrinoviride
+          - Trichoderma_gamsii
+          - Trichophyton_benhamiae
+          - Trichophyton_rubrum
+          - Trichophyton_verrucosum
+          - Trichosporon_asahii
+          - Tuber_melanosporum
+          - Uncinocarpus_reesii
+          - Vanderwaltozyma_polyspora
+          - Vanrija_pseudolonga
+          - Verruconis_gallopava
+          - Verticillium_alfalfae
+          - Verticillium_dahliae
+          - Verticillium_nonalfalfae
+          - Wallemia_ichthyophaga
+          - Wallemia_mellicola
+          - Wickerhamiella_sorbophila
+          - Xylona_heveae
+          - Yamadazyma_tenuis
+          - Zymoseptoria_tritici
+
+          Validation species:
+          - Alternaria_alternata
+          - Alternaria_arborescens
+          - Aspergillus_aculeatinus
+          - Aspergillus_costaricensis
+          - Aspergillus_eucalypticola
+          - Aspergillus_pseudonomiae
+          - Aspergillus_pseudoviridinutans
+          - Aspergillus_ruber
+          - Aureobasidium_subglaciale
+          - Bipolaris_sorokiniana
+          - Candida_pseudojiufengensis
+          - Cercospora_beticola
+          - Colletotrichum_abscissum
+          - Colletotrichum_chrysophilum
+          - Colletotrichum_costaricense
+          - Colletotrichum_destructivum
+          - Colletotrichum_fructicola
+          - Coprinopsis_cinerea
+          - Cutaneotrichosporon_cavernicola
+          - Daldinia_loculata
+          - Diaporthe_citri
+          - Epithele_typhae
+          - Fonsecaea_pedrosoi
+          - Fusarium_flagelliforme
+          - Fusarium_musae
+          - Fusarium_poae
+          - Geosmithia_morbida
+          - Glarea_lozoyensis
+          - Guyanagaster_necrorhizus
+          - Kalmanozyma_brasiliensis
+          - Kwoniella_dendrophila
+          - Kwoniella_pini
+          - Lichtheimia_ornata
+          - Lipomyces_arxii
+          - Marasmius_oreades
+          - Microdochium_trichocladiopsis
+          - Moesziomyces_antarcticus
+          - Morchella_sextelata
+          - Naumovozyma_castellii
+          - Neurospora_hispaniola
+          - Paracoccidioides_lutzii
+          - Penicilliopsis_zonata
+          - Penicillium_antarcticum
+          - Penicillium_crustosum
+          - Penicillium_diatomitis
+          - Penicillium_hordei
+          - Penicillium_longicatenatum
+          - Penicillium_rubens
+          - Penicillium_verrucosum
+          - Penicillium_vulpinum
+          - Pisolithus_orientalis
+          - Rhinocladiella_mackenziei
+          - Rhodofomes_roseus
+          - Schizophyllum_commune
+          - Schizosaccharomyces_osmophilus
+          - Suillus_discolor
+          - Suillus_subaureus
+          - Tetrapisispora_phaffii
+          - Wickerhamomyces_ciferrii
+          - Zygosaccharomyces_rouxii
+"
+training_species: [
+   Aaosphaeria_arxii
+  Akanthomyces_muscarius
+  Alternaria_atra
+  Alternaria_burnsii
+  Alternaria_rosae
+  Amorphotheca_resinae
+  Annulohypoxylon_maeteangense
+  Annulohypoxylon_truncatum
+  Apiospora_aurea
+  Apiospora_marii
+  Apiotrichum_porosum
+  Aplosporella_prunicola
+  Ascochyta_rabiei
+  Aspergillus_aculeatus
+  Aspergillus_alliaceus
+  Aspergillus_brunneoviolaceus
+  Aspergillus_caelatus
+  Aspergillus_campestris
+  Aspergillus_candidus
+  Aspergillus_chevalieri
+  Aspergillus_clavatus
+  Aspergillus_fijiensis
+  Aspergillus_fischeri
+  Aspergillus_glaucus
+  Aspergillus_heteromorphus
+  Aspergillus_homomorphus
+  Aspergillus_ibericus
+  Aspergillus_japonicus
+  Aspergillus_lentulus
+  Aspergillus_neoniger
+  Aspergillus_piperis
+  Aspergillus_puulaauensis
+  Aspergillus_saccharolyticus
+  Aspergillus_sclerotioniger
+  Aspergillus_steynii
+  Aspergillus_sydowii
+  Aspergillus_tubingensis
+  Aspergillus_udagawae
+  Aspergillus_uvarum
+  Aspergillus_vadensis
+  Aspergillus_versicolor
+  Aspergillus_viridinutans
+  Aspergillus_wentii
+  Aureobasidium_melanogenum
+  Aureobasidium_namibiae
+  Aureobasidium_pullulans
+  Babjeviella_inositovora
+  Batrachochytrium_dendrobatidis
+  Beauveria_bassiana
+  Bipolaris_oryzae
+  Bipolaris_victoriae
+  Bipolaris_zeicola
+  Boeremia_exigua
+  Botrytis_byssoidea
+  Botrytis_cinerea
+  Botrytis_deweyae
+  Botrytis_fragariae
+  Botrytis_porri
+  Botrytis_sinoallii
+  Canariomyces_notabilis
+  Candida_albicans
+  Candida_jiufengensis
+  Candida_orthopsilosis
+  Candida_parapsilosis
+  Capronia_coronata
+  Capronia_epimyces
+  Cercospora_kikuchii
+  Chaetomium_fimeti
+  Chaetomium_strumarium
+  Chaetomium_tenue
+  Cladophialophora_bantiana
+  Cladophialophora_carrionii
+  Cladophialophora_psammophila
+  Cladophialophora_yegresii
+  Clavispora_lusitaniae
+  Coccidioides_immitis
+  Cokeromyces_recurvatus
+  Colletotrichum_acutatum
+  Colletotrichum_godetiae
+  Colletotrichum_graminicola
+  Colletotrichum_karsti
+  Colletotrichum_navitas
+  Colletotrichum_orchidophilum
+  Colletotrichum_paranaense
+  Colletotrichum_phormii
+  Colletotrichum_tamarilloi
+  Coniosporium_apollinis
+  Cryptococcus_amylolentus
+  Cryptococcus_bacillisporus
+  Cryptococcus_decagattii
+  Cryptococcus_deuterogattii
+  Cryptococcus_gattii
+  Cryptococcus_neoformans
+  Cryptococcus_tetragattii
+  Cryptococcus_wingfieldii
+  Cucurbitaria_berberidis
+  Cyberlindnera_jadinii
+  Cyphellophora_europaea
+  Cystobasidium_minutum
+  Daldinia_caldariorum
+  Daldinia_decipiens
+  Daldinia_vernicosa
+  Debaryomyces_fabryi
+  Debaryomyces_hansenii
+  Desarmillaria_tabescens
+  Diaporthe_amygdali
+  Dichomitus_squalens
+  Dichotomopilus_funicola
+  Didymella_exigua
+  Dioszegia_hungarica
+  Diplodia_corticola
+  Dipodascopsis_tothii
+  Dothidotthia_symphoricarpi
+  Drechmeria_coniospora
+  Drepanopeziza_brunnea
+  Durotheca_rogersii
+  Emericellopsis_atlantica
+  Eremothecium_gossypii
+  Eremothecium_sinecaudum
+  Exophiala_aquamarina
+  Exophiala_dermatitidis
+  Exophiala_oligosperma
+  Exophiala_spinifera
+  Exophiala_viscosa
+  Exophiala_xenobiotica
+  Fimicolochytrium_jonesii
+  Fomitiporia_mediterranea
+  Fonsecaea_erecta
+  Fonsecaea_multimorphosa
+  Fulvia_fulva
+  Fusarium_fujikuroi
+  Fusarium_mangiferae
+  Fusarium_odoratissimum
+  Fusarium_proliferatum
+  Fusarium_pseudograminearum
+  Fusarium_redolens
+  Fusarium_subglutinans
+  Fusarium_vanettenii
+  Fusarium_venenatum
+  Fusarium_verticillioides
+  Gaeumannomyces_tritici
+  Gamsiella_multidivaricata
+  Gilbertella_persicaria
+  Gloeophyllum_trabeum
+  Halteromyces_radiatus
+  Heterobasidion_irregulare
+  Hyphopichia_burtonii
+  Hypoxylon_fragiforme
+  Hypoxylon_trugodes
+  Ilyonectria_robusta
+  Kazachstania_africana
+  Kickxella_alabastrina
+  Kluyveromyces_lactis
+  Kluyveromyces_marxianus
+  Kockiozyma_suomiensis
+  Kockovaella_imperatae
+  Komagataella_phaffii
+  Kuraishia_capsulata
+  Kwoniella_bestiolae
+  Kwoniella_botswanensis
+  Kwoniella_dejecticola
+  Kwoniella_europaea
+  Kwoniella_mangrovensis
+  Kwoniella_newhampshirensis
+  Kwoniella_shandongensis
+  Kwoniella_shivajii
+  Lachancea_thermotolerans
+  Laetiporus_sulphureus
+  Lasiodiplodia_theobromae
+  Lasiosphaeria_miniovina
+  Lentinula_edodes
+  Limtongia_smithiae
+  Linderina_pennispora
+  Lindgomyces_ingoldianus
+  Lipomyces_chichibuensis
+  Lipomyces_doorenjongii
+  Lipomyces_japonicus
+  Lipomyces_oligophaga
+  Lipomyces_tetrasporus
+  Lobosporangium_transversale
+  Macroventuria_anomochaeta
+  Metarhizium_brunneum
+  Metarhizium_robertsii
+  Mollisia_scopiformis
+  Morchella_importuna
+  Mucor_mucedo
+  Mucor_velutinosus
+  Mycotypha_africana
+  Mytilinidion_resinicola
+  Myxozyma_melibiosi
+  Nakaseomyces_glabratus
+  Nannizzia_gypsea
+  Naumovozyma_dairenensis
+  Neoarthrinium_moseri
+  Neohortaea_acidophila
+  Neurospora_crassa
+  Neurospora_tetraspora
+  Paecilomyces_variotii
+  Paraphaeosphaeria_sporulosa
+  Parathielavia_appendiculata
+  Penicillium_alfredii
+  Penicillium_angulare
+  Penicillium_argentinense
+  Penicillium_atrosanguineum
+  Penicillium_bovifimosum
+  Penicillium_brevicompactum
+  Penicillium_canariense
+  Penicillium_cataractarum
+  Penicillium_chrysogenum
+  Penicillium_cinerascens
+  Penicillium_concentricum
+  Penicillium_coprophilum
+  Penicillium_daleae
+  Penicillium_digitatum
+  Penicillium_expansum
+  Penicillium_griseofulvum
+  Penicillium_hispanicum
+  Penicillium_macrosclerotiorum
+  Penicillium_malachiteum
+  Penicillium_nucicola
+  Penicillium_odoratum
+  Penicillium_oxalicum
+  Penicillium_paradoxum
+  Penicillium_psychrosexuale
+  Penicillium_pulvis
+  Penicillium_robsamsonii
+  Penicillium_solitum
+  Penicillium_soppii
+  Penicillium_subrubescens
+  Penicillium_taxi
+  Penicillium_verhagenii
+  Phycomyces_blakesleeanus
+  Phyllosticta_capitalensis
+  Phyllosticta_citribraziliensis
+  Plenodomus_lingam
+  Pleurotus_ostreatus
+  Polychytrium_aggregatum
+  Postia_placenta
+  Priceomyces_carsonii
+  Pseudocercospora_fijiensis
+  Pseudogymnoascus_verrucosus
+  Pseudomassariella_vexata
+  Pseudozyma_flocculosa
+  Pseudozyma_hubeiensis
+  Psilocybe_cubensis
+  Purpureocillium_lilacinum
+  Purpureocillium_takamizusanense
+  Pyricularia_grisea
+  Pyricularia_oryzae
+  Pyricularia_pennisetigena
+  Radiomyces_spectabilis
+  Ramularia_collo-cygni
+  Rhizophagus_irregularis
+  Rhizopus_microsporus
+  Rhodotorula_toruloides
+  Saccharomyces_cerevisiae
+  Saccharomyces_kudriavzevii
+  Saccharomyces_mikatae
+  Saccharomyces_paradoxus
+  Saitoella_complicata
+  Saprochaete_ingens
+  Scheffersomyces_amazonensis
+  Scheffersomyces_stipitis
+  Scheffersomyces_xylosifermentans
+  Schizosaccharomyces_cryophilus
+  Schizosaccharomyces_japonicus
+  Schizosaccharomyces_octosporus
+  Schizosaccharomyces_pombe
+  Sodiomyces_alkalinus
+  Sordaria_macrospora
+  Sparassis_crispa
+  Sphaerulina_musiva
+  Spizellomyces_punctatus
+  Stereum_hirsutum
+  Suhomyces_tanzawaensis
+  Suillus_bovinus
+  Suillus_clintonianus
+  Suillus_fuscotomentosus
+  Suillus_paluster
+  Suillus_plorans
+  Suillus_subalutaceus
+  Synchytrium_microbalum
+  Talaromyces_proteolyticus
+  Talaromyces_stipitatus
+  Torulaspora_delbrueckii
+  Torulaspora_globosa
+  Trametes_versicolor
+  Trematosphaeria_pertusa
+  Trichoderma_aggressivum
+  Trichoderma_breve
+  Trichoderma_harzianum
+  Trichoderma_reesei
+  Trichoderma_virens
+  Truncatella_angustata
+  Umbelopsis_ramanniana
+  Ustilaginoidea_virens
+  Ustilago_hordei
+  Ustilago_maydis
+  Venustampulla_echinocandica
+  Westerdykella_ornata
+  Wickerhamomyces_anomalus
+  Xylaria_bambusicola
+  Yarrowia_lipolytica
+  Zasmidium_cellare
+  Zychaea_mexicana
+  Zygotorulaspora_mrakii
+]

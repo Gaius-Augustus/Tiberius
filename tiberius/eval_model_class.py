@@ -30,7 +30,7 @@ class PredictionGTF:
     """
     def __init__(self, model_path='', model_path_old='', model_path_lstm_old='',
                  seq_len=500004, batch_size=200,
-                 hmm=False,  model_path_hmm='',
+                 hmm=False, hmm_emitter_epsilon=0, model_path_hmm='',
                  temp_dir='', num_hmm=1,
                  hmm_factor=None,
                  annot_path='', genome_path='', genome=None, softmask=True,
@@ -44,6 +44,7 @@ class PredictionGTF:
             - seq_len (int): The sequence length to be used for prediction.
             - batch_size (int): The size of the batches to be used.
             - hmm (bool): A flag to indicate whether Hidden Markov Models (HMM) should be used. Defaults to False.
+            - hmm_emitter_epsilon (float): A small deviation from the identity matrix of the emitter of the HMM.
             - model_path_hmm (str): Path to the HMM model file.
             - temp_dir (str): Temporary directory path for intermediate files.
             - num_hmm (int): Number of HMMs to be used.
@@ -69,6 +70,7 @@ class PredictionGTF:
         self.genome = genome
         self.softmask = softmask
         self.hmm = hmm
+        self.hmm_emitter_epsilon = hmm_emitter_epsilon
         self.strand=strand
         self.model = None
         self.model_path_hmm = model_path_hmm
@@ -513,8 +515,10 @@ class PredictionGTF:
                 hmm_predictions[i] = lstm_predictions[0][i].argmax(-1)
 
             if len(batch_i) == batch_size*self.hmm_factor or i == inp_chunks.shape[0]-1:
-                y_hmm = self.predict_vit(inp_chunks[batch_i],
-                        lstm_predictions[batch_i]).numpy().squeeze()
+                y_hmm = self.predict_vit(
+                    inp_chunks[batch_i],
+                    lstm_predictions[batch_i],
+                ).numpy().squeeze()
                 if len(y_hmm.shape) == 1:
                     y_hmm = np.expand_dims(y_hmm,0)
                 for j1, j2 in enumerate(batch_i):
@@ -1020,5 +1024,6 @@ class PredictionGTF:
             parallel=self.parallel_factor,
             mode=HMMMode.VITERBI,
             training=False,
+            emitter_epsilon=self.hmm_emitter_epsilon,
         )
-        self.gene_pred_hmm_layer.build([self.adapted_batch_size, self.seq_len, inp_size])
+        self.gene_pred_hmm_layer.build((self.adapted_batch_size, self.seq_len, inp_size))

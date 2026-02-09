@@ -35,8 +35,8 @@ def parseCmd():
         help='Print the model config file in a readable format.')
     general.add_argument('--list_cfg', action='store_true',
         help='List every file in model_cfg/ with its target species.')
-    
-    tiberius_grp = parser.add_argument_group("Direct Tiberius only")    
+
+    tiberius_grp = parser.add_argument_group("Direct Tiberius only")
     model_grp = tiberius_grp.add_mutually_exclusive_group(required=False)
     model_grp.add_argument('--model', type=str,
         help='Tiberius model with weight file (.h5) without the HMM layer.', default='')
@@ -50,6 +50,8 @@ def parseCmd():
         help='Output GTF file with Tiberius gene prediction.', default='tiberius.gtf')
     tiberius_grp.add_argument('--parallel_factor', type=int, default=0,
         help='Parallel factor used in Viterbi (default uses sqrt(seq_len)).')
+    tiberius_grp.add_argument('--hmm_eps', type=float, default=0,
+        help='Deviation from the identity matrix of the HMM emitter.')
     tiberius_grp.add_argument('--no_softmasking', action='store_true',
         help='Disable softmasking.')
     tiberius_grp.add_argument('--clamsa', type=str, default='',
@@ -72,7 +74,7 @@ def parseCmd():
         help='Minimum length of input sequences used for predictions.')
     tiberius_grp.add_argument('--singularity', action='store_true',
         help='Run Tiberius inside the Singularity image (auto-download if missing).')
-    
+
     nf_grp = parser.add_argument_group("Nextflow Pipeline")
     nf_grp.add_argument('-c', '--nf_config',
         help='Path to the Nextflow config file. See examples in conf/*.config', default='')

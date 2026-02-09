@@ -103,11 +103,9 @@ def custom_cce_f1_loss(f1_factor, batch_size,
         
         if use_cce:
             # Compute the categorical cross-entropy loss
-            cce_loss = tf.keras.losses.categorical_crossentropy(
-                y_true_features, y_pred_features, from_logits=from_logits
-            )
-            cce_loss = tf.reduce_mean(cce_loss, -1)
-            cce_loss = tf.reduce_sum(cce_loss) / batch_size
+            cce_loss = tf.keras.losses.categorical_crossentropy(y_true_features, y_pred_features, from_logits=from_logits)
+            cce_loss = tf.reduce_mean(cce_loss, -1) #mean over sequence length
+            cce_loss = tf.reduce_sum(cce_loss) / batch_size #mean over batch with global batch size
         else:
             cce_loss = 0
         
@@ -130,20 +128,20 @@ def custom_cce_f1_loss(f1_factor, batch_size,
                 cds_pred = tf.reduce_sum(y_pred_features[:, :, 4:15], axis=-1, keepdims=True)
                 cds_true = tf.reduce_sum(y_true_features[:, :, 4:15], axis=-1, keepdims=True)
         
-        # Compute precision and recall
+        # Compute precision and recall for the specified class
         true_positives = tf.reduce_sum(cds_pred * cds_true, axis=1)
         predicted_positives = tf.reduce_sum(cds_pred, axis=1)
         possible_positives = tf.reduce_sum(cds_true, axis=1)
         any_positives = tf.cast(possible_positives > 0, possible_positives.dtype)
         
         precision = true_positives / (predicted_positives + K.epsilon())
-        recall = true_positives / (possible_positives + K.epsilon())
+        recall = true_positives  / (possible_positives + K.epsilon())
         
-        # F1 score
-        f1_score = 2 * (precision * recall) / (precision + recall + K.epsilon())
-        f1_loss = tf.reduce_sum((1 - f1_score) * any_positives) / batch_size
+        # For the examples with positive class, maximize the F1 score
+        f1_score = 2 * (precision * recall) / (precision + recall + K.epsilon()) #f1 score per sequence
+        f1_loss = tf.reduce_sum((1 - f1_score) * any_positives) / batch_size #mean over batch with global batch size
         
-        # False positive rate
+        # For the examples with no positive class, minimize the false positive rate
         L = tf.cast(tf.shape(cds_pred)[1], cds_pred.dtype)
         fpr = tf.reduce_sum(cds_pred * (1-any_positives)[:,tf.newaxis]) / (L * batch_size)
         

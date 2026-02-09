@@ -204,22 +204,19 @@ class DataGenerator:
             if self.unsupervised_loss:
                 intergenic_regions = tf.cast(tf.equal(Y[:, 0], 1), tf.float32)
                 transcript_regions = 1.0 - intergenic_regions
-                transcript_regions = 1.0 - intergenic_regions
                 w_squeezed = tf.squeeze(w, axis=-1)
                 possible_mask_positions = 1.0 - (transcript_regions * w_squeezed)
-                random_mask = tf.random.uniform([seq_len]) < 0.15   # bool array
+                random_mask = tf.random.uniform([seq_len]) < 0.15 
                 mask_positions = tf.cast(random_mask, tf.float32) * possible_mask_positions
                 
-                mask_bool = tf.cast(mask_positions, tf.bool)  # (seq_len,)
-                mask_expanded = tf.expand_dims(mask_bool, axis=-1)  # (seq_len, 1)
-                mask_4d = tf.tile(mask_expanded, [1, 4])  # (seq_len, 4) - für erste 4 dims
+                mask_bool = tf.cast(mask_positions, tf.bool)
+                mask_expanded = tf.expand_dims(mask_bool, axis=-1)
+                mask_4d = tf.tile(mask_expanded, [1, 4])
 
                 nucleotides = x[:, :4]
                 rest = x[:, 4:]
 
-                nucleotides_masked = tf.where(mask_4d, 
-                                               tf.zeros_like(nucleotides), 
-                                               nucleotides)
+                nucleotides_masked = tf.where(mask_4d, tf.zeros_like(nucleotides), nucleotides)
 
                 X_masked = tf.concat([nucleotides_masked, rest], axis=-1)
                 w_unsupervised = tf.expand_dims(mask_positions, axis=-1)

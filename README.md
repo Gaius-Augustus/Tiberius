@@ -148,7 +148,7 @@ Tiberius supports several execution modes. The table below gives a quick overvie
 
 | Mode | What it does | Key arguments |
 | ---- | ------------ | ------------- |
-| **Ab initio** | Gene prediction from genomic sequence only | `--genome`, `--model_cfg` |
+| ***Ab initio*** | Gene prediction from genomic sequence only | `--genome`, `--model_cfg` |
 | **Nextflow** | Parallelized *ab initio* prediction across multiple GPUs on an HPC | `--nf_config`, `--genome`, `--model_cfg` |
 | **Evidence pipeline** (Nextflow) | Combines *ab initio* predictions with extrinsic evidence (proteins, RNA-Seq, Iso-Seq) | `--nf_config`, `--params_yaml` |
 | **De novo with ClaMSA** | Uses evolutionary information from ClaMSA as additional input | `--genome`, `--clamsa`, `--model_cfg` |

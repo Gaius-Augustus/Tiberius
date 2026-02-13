@@ -205,8 +205,6 @@ In order to run Tiberius with a local installation omit `--singularity`.
 
 Tiberius produces a GTF file containing the predicted gene structures (default: `tiberius.gtf`). It can also generate FASTA-formatted files of coding sequences and protein sequences when locations are specified using the `--codingseq` and `--protseq` options, respectively.
 
-If you want to write custom code for Tiberius gene prediction, see [example_prediction.ipynb](test_data/Panthera_pardus/example_prediction.ipynb) for an example on how to write a custom prediction script.
-
 
 ### Running Tiberius with Nextflow
 
@@ -217,7 +215,6 @@ You can start Tiberius with Nextflow by providing it with your Nextflow config f
 # Nextflow for a Diatom genome
 python tiberius.py --nf_config conf/slurm_generic.config --genome input.fasta --model_cfg diatoms
 ```
-
 
 
 ### Running Tiberius with Extrinsic Evidence (Nextflow-only)

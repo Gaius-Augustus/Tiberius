@@ -37,20 +37,12 @@ Additionally, Tiberius provides an evidence mode that generates highly precise g
 - [How to Cite](#how-to-cite)
 - [References](#references)
 
-We are providing different models for following species (see model_cfg/README.md for more information):
-- Basidiomycota
-- Chlorophyta
-- Diatoms
-- Eudicotyledons
-- Fungi incertae sedis
-- Fungi
-- Insecta
-- Monocotyledonae
-- Mucoromycota
-- Mammalia
-- Saccharomycota
-- Sordariomycota
-- Vertebrates
+We are providing pre-trained models for the following clades (see [model_cfg/README.md](model_cfg/README.md) for details):
+
+- **Animals:** Mammalia, Vertebrates, Insecta
+- **Plants:** Eudicotyledons, Monocotyledonae
+- **Fungi:** Fungi, Fungi incertae sedis, Mucoromycota, Saccharomycota, Sordariomycota, Basidiomycota
+- **Algae & Protists:** Diatoms, Chlorophyta
 
 
 ## Quick Start

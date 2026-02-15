@@ -46,8 +46,7 @@ comment: "!!! This parameter set has been superseded by fungi.yaml !!!
           ANNEVO v2.2.
 
 
-          Accuracy relative to the fungi parameters:
-          Average accuracy results across 4 species 
+          Accuracy relative to the fungi parameters, results across 4 species 
           (Coemansia_reversa_NRRL_1564, Encephalitozoon_cuniculi_GB-M1,
           Phycomyces_blakesleeanus_NRRL_1555_minus, Spizellomyces_punctatus_DAOM_BR117):
 

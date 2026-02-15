@@ -5,31 +5,41 @@ Each file is read at runtime by Tiberius and therefore must follow the schema be
 
 ---
 
-## 1  List of model weigths
+## 1  List of current model weights
 
 | Model name | Target species | Softmasking required | ClaMSA input required|
 | ----------------|------------------|-------------------|------------------|
-| basidiomycota | Basidiomycota | :x: |  :x:|
 | chlorophyta | Chlorophyta | :x: |  :x:|
 | diatoms | Diatoms | :white_check_mark: |  :x:|
 | diatoms_unmasked | Diatoms | :x: |  :x:|
 | eudicotyledons | Eudicotyledons | :white_check_mark: |  :x:|
 | fungi | Fungi |  :x:|  :x:|
-| fungi_incertae_sedis | Fungi incertae sedis |  :x:|  :x:|
 | insecta | Insecta | :white_check_mark: |  :x:|
-| insecta_unmasked | Insecta | :x: |  :x:|
+| insecta_unmasked_v2 | Insecta | :x: |  :x:|
 | monocotyledonae | Monocotyledonae | :white_check_mark: |  :x:|
-| mucoromycota | Mucoromycota | :white_check_mark: |  :x:|
-| mammalia_softmasking_v2 | Mammalia | :white_check_mark: |  :x:|
 | mammalia_softmasking_v2 | Mammalia | :white_check_mark: |  :x:|
 | mammalia_nosofttmasking_v2 | Mammalia | :x: |  :x:|
 | mammalia_clamsa_v2 | Mammalia | :white_check_mark: |  :white_check_mark:|
-| saccharomycota | Saccharomycota | :white_check_mark: |  :x:|
-| sordariomycota | Sordariomycota | :white_check_mark: |  :x:|
 | vertebrates | Vertebrates | :x: |  :x:|
 
 
-## 2  File naming convention
+## 2  Superseded parameter sets
+
+The `superseded/` subdirectory contains older parameter YAML files that have been replaced by improved versions. These files are archived solely for reproducibility of previously published results. **For new analyses, always use the current parameter files listed above.**
+
+| Model name | Target species | Superseded by |
+| ----------------|------------------|------------------|
+| basidiomycota | Basidiomycota | — |
+| fungi_incertae_sedis | Fungi incertae sedis | — |
+| insecta_unmasked | Insecta | insecta_unmasked_v2 |
+| lepidoptera | Lepidoptera | insecta |
+| mucoromycota | Mucoromycota | — |
+| saccharomycota | Saccharomycota | — |
+| sordariomycota | Sordariomycota | — |
+
+---
+
+## 3  File naming convention
 
 ```
 <target_species|clade>_<identifying_attribute>_<version>.yaml
@@ -42,7 +52,7 @@ Example:  `mammalia_nosoftmasking_v2.yaml`
 
 ---
 
-## 3  Required keys
+## 4  Required keys
 
 | Key                                | Type               | Constraints & semantics                                                                                                                                                                                       |
 | ---------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -59,7 +69,7 @@ Example:  `mammalia_nosoftmasking_v2.yaml`
 
 ---
 
-## 4  Example (minimal)
+## 5  Example (minimal)
 
 ```yaml
 target_species: "Mammalia"

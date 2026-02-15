@@ -8,6 +8,8 @@ tiberius_version: 1.1.6
 date: "2025-12-03"
 comment: "Training insecta weights by Felix Ortmann, accuracy benchmark by Katharina Hoff.
 
+          NCBI masking was used.
+
           -------------------------------------------------------------------------------------
           Species                 | Accession       | CDS Exon    | Intron chain| Locus       |
                                   |                 | Sens | Prec | Sens | Prec | Sens | Prec |

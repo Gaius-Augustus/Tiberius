@@ -6,7 +6,63 @@ units: 186
 clamsa: False
 tiberius_version: 1.1.6
 date: "2025-04-04"
-comment: "Felix Ortmann, Lepidoptera training weights. Species seperated with underscoe _ are data from BRAKER3, with dash - from NCBI RefSeq."
+comment: "!!! This parameter set has been superseded by insecta_unmasked_v2.yaml !!!
+          
+          Training Lepidoptera weights by Felix Ortmann, accuracy benchmark by Katharina Hoff. 
+          Training annotations for species seperated with underscoe _ are data from BRAKER3, 
+          with dash - from NCBI RefSeq. The BRAKER3 annotations are described in Saenko et al.
+          (2025) https://doi.org/10.1101/2025.04.17.649312 .
+
+          Accuracy on lepidopteran species not in training set (NCBI masked genomes):
+
+          -------------------------------------------------------------------------------------
+          Species                 | Accession       | CDS Exon    | Intron chain| Locus       |
+                                  |                 | Sens | Prec | Sens | Prec | Sens | Prec |
+          -------------------------------------------------------------------------------------
+          Bombyx mori             | GCF_030269925.1 | 70.6 | 82.4 | 25.7 | 41.4 | 44.9 | 37.0 |
+          Leptidea sinapis        | GCF_905404315.1 | 74.2 | 74.6 | 28.6 | 38.3 | 46.8 | 31.3 |
+          Nymphalis io            | GCF_905147045.1 | 81.1 | 86.9 | 37.7 | 54.0 | 59.8 | 48.2 |
+          Vanessa cardui          | GCF_905220365.1 | 83.1 | 87.0 | 42.8 | 56.4 | 59.3 | 49.2 |
+          -------------------------------------------------------------------------------------
+          Average                 |                 | 77.2 | 82.7 | 33.7 | 47.5 | 52.7 | 41.4 |
+          -------------------------------------------------------------------------------------
+
+
+          Accuracy relative to ANNEVO (comparison on 4 common species):
+
+                                         ANNEVO       |     lepidoptera      |      delta           |
+          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+          -------------------------------------------------------------------------------------------
+          Base level           |   90.8   91.2   91.0 |   84.4   85.3   84.8 |   -6.5   -5.9   -6.2 |
+          Exon level           |   82.6   78.7   80.6 |   77.2   82.7   79.9 |   -5.3   +4.1   -0.7 |
+          Intron chain level   |   30.1   43.3   35.5 |   33.7   47.5   39.4 |   +3.6   +4.2   +3.9 |
+          Locus level          |   46.5   43.2   44.8 |   52.7   41.4   46.4 |   +6.2   -1.8   +1.6 |
+          -------------------------------------------------------------------------------------------
+
+
+          Accuracy relative to insecta_unmasked_v2 (comparison on 4 common species):
+
+                                 insecta_unmasked_v2  |   lepidoptera        |          delta       |
+          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+          -------------------------------------------------------------------------------------------
+          Base level           |   89.9   75.2   81.9 |   84.4   85.3   84.8 |   -5.5  +10.0   +2.9 |
+          Exon level           |   83.8   83.9   83.8 |   77.2   82.7   79.9 |   -6.5   -1.2   -3.9 |
+          Intron chain level   |   42.0   62.0   50.1 |   33.7   47.5   39.4 |   -8.3  -14.4  -10.6 |
+          Locus level          |   66.0   44.4   53.1 |   52.7   41.4   46.4 |  -13.2   -3.0   -6.7 |
+          -------------------------------------------------------------------------------------------
+
+
+          Accuracy relative to insecta_unmasked (comparison on 4 common species):
+
+                                   insecta_unmasked   |       lepidoptera    |       delta          |
+          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+          -------------------------------------------------------------------------------------------
+          Base level           |   89.7   80.0   84.6 |   84.4   85.3   84.8 |   -5.4   +5.3   +0.2 |
+          Exon level           |   84.6   83.9   84.3 |   77.2   82.7   79.9 |   -7.4   -1.2   -4.4 |
+          Intron chain level   |   40.2   59.3   47.9 |   33.7   47.5   39.4 |   -6.5  -11.8   -8.5 |
+          Locus level          |   62.9   46.5   53.5 |   52.7   41.4   46.4 |  -10.2   -5.1   -7.1 |
+          -------------------------------------------------------------------------------------------
+"
 training_species: [
    papilio-machaon
    melitaea-cinxia

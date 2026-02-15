@@ -5,58 +5,76 @@ softmasking: False
 units: 186
 clamsa: False
 tiberius_version: 1.1.7
-date: "2026-02-14"
+date: "2026-02-15"
 comment: "Training for insects (no softmasking) by Katharina Hoff.
 
-        ------------------------------------------------------------------------------------------------
-        Species                 | Accession       | CDS Exon    | Intron chain| Locus       |
-                                |                 | Sens | Prec | Sens | Prec | Sens | Prec |
-        ------------------------------------------------------------------------------------------------
-        Bombyx mori             | GCF_030269925.1 | 78.5 | 86.1 | 35.1 | 62.1 | 61.0 | 43.0 |
-        Cataglyphis hispanica   | GCF_021464435.1 | 84.4 | 86.7 | 43.9 | 70.5 | 72.9 | 48.9 |
-        Colias croceus          | GCF_905220415.1 | 87.4 | 90.9 | 49.4 | 70.2 | 69.7 | 61.3 |
-        Drosophila melanogaster | GCF_000001215.4 | 81.2 | 91.6 | 49.6 | 86.4 | 79.5 | 71.9 |
-        Leptidea sinapis        | GCF_905404315.1 | 81.2 | 74.9 | 37.7 | 53.3 | 61.1 | 32.0 |
-        Nymphalis io            | GCF_905147045.1 | 87.3 | 87.2 | 45.2 | 65.5 | 71.9 | 51.4 |
-        Osmia bicornis          | GCF_907164935.1 | 79.8 | 79.9 | 40.5 | 66.9 | 66.9 | 37.0 |
-        Tribolium castaneum     | GCF_031307605.1 | 74.4 | 82.0 | 37.5 | 57.9 | 60.5 | 47.1 |
-        Vanessa cardui          | GCF_905220365.1 | 88.2 | 87.3 | 50.0 | 66.9 | 69.8 | 51.2 |
-        Zerene cesonia          | GCF_012273895.1 | 86.7 | 89.6 | 48.6 | 63.0 | 66.4 | 60.5 |
-        ------------------------------------------------------------------------------------------------
-        Average                 |                 | 82.9 | 85.6 | 43.8 | 66.3 | 68.0 | 50.4 |
-        ------------------------------------------------------------------------------------------------
+          -------------------------------------------------------------------------------------
+          Species                 | Accession       | CDS Exon    | Intron chain| Locus       |
+                                  |                 | Sens | Prec | Sens | Prec | Sens | Prec |
+          -------------------------------------------------------------------------------------
+          Bombyx mori             | GCF_030269925.1 | 78.5 | 86.1 | 35.1 | 62.1 | 61.0 | 43.0 |
+          Cataglyphis hispanica   | GCF_021464435.1 | 84.4 | 86.7 | 43.9 | 70.5 | 72.9 | 48.9 |
+          Colias croceus          | GCF_905220415.1 | 87.4 | 90.9 | 49.4 | 70.2 | 69.7 | 61.3 |
+          Drosophila melanogaster | GCF_000001215.4 | 81.2 | 91.6 | 49.6 | 86.4 | 79.5 | 71.9 |
+          Leptidea sinapis        | GCF_905404315.1 | 81.2 | 74.9 | 37.7 | 53.3 | 61.1 | 32.0 |
+          Nymphalis io            | GCF_905147045.1 | 87.3 | 87.2 | 45.2 | 65.5 | 71.9 | 51.4 |
+          Osmia bicornis          | GCF_907164935.1 | 79.8 | 79.9 | 40.5 | 66.9 | 66.9 | 37.0 |
+          Tribolium castaneum     | GCF_031307605.1 | 74.4 | 82.0 | 37.5 | 57.9 | 60.5 | 47.1 |
+          Vanessa cardui          | GCF_905220365.1 | 88.2 | 87.3 | 50.0 | 66.9 | 69.8 | 51.2 |
+          Zerene cesonia          | GCF_012273895.1 | 86.7 | 89.6 | 48.6 | 63.0 | 66.4 | 60.5 |
+          -------------------------------------------------------------------------------------
+          Average                 |                 | 82.9 | 85.6 | 43.8 | 66.3 | 68.0 | 50.4 |
+          -------------------------------------------------------------------------------------
 
-        Accuracy relative to the previously released insect parameters for 
-        unmasked genomes:
 
-        Comparison on 10 common species
+          Accuracy relative to ANNEVO (comparison on 10 common species):
 
-                               insecta_unmasked     | insecta_unmasked_v2  |      delta           |
-        Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
-        -------------------------------------------------------------------------------------------
-        Base level           |   90.6   84.0   87.2 |   91.1   80.8   85.6 |   +0.4   -3.1   -1.5 |
-        Exon level           |   83.0   85.4   84.2 |   82.9   85.6   84.2 |   -0.1   +0.2   +0.1 |
-        Intron chain level   |   41.7   63.3   50.3 |   43.8   66.3   52.7 |   +2.1   +3.0   +2.4 |
-        Locus level          |   64.5   51.2   57.1 |   68.0   50.4   57.9 |   +3.4   -0.8   +0.8 |
-        -------------------------------------------------------------------------------------------
+                                         ANNEVO       | insecta_unmasked_v2  |         delta        |
+          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+          -------------------------------------------------------------------------------------------
+          Base level           |   91.3   93.4   92.3 |   91.1   80.8   85.6 |   -0.2  -12.6   -6.7 |
+          Exon level           |   80.0   80.4   80.2 |   82.9   85.6   84.2 |   +2.9   +5.2   +4.0 |
+          Intron chain level   |   31.6   47.8   38.1 |   43.8   66.3   52.7 |  +12.1  +18.5  +14.6 |
+          Locus level          |   48.4   47.0   47.7 |   68.0   50.4   57.9 |  +19.6   +3.4  +10.2 |
+          -------------------------------------------------------------------------------------------
 
-        Accuracy relative to the previously released insect parameters for
-        masked genomes (using NCBI masking):
+
+          Accuracy relative to the previously released insect parameters for unmasked genomes
+          (comparison on 10 common species):
+
+                                   insecta_unmasked   | insecta_unmasked_v2  |         delta        |
+          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+          -------------------------------------------------------------------------------------------
+          Base level           |   90.6   84.0   87.2 |   91.1   80.8   85.6 |   +0.4   -3.1   -1.5 |
+          Exon level           |   83.0   85.4   84.2 |   82.9   85.6   84.2 |   -0.1   +0.2   +0.1 |
+          Intron chain level   |   41.7   63.3   50.3 |   43.8   66.3   52.7 |   +2.1   +3.0   +2.4 |
+          Locus level          |   64.5   51.2   57.1 |   68.0   50.4   57.9 |   +3.4   -0.8   +0.8 |
+          -------------------------------------------------------------------------------------------
+
+          Accuracy relative to the insect parameters for masked genomes (using 
+          NCBI masking, comparison on 10 common species):
+
+                                        insecta       | insecta_unmasked_v2  |         delta        |
+          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+          -------------------------------------------------------------------------------------------
+          Base level           |   88.6   89.4   89.0 |   91.1   80.8   85.6 |   +2.5   -8.6   -3.3 |
+          Exon level           |   81.0   87.4   84.1 |   82.9   85.6   84.2 |   +1.9   -1.8   +0.1 |
+          Intron chain level   |   41.0   62.9   49.7 |   43.8   66.3   52.7 |   +2.7   +3.4   +3.0 |
+          Locus level          |   63.0   55.4   59.0 |   68.0   50.4   57.9 |   +4.9   -5.0   -1.1 |
+          -------------------------------------------------------------------------------------------
 
         
+          Accuracy relative to the lepidoptera parameter set (comparison on the 4 common species 
+          Leptidea sinapis, Nymphalis io, Bombyx mori, Vanessa cardui):
 
-        Accuracy relative to ANNEVO, comparison on 10 common species
-
-        Comparison on 10 common species
-
-                                   ANNEVO           | insecta_unmasked_v2  |          delta           |
-        Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
-        -------------------------------------------------------------------------------------------
-        Base level           |   91.3   93.4   92.3 |   91.1   80.8   85.6 |   -0.2  -12.6   -6.7 |
-        Exon level           |   80.0   80.4   80.2 |   82.9   85.6   84.2 |   +2.9   +5.2   +4.0 |
-        Intron chain level   |   31.6   47.8   38.1 |   43.8   66.3   52.7 |  +12.1  +18.5  +14.6 |
-        Locus level          |   48.4   47.0   47.7 |   68.0   50.4   57.9 |  +19.6   +3.4  +10.2 |
-        -------------------------------------------------------------------------------------------
+                                      lepidoptera     | insecta_unmasked_v2  |         delta        |
+          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+          -------------------------------------------------------------------------------------------
+          Base level           |   84.4   85.3   84.8 |   89.9   75.2   81.9 |   +5.5  -10.0   -2.9 |
+          Exon level           |   77.2   82.7   79.9 |   83.8   83.9   83.8 |   +6.5   +1.2   +3.9 |
+          Intron chain level   |   33.7   47.5   39.4 |   42.0   62.0   50.1 |   +8.3  +14.4  +10.6 |
+          Locus level          |   52.7   41.4   46.4 |   66.0   44.4   53.1 |  +13.2   +3.0   +6.7 |
+          -------------------------------------------------------------------------------------------
 
 "
 training_species: [

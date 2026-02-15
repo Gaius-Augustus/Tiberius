@@ -1,0 +1,163 @@
+target_species: "Insecta"
+weights_url: "https://bioinf.uni-greifswald.de/bioinf/tiberius/models/insecta_unmasked_v2.tar.gz"
+ncbi_tax_id: 50557
+softmasking: False
+units: 186
+clamsa: False
+tiberius_version: 1.1.7
+date: "2026-02-14"
+comment: "Training for insects (no softmasking) by Katharina Hoff.
+
+        ------------------------------------------------------------------------------------------------
+        Species                 | Accession       | CDS Exon    | Intron chain| Locus       |
+                                |                 | Sens | Prec | Sens | Prec | Sens | Prec |
+        ------------------------------------------------------------------------------------------------
+        Bombyx mori             | GCF_030269925.1 | 78.5 | 86.1 | 35.1 | 62.1 | 61.0 | 43.0 |
+        Cataglyphis hispanica   | GCF_021464435.1 | 84.4 | 86.7 | 43.9 | 70.5 | 72.9 | 48.9 |
+        Colias croceus          | GCF_905220415.1 | 87.4 | 90.9 | 49.4 | 70.2 | 69.7 | 61.3 |
+        Drosophila melanogaster | GCF_000001215.4 | 81.2 | 91.6 | 49.6 | 86.4 | 79.5 | 71.9 |
+        Leptidea sinapis        | GCF_905404315.1 | 81.2 | 74.9 | 37.7 | 53.3 | 61.1 | 32.0 |
+        Nymphalis io            | GCF_905147045.1 | 87.3 | 87.2 | 45.2 | 65.5 | 71.9 | 51.4 |
+        Osmia bicornis          | GCF_907164935.1 | 79.8 | 79.9 | 40.5 | 66.9 | 66.9 | 37.0 |
+        Tribolium castaneum     | GCF_031307605.1 | 74.4 | 82.0 | 37.5 | 57.9 | 60.5 | 47.1 |
+        Vanessa cardui          | GCF_905220365.1 | 88.2 | 87.3 | 50.0 | 66.9 | 69.8 | 51.2 |
+        Zerene cesonia          | GCF_012273895.1 | 86.7 | 89.6 | 48.6 | 63.0 | 66.4 | 60.5 |
+        ------------------------------------------------------------------------------------------------
+        Average                 |                 | 82.9 | 85.6 | 43.8 | 66.3 | 68.0 | 50.4 |
+        ------------------------------------------------------------------------------------------------
+
+        Accuracy relative to the previously released insect parameters for 
+        unmasked genomes:
+
+        Comparison on 10 common species
+
+                               insecta_unmasked     | insecta_unmasked_v2  |      delta           |
+        Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+        -------------------------------------------------------------------------------------------
+        Base level           |   90.6   84.0   87.2 |   91.1   80.8   85.6 |   +0.4   -3.1   -1.5 |
+        Exon level           |   83.0   85.4   84.2 |   82.9   85.6   84.2 |   -0.1   +0.2   +0.1 |
+        Intron chain level   |   41.7   63.3   50.3 |   43.8   66.3   52.7 |   +2.1   +3.0   +2.4 |
+        Locus level          |   64.5   51.2   57.1 |   68.0   50.4   57.9 |   +3.4   -0.8   +0.8 |
+        -------------------------------------------------------------------------------------------
+
+        Accuracy relative to the previously released insect parameters for
+        masked genomes (using NCBI masking):
+
+        
+
+        Accuracy relative to ANNEVO, comparison on 10 common species
+
+        Comparison on 10 common species
+
+                                   ANNEVO           | insecta_unmasked_v2  |          delta           |
+        Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+        -------------------------------------------------------------------------------------------
+        Base level           |   91.3   93.4   92.3 |   91.1   80.8   85.6 |   -0.2  -12.6   -6.7 |
+        Exon level           |   80.0   80.4   80.2 |   82.9   85.6   84.2 |   +2.9   +5.2   +4.0 |
+        Intron chain level   |   31.6   47.8   38.1 |   43.8   66.3   52.7 |  +12.1  +18.5  +14.6 |
+        Locus level          |   48.4   47.0   47.7 |   68.0   50.4   57.9 |  +19.6   +3.4  +10.2 |
+        -------------------------------------------------------------------------------------------
+
+"
+training_species: [
+    Ennomos_fuscantarius
+    Sipha_flava
+    Drosophila_navojoa
+    Cardiocondyla_obscurior
+    Lasiommata_megera
+    Schlechtendalia_chinensis
+    Drosophila_birchii
+    Agrotis_ipsilon
+    Anastrepha_ludens
+    Bactrocera_oleae
+    Drosophila_grimshawi
+    Zeugodacus_cucurbitae
+    Metopolophium_dirhodum
+    Formica_exsecta
+    Megalopta_genalis
+    Aporophyla_lueneburgensis
+    Harpegnathos_saltator
+    Ostrinia_furnacalis
+    Drosophila_obscura
+    Culex_quinquefasciatus
+    Apis_mellifera
+    Sitophilus_oryzae
+    Bactrocera_dorsalis
+    Oryctes_rhinoceros
+    Trichoplusia_ni
+    Bactrocera_minax
+    Musca_domestica
+    Rhopalosiphum_padi
+    Polypedilum_vanderplanki
+    Thrips_palmi
+    Cochliomyia_hominivorax
+    Hormaphis_cornu
+    Episyrphus_balteatus
+    Calliphora_vicina
+    Arctia_plantaginis
+    Nicrophorus_vespilloides
+    Mythimna_separata
+    Chilo_suppressalis
+    Thymelicus_sylvestris
+    Frankliniella_occidentalis
+    Rhogogaster_chlorosoma
+    Schizaphis_graminum
+    Rhynchophorus_ferrugineus
+    Plodia_interpunctella
+    Ceratitis_capitata
+    Melitaea_cinxia
+    Cryptotermes_secundus
+    Amphipyra_tragopoginis
+    Operophtera_brumata
+    Onthophagus_taurus
+    Bradysia_coprophila
+    Nezara_viridula
+    Temnothorax_longispinosus
+    Cimex_lectularius
+    Propsilocerus_akamusi
+    Ips_nitidus
+    Melanaphis_sacchari
+    Pediculus_humanus
+    Anopheles_farauti
+    Chrysoperla_carnea
+    Laodelphax_striatellus
+    Glossina_palpalis
+    Monomorium_pharaonis
+    Diuraphis_noxia
+    Phlebotomus_papatasi
+    Drosophila_suzukii
+    Aphis_glycines
+    Sogatella_furcifera
+    Sitobion_avenae
+    Gryllus_bimaculatus
+    Andrena_minutula
+    Anopheles_arabiensis
+    Drosophila_innubila
+    Bactrocera_tryoni
+    Nasonia_vitripennis
+    Solenopsis_invicta
+    Galleria_mellonella
+    Camponotus_floridanus
+    Bombus_impatiens
+    Scaptomyza_flava
+    Pogonomyrmex_californicus
+    Dendroctonus_ponderosae
+    Helicoverpa_zea
+    Periplaneta_americana
+    Hycleus_cichorii
+    Leptopilina_boulardi
+    Anopheles_stephensi
+    Halyomorpha_halys
+    Hermetia_illucens
+    Ooceraea_biroi
+    Spodoptera_litura
+    Bemisia_tabaci
+    Lymantria_dispar
+    Anabrus_simplex
+    Aedes_aegypti
+    Stomoxys_calcitrans
+    Dermacentor_andersoni
+    Bicyclus_anynana
+    Armigeres_subalbatus
+    Malaya_genurostris
+]

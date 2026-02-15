@@ -5,7 +5,82 @@ softmasking: True
 clamsa: False
 tiberius_version: 1.1.6
 date: "2025-10-24"
-comment: "Saccharomycota training weights trained by the fungal team at JGI."
+comment: "!!! This parameter set has been superseded by fungi.yaml !!!
+
+          Saccharomycota training weights trained by the fungal team at JGI.
+          Accuracy benchmark by Katharina Hoff.
+
+          Species-specific accuracy results according to gffcompare 0.12.6 on test species
+          never seen during training of Tiberius (NCBI masking):
+
+          ---------------------------------------------------------------------------------------------
+          Species                         | Accession       | CDS Exon    | Intron chain| Locus       |
+                                          |                 | Sens | Prec | Sens | Prec | Sens | Prec |
+          ---------------------------------------------------------------------------------------------
+          Arxiozyma_heterogenica          | GCF_036370985.1 | 84.3 | 80.4 |  9.7 |  4.9 | 86.1 | 85.7 |
+          Ascoidea_rubescens              | GCF_001661345.1 | 44.6 | 50.7 | 16.7 | 22.9 | 53.4 | 55.5 |
+          Brettanomyces_bruxellensis      | GCF_011074885.1 | 75.5 | 71.2 | 31.9 | 28.8 | 80.0 | 76.2 |
+          Brettanomyces_nanus             | GCF_011074865.1 | 56.6 | 58.7 | 13.5 | 34.8 | 66.4 | 59.7 |
+          Candida_dubliniensis            | GCF_000026945.1 | 82.1 | 77.3 | 53.5 | 30.8 | 83.5 | 82.4 |
+          Candida_margitis                | GCF_024628925.1 | 74.5 | 75.1 | 29.0 | 38.3 | 79.9 | 77.6 |
+          Candida_oxycetoniae             | GCF_023343755.2 | 64.1 | 65.5 | 15.7 | 24.1 | 72.5 | 68.9 |
+          Candida_theae                   | GCF_024610275.1 | 71.1 | 72.0 | 24.4 | 32.6 | 77.0 | 74.7 |
+          Candida_tropicalis              | GCF_000006335.3 | 79.8 | 71.6 | 67.6 |  3.7 | 80.3 | 80.1 |
+          Diutina_rugosa                  | GCF_008704595.1 | 80.4 | 76.0 | 24.2 | 12.0 | 81.3 | 79.8 |
+          Eremothecium_cymbalariae        | GCF_000235365.1 | 87.7 | 78.1 | 59.6 | 32.3 | 88.3 | 82.2 |
+          Henningerozyma_blattae          | GCF_000315915.1 | 84.6 | 79.5 | 31.6 | 15.5 | 86.0 | 84.3 |
+          Huiozyma_naganishii             | GCF_000348985.1 | 83.8 | 83.2 | 33.3 | 25.9 | 85.1 | 85.7 |
+          Lachancea_lanzarotensis         | GCF_000938715.1 | 84.8 | 85.7 | 52.1 | 48.1 | 85.8 | 88.4 |
+          Lodderomyces_beijingensis       | GCF_963989305.1 | 80.6 | 79.8 | 44.6 | 43.2 | 82.1 | 83.1 |
+          Lodderomyces_elongisporus       | GCF_030384665.1 | 67.0 | 70.1 | 17.4 | 26.6 | 76.0 | 74.6 |
+          Maudiozyma_barnettii            | GCF_903064755.1 | 87.4 | 84.3 | 27.3 | 20.7 | 89.0 | 87.2 |
+          Metschnikowia_bicuspidata       | GCF_001664035.1 | 48.2 | 56.7 | 12.9 | 29.2 | 56.7 | 59.0 |
+          Meyerozyma_guilliermondii       | GCF_000149425.1 | 75.7 | 69.0 | 46.7 |  1.1 | 76.8 | 77.8 |
+          Ogataea_angusta                 | GCF_019207475.1 | 65.0 | 70.3 |  1.8 |  3.5 | 72.7 | 74.4 |
+          Ogataea_haglerorum              | GCF_019207285.1 | 63.1 | 68.2 |  1.6 |  3.2 | 71.3 | 72.7 |
+          Ogataea_parapolymorpha          | GCF_000187245.1 | 80.4 | 79.3 | 60.0 | 61.2 | 81.7 | 80.6 |
+          Ogataea_philodendri             | GCF_020536065.1 | 38.0 | 68.1 |  0.5 |  2.4 | 51.6 | 72.0 |
+          Ogataea_polymorpha              | GCF_001664045.1 | 55.3 | 57.1 | 21.9 | 39.0 | 60.9 | 58.2 |
+          Pichia_kudriavzevii             | GCF_003054445.1 | 84.6 | 82.8 | 44.9 | 29.1 | 85.5 | 85.9 |
+          Pichia_membranifaciens          | GCF_001661235.1 | 59.0 | 62.1 | 12.5 | 20.5 | 66.9 | 65.7 |
+          Saccharomyces_eubayanus         | GCF_001298625.1 | 88.9 | 83.4 | 39.6 | 14.9 | 89.8 | 87.2 |
+          Saccharomycodes_ludwigii        | GCF_020623625.1 | 83.0 | 79.8 |  6.9 |  4.6 | 85.4 | 84.0 |
+          Saccharomycopsis_crataegensis   | GCF_037102585.1 | 76.9 | 72.8 | 49.2 | 47.9 | 80.1 | 76.2 |
+          Scheffersomyces_coipomensis     | GCF_036884675.1 | 70.2 | 71.0 | 25.8 | 33.5 | 77.8 | 75.0 |
+          Scheffersomyces_spartinae       | GCF_019049425.1 | 57.5 | 61.7 | 13.1 | 31.8 | 68.5 | 62.9 |
+          Spathaspora_passalidarum        | GCF_000223485.1 | 60.9 | 64.7 | 28.4 | 46.3 | 66.2 | 66.1 |
+          Sugiyamaella_lignohabitans      | GCF_001640025.1 | 59.3 | 35.1 | 21.0 |  2.0 | 59.9 | 50.3 |
+          Vanderwaltozyma_polyspora       | GCF_000150035.1 | 88.0 | 79.2 | 49.3 | 18.7 | 89.1 | 84.7 |
+          Wickerhamiella_sorbophila       | GCF_002251995.1 | 77.2 | 80.2 | 18.0 | 30.1 | 81.8 | 82.0 |
+          Yamadazyma_tenuis               | GCF_029203305.1 | 62.2 | 63.0 | 20.3 | 42.2 | 70.2 | 63.8 |
+          ---------------------------------------------------------------------------------------------
+          Average (36 species)            |                 | 71.7 | 71.2 | 28.5 | 25.2 | 76.3 | 75.1 |
+          ---------------------------------------------------------------------------------------------
+
+
+          Accuracy relative to ANNEVO (comparison on 36 common species):
+
+                                         ANNEVO       |    saccharomycota    |         delta        |
+          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+          -------------------------------------------------------------------------------------------
+          Base level           |   97.3   94.9   96.1 |   97.3   94.9   96.1 |   -0.0   +0.0   -0.0 |
+          Exon level           |   69.8   67.7   68.7 |   71.7   71.2   71.5 |   +2.0   +3.5   +2.8 |
+          Intron chain level   |   36.3   25.1   29.6 |   28.5   25.2   26.7 |   -7.7   +0.1   -2.9 |
+          Locus level          |   73.4   71.7   72.6 |   76.3   75.1   75.7 |   +2.9   +3.4   +3.1 |
+          -------------------------------------------------------------------------------------------
+
+
+          Accuracy relative to fungi parameters (comparison on 36 common species):
+
+                                                   fungi     |    saccharomycota    |         delta        |
+          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+          -------------------------------------------------------------------------------------------
+          Base level           |   98.1   94.7   96.4 |   97.3   94.9   96.1 |   -0.8   +0.2   -0.3 |
+          Exon level           |   75.6   75.1   75.4 |   71.7   71.2   71.5 |   -3.9   -3.9   -3.9 |
+          Intron chain level   |   44.9   38.5   41.5 |   28.5   25.2   26.7 |  -16.4  -13.3  -14.7 |
+          Locus level          |   79.4   78.0   78.7 |   76.3   75.1   75.7 |   -3.2   -2.9   -3.0 |
+          -------------------------------------------------------------------------------------------
+"
 training_species: [
    Blastobotrys (Arxula) adeninivorans
    Debaryomyces fabryi NRRL Y-17914

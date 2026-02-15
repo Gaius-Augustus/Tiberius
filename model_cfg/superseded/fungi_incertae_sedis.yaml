@@ -5,7 +5,9 @@ softmasking: False
 clamsa: False
 tiberius_version: 1.1.7
 date: "2026-02-01"
-comment: "Fungi incertae sedis training weights trained by Katharina Hoff.
+comment: "!!! This parameter set has been superseded by fungi.yaml !!!
+          
+          Fungi incertae sedis training weights trained by Katharina Hoff.
 
           Accuracy results according to gffcompare 0.12.6 on test species
           never seen during training of Tiberius:

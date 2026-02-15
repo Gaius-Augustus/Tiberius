@@ -41,7 +41,7 @@ We are providing pre-trained models for the following clades (see [model_cfg/REA
 
 - **Animals:** Mammalia, Vertebrates, Insecta
 - **Plants:** Eudicotyledons, Monocotyledonae
-- **Fungi:** Fungi, Fungi incertae sedis, Mucoromycota, Saccharomycota, Sordariomycota, Basidiomycota
+- **Fungi:** Fungi
 - **Algae & Protists:** Diatoms, Chlorophyta
 
 

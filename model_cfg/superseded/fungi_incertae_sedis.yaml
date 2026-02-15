@@ -44,6 +44,21 @@ comment: "!!! This parameter set has been superseded by fungi.yaml !!!
           February 1st 2026.
 
           ANNEVO v2.2.
+
+
+          Accuracy relative to the fungi parameters:
+          Average accuracy results across 4 species 
+          (Coemansia_reversa_NRRL_1564, Encephalitozoon_cuniculi_GB-M1,
+          Phycomyces_blakesleeanus_NRRL_1555_minus, Spizellomyces_punctatus_DAOM_BR117):
+
+                                          fungi       | fungi_incertae_sedis |         delta        |
+          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+          -------------------------------------------------------------------------------------------
+          Base level           |   91.6   87.3   89.4 |   90.1   86.3   88.2 |   -1.5   -1.0   -1.2 |
+          Exon level           |   64.3   68.7   66.5 |   64.1   66.5   65.3 |   -0.2   -2.2   -1.1 |
+          Intron chain level   |   41.3   41.1   41.2 |   43.9   38.8   41.2 |   +2.6   -2.3   +0.0 |
+          Locus level          |   53.9   57.9   55.8 |   52.4   56.2   54.2 |   -1.5   -1.7   -1.6 |
+          -------------------------------------------------------------------------------------------
 "
 training_species: [
    Apophysomyces_sp._BC1021

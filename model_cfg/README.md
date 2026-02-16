@@ -29,13 +29,13 @@ The `superseded/` subdirectory contains older parameter YAML files that have bee
 
 | Model name | Target species | Superseded by |
 | ----------------|------------------|------------------|
-| basidiomycota | Basidiomycota | — |
-| fungi_incertae_sedis | Fungi incertae sedis | — |
+| basidiomycota | Basidiomycota | fungi |
+| fungi_incertae_sedis | Fungi incertae sedis | fungi |
 | insecta_unmasked | Insecta | insecta_unmasked_v2 |
 | lepidoptera | Lepidoptera | insecta |
-| mucoromycota | Mucoromycota | — |
-| saccharomycota | Saccharomycota | — |
-| sordariomycota | Sordariomycota | — |
+| mucoromycota | Mucoromycota | fungi |
+| saccharomycota | Saccharomycota | fungi |
+| sordariomycota | Sordariomycota | fungi |
 
 ---
 

@@ -41,7 +41,7 @@ We are providing pre-trained models for the following clades (see [model_cfg/REA
 
 - **Animals:** Mammalia, Vertebrates, Insecta
 - **Plants:** Eudicotyledons, Monocotyledonae
-- **Fungi:** Fungi, Fungi incertae sedis, Mucoromycota, Saccharomycota, Sordariomycota, Basidiomycota
+- **Fungi:** Fungi
 - **Algae & Protists:** Diatoms, Chlorophyta
 
 
@@ -158,6 +158,8 @@ All modes are invoked through `tiberius.py`. Add `--singularity` to any direct (
 ### Choosing the Model Weights
 
 Tiberius requires a model config file (`--model_cfg`). The model config is a YAML file that contains the model weights URL and other information about the model. See [model_cfg](model_cfg/README.md) for available configurations and how to create custom ones. You can pass either a full path or a short name (e.g., `diatoms` or `diatoms.yaml`).
+
+> **Note:** Superseded parameter files are archived in [`model_cfg/superseded/`](model_cfg/superseded/) for reproducibility of previously published results. Always use the current parameter files in [`model_cfg/`](model_cfg/) for new analyses.
 
 To list all available model configs and their target species:
 

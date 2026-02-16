@@ -1,0 +1,127 @@
+target_species: "Basidiomycota"
+ncbi_tax_id: 5204
+weights_url: "https://bioinf.uni-greifswald.de/bioinf/tiberius/models/basidiomycota.tar.gz"
+softmasking: False
+clamsa: False
+tiberius_version: 1.1.7
+date: "2026-01-23"
+comment: "!!! This parameter set has been superseded by fungi.yaml !!!
+
+          Basidiomycota training weights trained by Katharina Hoff.
+
+          Species-specific accuracy results according to gffcompare 0.12.6 on test species
+          never seen during training of Tiberius:
+
+          ---------------------------------------------------------------------------------------------
+          Species                         | Accession       | CDS Exon    | Intron chain| Locus       |
+                                          |                 | Sens | Prec | Sens | Prec | Sens | Prec |
+          ---------------------------------------------------------------------------------------------
+          Acaromyces_ingoldii             | GCF_003144295.1 | 81.0 | 80.8 | 74.3 | 74.4 | 64.6 | 65.6 |
+          Agaricus_bisporus               | GCF_000300555.1 | 77.6 | 77.0 | 46.7 | 48.5 | 40.1 | 43.0 |
+          Cantharellus_anzutake           | GCF_015039405.1 | 58.8 | 45.1 | 24.1 | 19.4 | 19.1 | 15.5 |
+          Ceraceosorus_guamensis          | GCF_003144195.1 | 76.1 | 77.8 | 58.3 | 60.1 | 47.7 | 53.9 |
+          Coniophora_puteana              | GCF_000271625.1 | 76.6 | 75.5 | 50.8 | 50.9 | 44.1 | 44.8 |
+          Cryptococcus_depauperatus       | GCF_001720195.1 | 70.0 | 84.0 | 41.5 | 48.2 | 39.0 | 45.1 |
+          Cutaneotrichosporon_oleaginosum | GCF_008065305.1 | 40.9 | 44.6 | 18.7 | 19.0 | 20.2 | 21.6 |
+          Dacryopinax_primogenitus        | GCF_000292625.1 | 74.7 | 74.2 | 54.8 | 55.0 | 43.9 | 46.4 |
+          Fibroporia_radiculosa           | GCF_000313525.1 | 78.5 | 79.4 | 43.6 | 45.6 | 39.7 | 42.1 |
+          Filobasidium_floriforme         | GCF_021052385.1 | 84.0 | 81.1 | 60.9 | 58.7 | 55.8 | 51.3 |
+          Jaminaea_rosea                  | GCF_003144245.1 | 75.5 | 74.1 | 70.3 | 68.7 | 61.4 | 63.5 |
+          Malassezia_globosa              | GCF_000181695.2 | 38.0 | 33.3 | 21.5 | 13.5 | 31.3 | 36.5 |
+          Malassezia_japonica             | GCF_029542785.1 | 29.8 | 40.8 | 12.3 | 17.2 | 29.4 | 33.1 |
+          Malassezia_pachydermatis        | GCF_001278385.1 | 26.8 | 39.9 | 10.8 | 16.2 | 28.6 | 34.8 |
+          Malassezia_restricta            | GCF_003290485.1 | 35.1 | 48.0 | 11.6 | 13.9 | 39.0 | 52.1 |
+          Malassezia_sympodialis          | GCF_000349305.1 | 20.1 | 26.5 |  5.2 |  9.3 | 22.3 | 25.6 |
+          Malassezia_vespertilionis       | GCF_029542925.1 | 30.7 | 41.6 |  9.5 | 13.5 | 36.4 | 41.8 |
+          Mycena_indigotica               | GCF_014461135.1 | 57.1 | 57.9 | 38.0 | 32.3 | 35.7 | 29.3 |
+          Phanerochaete_carnosa           | GCF_000300595.1 | 74.4 | 69.9 | 46.2 | 43.2 | 34.6 | 37.6 |
+          Pseudomicrostroma_glucosiphilum | GCF_003144135.1 | 76.2 | 76.6 | 69.3 | 69.8 | 60.3 | 63.8 |
+          Puccinia_graminis               | GCF_000149925.1 | 65.7 | 70.9 | 40.7 | 47.0 | 35.1 | 40.8 |
+          Puccinia_striiformis            | GCF_021901695.1 | 69.5 | 72.3 | 44.5 | 49.9 | 37.4 | 45.0 |
+          Puccinia_triticina              | GCF_026914185.1 | 63.7 | 53.9 | 33.0 | 27.2 | 28.8 | 22.9 |
+          Punctularia_strigosozonata      | GCF_000264995.1 | 80.3 | 76.8 | 52.5 | 51.1 | 44.8 | 44.5 |
+          Rhizoctonia_solani              | GCF_016906535.1 | 67.6 | 74.7 | 29.9 | 32.3 | 26.1 | 30.1 |
+          Rhodotorula_graminis            | GCF_001329695.1 | 86.2 | 84.0 | 62.5 | 60.6 | 57.5 | 55.6 |
+          Serpula_lacrymans               | GCF_000218685.1 | 70.8 | 71.7 | 40.0 | 42.7 | 31.4 | 37.3 |
+          Sporisorium_graminicola         | GCF_005498985.1 | 85.0 | 80.4 | 78.5 | 73.3 | 82.0 | 79.8 |
+          Tilletiaria_anomala             | GCF_000711695.1 | 73.8 | 78.4 | 63.5 | 66.7 | 49.0 | 56.5 |
+          Tilletiopsis_washingtonensis    | GCF_003144115.1 | 86.1 | 84.5 | 70.8 | 69.9 | 57.2 | 62.7 |
+          Tremella_mesenterica            | GCF_000271645.1 | 34.2 | 45.7 |  6.7 |  8.2 |  8.9 | 10.0 |
+          Trichosporon_asahii             | GCF_000293215.1 | 53.1 | 51.6 | 27.2 | 25.9 | 34.3 | 34.2 |
+          Vanrija_pseudolonga             | GCF_020906515.1 | 68.2 | 69.8 | 43.0 | 42.0 | 44.6 | 42.9 |
+          Wallemia_ichthyophaga           | GCF_000400465.1 | 53.3 | 76.1 | 38.5 | 55.6 | 35.2 | 50.4 |
+          Wallemia_mellicola              | GCF_000263375.1 | 49.8 | 71.2 | 32.2 | 48.7 | 27.0 | 41.6 |
+          ---------------------------------------------------------------------------------------------
+          Average (35 species)            |                 | 62.5 | 65.4 | 40.9 | 42.2 | 39.8 | 42.9 |
+          ---------------------------------------------------------------------------------------------
+
+
+          Accuracy relative to ANNEVO (comparison on 35 common species):
+          
+                                         ANNEVO       |   basidiomycota      |         delta        |
+          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+          -------------------------------------------------------------------------------------------
+          Base level           |   93.3   84.9   88.9 |   85.2   87.3   86.2 |   -8.2   +2.4   -2.7 |
+          Exon level           |   66.1   61.0   63.5 |   62.5   65.4   64.0 |   -3.5   +4.4   +0.5 |
+          Intron chain level   |   40.7   38.1   39.4 |   40.9   42.2   41.6 |   +0.2   +4.1   +2.2 |
+          Locus level          |   39.1   37.2   38.1 |   39.8   42.9   41.3 |   +0.7   +5.7   +3.1 |
+          -------------------------------------------------------------------------------------------
+
+
+          Accuracy relative to fungi parameters (comparison on 35 common species):
+
+                                          fungi       |   basidiomycota      |         delta        |
+          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+          -------------------------------------------------------------------------------------------
+          Base level           |   92.7   85.8   89.2 |   85.2   87.3   86.2 |   -7.6   +1.4   -3.0 |
+          Exon level           |   70.4   69.8   70.1 |   62.5   65.4   64.0 |   -7.9   -4.4   -6.2 |
+          Intron chain level   |   49.1   48.4   48.7 |   40.9   42.2   41.6 |   -8.1   -6.1   -7.1 |
+          Locus level          |   47.3   47.4   47.3 |   39.8   42.9   41.3 |   -7.5   -4.5   -6.1 |
+          -------------------------------------------------------------------------------------------
+
+
+          Accuracy relative to Helixer (comparison on 2 species):
+          - Mycosarcoma_maydis (GCF_000328475.2)
+          - Puccinia_graminis_f._sp._tritici_CRL_75-36-700-3 (GCF_000149925.1)
+
+                                        Helixer       |   basidiomycota      |         delta        |
+          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+          -------------------------------------------------------------------------------------------
+          Exon level           |   68.0   57.2   62.1 |   71.7   75.3   73.5 |   +3.7  +18.1  +11.3 |
+          Intron chain level   |   41.5   34.8   37.9 |   70.0   71.6   70.8 |  +28.5  +36.8  +32.9 |
+          Locus level          |   49.4   45.3   47.3 |   56.2   60.8   58.4 |   +6.8  +15.5  +11.1 |
+          -------------------------------------------------------------------------------------------
+
+"
+training_species: [
+   Favolaschia_claudopus
+   Lentinula_aciculospora
+   Pisolithus_croceorrhizus
+   Lactarius_indigo
+   Lyophyllum_atratum
+   Exidia_glandulosa_HHB12029
+   Amanita_rubescens
+   Calocera_viscosa_TUFC12733
+   Schizophyllum_amplum
+   Phellopilus_nigrolimitatus
+   Ramaria_rubella
+   Fomitopsis_serialis
+   Sistotremastrum_suecicum_HHB10207_ss-3
+   Hymenopellis_radicata
+   Pholiota_molesta
+   Meira_miltonrushii
+   Violaceomyces_palustris
+   Testicularia_cyperi
+   Ustilago_nuda
+   Moesziomyces_aphidis
+   Melanopsichium_pennsylvanicum
+   Mixia_osmundae_IAM_14324
+   Melampsora_larici-populina_98AG31
+   Melampsora_americana
+   Cronartium_quercuum_f._sp._fusiforme_G11
+   Microbotryomycetes_sp._JL221
+   Microbotryomycetes_sp._JL201
+   Microbotryum_saponariae
+   Microbotryum_silenes-dioicae
+   Microbotryum_lychnidis-dioicae_p1A1_Lamole
+]

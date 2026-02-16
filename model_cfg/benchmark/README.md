@@ -1,3 +1,9 @@
+# Tiberius Benchmarks
+
+> **Note:** Some benchmarks below were produced with parameter sets that have since been superseded. These results are retained for reference and reproducibility. The superseded YAML files can be found in [`model_cfg/superseded/`](../superseded/). For new analyses, always use the current parameter files in [`model_cfg/`](../).
+
+---
+
 ## Mammals
 
 | Species                 | Tool     | Exon Sn | Exon Pr |  Exon F1 | Gene Sn | Gene Pr | Gene F1 |
@@ -41,7 +47,7 @@
 |                             | BRAKER3  |   65.7  |   83.1  |   73.8   |   65.2   |   73.7   |   69.2   |
 
 
-## Lepidotera
+## Lepidoptera *(superseded — see `insecta`)*
 
 | Species            | Tool     | Exon Sn | Exon Pr |  Exon F1 | Gene Sn | Gene Pr | Gene F1 |
 | :----------------- | :------- | :-----: | :-----: | :------: | :------: | :------: | :------: |
@@ -101,7 +107,7 @@
 |                          | Helixer         |   87.6  |   62.2  |   72.7   |   61.9   |   43.1   |   51.0   |
 
 
-## Mucoromycota
+## Mucoromycota *(superseded)*
 
 | Species             | Tool     | Exon Sn | Exon Pr |  Exon F1 | Gene Sn | Gene Pr | Gene F1 |
 | :------------------ | :------- | :-----: | :-----: | :------: | :------: | :------: | :------: |
@@ -115,7 +121,7 @@
 |                     | AUGUSTUS |   81.2  |   84.4  |   82.8   |   53.3   |   56.7   |   55.0   |
 
 
-## Saccharomycota
+## Saccharomycota *(superseded)*
 
 | Species                   | Tool     | Exon Sn | Exon Pr |  Exon F1 | Gene Sn | Gene Pr | Gene F1 |
 | :------------------------ | :------- | :-----: | :-----: | :------: | :------: | :------: | :------: |
@@ -128,7 +134,7 @@
 |                           | AUGUSTUS |   46.0  |   63.9  |   53.5   |   55.2   |   62.7   |   58.7   |
 
 
-## Sordariomycota
+## Sordariomycota *(superseded)*
 
 | Species                     | Tool     | Exon Sn | Exon Pr |  Exon F1 | Gene Sn | Gene Pr | Gene F1 |
 | :-------------------------- | :------- | :-----: | :-----: | :------: | :------: | :------: | :------: |

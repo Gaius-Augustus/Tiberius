@@ -13,8 +13,6 @@ def parseCmd():
         help='')
     parser.add_argument('--load', type=str, default='',
         help='')
-    parser.add_argument('--load_lstm', type=str, default='',
-        help='')
     parser.add_argument('--load_hmm', type=str, default='',
         help='')
     parser.add_argument('--hmm', action='store_true',

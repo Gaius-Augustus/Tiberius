@@ -6,15 +6,18 @@
 # Running Tiberius for single genome prediction
 # ==============================================================
 
-import sys, os, sys, requests, time, logging, math, gzip, bz2, yaml
+import sys, os, sys, requests, time, logging, gzip, bz2, yaml, math
 script_dir = os.path.dirname(os.path.realpath(__file__))
 import subprocess as sp
 from Bio import SeqIO
 from Bio.Seq import Seq
+from pathlib import Path
+import bricks2marble as b2m
+
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
-MAX_TF_VERSION = '2.12'
+MIN_TF_VERSION = '2.13'
 SCRIPT_ROOT = os.path.dirname(os.path.abspath(__file__))
 seqgroup_size = 50000400
 
@@ -71,10 +74,10 @@ def load_model_config(
 
 # Function to compare TensorFlow version
 def check_tf_version(tf_version):
-    if tf_version > MAX_TF_VERSION:
-        # print(f"WARNING: You are using TensorFlow version {tf_version}, "
-        #               f"which is newer than the recommended maximum version {MAX_TF_VERSION}. "
-        #               "It can produce an error if you use a sequence length > 259,992 during inference!")
+    if tf_version < MIN_TF_VERSION:
+        print(f"WARNING: You are using TensorFlow version {tf_version}, "
+                      f"which is older than the recommended minimum version {MIN_TF_VERSION}. "
+                      "It can will produce an error during the prediction step!")
         return False
     return True
 
@@ -195,7 +198,6 @@ def load_genome(genome_path):
             genome = SeqIO.to_dict(SeqIO.parse(file, "fasta"))
     return genome
 
-
 def run_tiberius(args):
     if args.learnMSA:
         sys.path.insert(0, args.learnMSA)
@@ -210,14 +212,6 @@ def run_tiberius(args):
             model_path = os.path.abspath(args.model)
         else:
             raise FileNotFoundError(f"A model config file has to be specified with --model_cfg!")
-            # if args.clamsa and args.no_softmasking:
-            #     raise InvalidArgumentCombinationError("Use either --clamsa or --no_softmasking with the default mammalian models!")
-            # elif args.clamsa:
-            #     config = load_model_config(f"{script_dir}/../model_cfg/mammalia_clamsa_v2.yaml")
-            # elif args.no_softmasking:
-            #     config = load_model_config(f"{script_dir}/../model_cfg/mammalia_nosoftmasking_v2.yaml")
-            # else:
-            #     config = load_model_config(f"{script_dir}/../model_cfg/mammalia_softmasking_v2.yaml")
 
         if model_path:
             check_file_exists(model_path)
@@ -245,8 +239,8 @@ def run_tiberius(args):
         logging.error(f'ERROR: The argument "strand" has to be either "+" or "-" or "+,-". Current value: {args.strand}.')
         sys.exit(1)
 
-    parallel_factor = compute_parallel_factor(seq_len) if args.parallel_factor == 0 else args.parallel_factor
-    logging.info(f'HMM parallel factor: {parallel_factor}')
+    # parallel_factor = compute_parallel_factor(seq_len) if args.parallel_factor == 0 else args.parallel_factor
+    # logging.info(f'HMM parallel factor: {parallel_factor}')
 
     softmasking = not args.no_softmasking if not config else config["softmasking"]
     logging.info(f'Softmasking: {softmasking}')
@@ -283,114 +277,82 @@ def run_tiberius(args):
     else:
         import tensorflow as tf
 
-    if not check_tf_version(tf.__version__) and args.seq_len > 259992:
+    check_tf_version(tf.__version__)
+
+    if args.seq_len > 500_004:
         logging.error(f"\nWARNING: The sequence length {args.seq_len} can be too long for TensorFlow version {tf.__version__}. "
-                        "If it fails, please use a sequence length <= 259992 (--seq_len).\n")
+                        "If it fails, please use a sequence length <= 500004 (--seq_len).\n")
 
 
-    from tiberius import Anno, make_weighted_cce_loss, PredictionGTF
+    from tiberius import make_weighted_cce_loss, PredictionGTF
 
+    parallel_factor = compute_parallel_factor(seq_len) if args.parallel_factor == 0 else args.parallel_factor
+    logging.info(f'HMM parallel factor: {parallel_factor}')
     start_time = time.time()
 
-    anno = Anno(gtf_out, f'anno')
-    tx_id=0
-
-    # load genome once completely into memory
-    # TODO: this should eventually be done in streaming mode to save RAM
-    genome = load_genome(genome_path)
     tf.keras.utils.get_custom_objects()["weighted_cce_loss"] = make_weighted_cce_loss()
 
-    for j, s_ in enumerate(strand):
-        pred_gtf = PredictionGTF(
-            model_path_lstm_old=args.model_lstm_old,
-            model_path_old=args.model_old,
-            model_path=model_path,
-            model_path_hmm=model_path_hmm,
-            seq_len=seq_len,
-            batch_size=batch_size,
-            hmm=True,
-            hmm_emitter_epsilon=args.hmm_eps,
-            temp_dir=None,
-            num_hmm=1,
-            hmm_factor=1,
-            genome=genome,
-            softmask=not args.no_softmasking, strand=s_,
-            parallel_factor=parallel_factor,
-        )
+    pred_gtf = PredictionGTF(
+        model_path_lstm_old=args.model_lstm_old,
+        model_path_old=args.model_old,
+        model_path=model_path,
+        model_path_hmm=model_path_hmm,
+        seq_len=seq_len,
+        batch_size=batch_size,
+        hmm=True,
+        hmm_emitter_epsilon=args.hmm_eps,
+        temp_dir=None,
+        num_hmm=1,
+        hmm_factor=1,
+        genome=None,
+        softmask=not args.no_softmasking, strand='+',
+        parallel_factor=parallel_factor,
+    )
 
-        pred_gtf.load_model(summary=j==0)
+    pred_gtf.load_model(summary=1)
 
-        genome_fasta = pred_gtf.init_fasta(chunk_len=seq_len, min_seq_len=min_seq_len)
-        genome_seq_dict = {s_n: len(s) for s_n, s in zip(genome_fasta.sequence_names, genome_fasta.sequences)}
-        seq_groups = group_sequences(genome_fasta.sequence_names,
-                                   [len(s) for s in genome_fasta.sequences],
-                                    t=seqgroup_size, chunk_size=seq_len)
+    genome_fasta = b2m.io.load_fasta(Path(genome_path).expanduser(), T=seq_len)
+    genome_fasta.rename(lambda x: x.split(" ")[0])
+    seq_groups = genome_fasta.grouped(t=seqgroup_size, chunk_size=seq_len)
+    numb_tx = 0
+    for k, seq in enumerate(seq_groups):
+        logging.info(f'Tiberius gene predicton {k+1}/{len(seq_groups)} ')
+        adapted_seqlen = seq.compute_adaptive_chunksize(
+            base_chunksize=seq_len, resample=True,
+            parallel_factor=parallel_factor)
 
-        for k, seq in enumerate(seq_groups):
-            logging.info(f'Tiberius gene predicton {k+1+len(seq_groups)*j}/{len(strand)*len(seq_groups)} ')
-            x_data, coords, adapted_seqlen = pred_gtf.load_genome_data(genome_fasta, seq,
-                                                       softmask=softmasking, strand=s_)
-            pred_gtf.adapt_batch_size(adapted_seqlen)
+        pred_gtf.adapt_batch_size(adapted_seqlen)
 
-            clamsa=None
-            if clamsa_prefix:
-                clamsa = pred_gtf.load_clamsa_data(clamsa_prefix=clamsa_prefix, seq_names=seq,
-                                 strand=s_, chunk_len=seq_len, pad=True)
+        clamsa=None
+        if clamsa_prefix:
+            clamsa = pred_gtf.load_clamsa_data(clamsa_prefix=clamsa_prefix, seq_names=seq,
+                                strand='+', chunk_len=seq_len, pad=True)
+        print(numb_tx, file=sys.stderr)
+        annotation = pred_gtf.get_predictions(seq, clamsa_inp=clamsa, starting_tx_id=numb_tx)
+        mode = 'w' if k == 0 else 'a'
+        annotation.clean(
+            fasta=seq,
+            min_cds_length=200, boundaries=True,
+            start_codons=False, stop_codons=False,
+            intron_begin=False, intron_end=False,
+            inframe_stop_codons=True
+            )
+        annotation.to_gtf(gtf_out, mode=mode)
+        if args.codingseq:
+            annotation.codingseq_to_file(
+                fasta=seq, path=args.codingseq, mode=mode)
 
-            hmm_pred = pred_gtf.get_predictions(x_data, hmm_filter=True, clamsa_inp=clamsa)
-            anno, tx_id = pred_gtf.create_gtf(y_label=hmm_pred, coords=coords, f_chunks=x_data,
-                                clamsa_inp=clamsa, strand=s_, anno=anno, tx_id=tx_id,
-                                filt=False)
+        if args.protseq:
+            annotation.proteinseq_to_file(
+                fasta=seq, path=args.protseq, mode=mode)
 
-    # filter transcripts
-    anno_outp = Anno('', f'anno')
-    out_tx = {}
-    for tx_id, tx in anno.transcripts.items():
-        exons = tx.get_type_coords('CDS', frame=False)
-        filt=False
-
-        # filter out tx with inframe stop codons
-        coding_seq, prot_seq = assemble_transcript(exons, genome[tx.chr], tx.strand )
-        if not coding_seq or check_in_frame_stop_codons(prot_seq):
-            filt = True
-        # filter out transcripts with cds len shorter than args.filter_short
-        if not filt and tx.get_cds_len() < 201:
-            filt = True
-
-        if not filt and tx.start < 1 or tx.end > genome_seq_dict[tx.chr]:
-            filt = True
-
-        if not filt:
-            out_tx[tx_id] = tx
-
-    anno_outp.add_transcripts(out_tx, f'anno')
-    anno_outp.norm_tx_format()
-    anno_outp.find_genes()
-    anno_outp.rename_tx_ids(args.id_prefix)
-    anno_outp.write_anno(gtf_out)
-
-    prot_seq_out = ""
-    coding_seq_out = ""
-    if args.protseq or args.codingseq:
-        for tx_id, tx in anno_outp.transcripts.items():
-            exons = tx.get_type_coords('CDS', frame=False)
-            coding_seq, prot_seq = assemble_transcript(exons, genome[tx.chr], tx.strand)
-            if args.codingseq:
-                coding_seq_out +=f">{tx_id}\n{coding_seq}\n"
-            if args.protseq:
-                prot_seq_out +=f">{tx_id}\n{prot_seq}\n"
-
-    if args.codingseq:
-        with open(args.codingseq, 'w+') as f:
-            f.write(coding_seq_out.strip())
-
-    if args.protseq:
-        with open(args.protseq, 'w+') as f:
-            f.write(prot_seq_out.strip())
+        numb_tx += len(annotation._genes)
 
     end_time = time.time()
     duration = end_time - start_time
     print(f"Tiberius took {duration/60:.4f} minutes to execute.")
+
+
 
 
 def main():

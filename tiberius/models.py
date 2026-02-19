@@ -138,12 +138,12 @@ def custom_cce_f1_loss(f1_factor, batch_size,
         return combined_loss
     return loss_
 
-def lstm_model(units=200, filter_size=64,
-              kernel_size=9, numb_conv=2,
-               numb_lstm=3, dropout_rate=0.0,
-               pool_size=10, stride=0,
-               lstm_mask=False, output_size=7,
-               multi_loss=False, residual_conv=False,
+def lstm_model(units=372, filter_size=128,
+              kernel_size=9, numb_conv=3,
+               numb_lstm=2, dropout_rate=0.0,
+               pool_size=9, stride=0,
+               lstm_mask=False, output_size=15,
+               multi_loss=False, residual_conv=True,
                clamsa=False, clamsa_kernel=6, softmasking=True, lru_layer=False
               ):
     """

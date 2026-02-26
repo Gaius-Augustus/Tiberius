@@ -1,7 +1,7 @@
 # ==============================================================
 # Authors: Lars Gabriel
 #
-# Class loading tfrecords so that they fit different training 
+# Class loading tfrecords so that they fit different training
 # scenarios
 # ==============================================================
 
@@ -14,7 +14,7 @@ _empty_serial = tf.io.serialize_tensor(
 ).numpy()
 
 class DataGenerator:
-    """DataGenerator class for reading and processing TFRecord files 
+    """DataGenerator class for reading and processing TFRecord files
     so that they can be used for training a deepfinder model.
 
     Args:
@@ -32,15 +32,15 @@ class DataGenerator:
         tx_filter_region (int): Region around the transcript IDs where the weights are set to 0 as well.
     """
 
-    def __init__(self, file_path, 
-                 batch_size, shuffle=True, 
-                 repeat=True,                  
+    def __init__(self, file_path,
+                 batch_size, shuffle=True,
+                 repeat=True,
                  filter=False,
                  output_size=5,
                 hmm_factor=None,
                  seq_weights=0, softmasking=True,
                 clamsa=False,
-                oracle=False, 
+                oracle=False,
                 threads=96,
                 tx_filter=[],
                 tx_filter_region=1000):
@@ -65,7 +65,7 @@ class DataGenerator:
 
         self.dataset = self._read_tfrecord_file(repeat=repeat)
         self.iterator = iter(self.dataset)
-    
+
     def _parse_fn(self, example):
         features = {
             'input':  tf.io.FixedLenFeature([], tf.string),
@@ -81,7 +81,7 @@ class DataGenerator:
         t = tf.io.parse_tensor(parsed['tx_ids'], out_type=tf.string)
 
         return x, y, t
-    
+
     def _parse_fn_clamsa(self, example):
         """Parse function for decoding TFRecord examples including clamsa data.
 
@@ -101,7 +101,7 @@ class DataGenerator:
         y = tf.io.parse_tensor(parsed_features['output'], out_type=tf.int32)
         clamsa_track = tf.io.parse_tensor(parsed_features['clamsa'], out_type=tf.double)
         return x, y, clamsa_track
-    
+
     def _read_tfrecord_file(self, repeat=True):
         """Read and preprocess the TFRecord file.
 
@@ -110,19 +110,19 @@ class DataGenerator:
 
         Returns:
             tf.data.Dataset: Processed dataset containing input and output tensors.
-        """       
+        """
         filepath_dataset = tf.data.Dataset.list_files(self.file_path, shuffle=True)
 
         # Interleave the reading of these files, parsing tfrecord files in parallel.
         dataset = filepath_dataset.interleave(
-            lambda x: tf.data.TFRecordDataset(x, compression_type='GZIP'), 
-            cycle_length=min(self.threads,len(self.file_path)), 
+            lambda x: tf.data.TFRecordDataset(x, compression_type='GZIP'),
+            cycle_length=min(self.threads,len(self.file_path)),
             num_parallel_calls=min(self.threads,len(self.file_path)),
             deterministic=False
         )
         options = tf.data.Options()
         options.threading.private_threadpool_size = self.threads
-        
+
         dataset = dataset.with_options(options)
         if self.clamsa:
             dataset = dataset.map(self._parse_fn_clamsa,
@@ -130,24 +130,24 @@ class DataGenerator:
         else:
             dataset = dataset.map(self._parse_fn,
                     num_parallel_calls=tf.data.experimental.AUTOTUNE)
-        
+
         if self.filter:
             dataset = dataset.filter(
                 lambda x, y, t: tf.greater(tf.reduce_max(tf.argmax(y, axis=-1)), 0)
                 )
-        
+
         if self.shuffle:
             dataset = dataset.shuffle(buffer_size=50)
-            options.experimental_deterministic = False 
-        else: 
+            options.experimental_deterministic = False
+        else:
             options.experimental_deterministic = True
 
         if repeat:
             dataset = dataset.repeat()
 
-        def preprocess(x, y, t=tf.constant([], dtype=tf.string)):            
+        def preprocess(x, y, t=tf.constant([], dtype=tf.string)):
             tf.debugging.assert_rank(y, 2, message="y must be [seq_len, output_size]")
-            x = tf.reshape(x, [-1, tf.shape(x)[-1]]) 
+            x = tf.reshape(x, [-1, tf.shape(x)[-1]])
             y = tf.reshape(y, [-1, self.output_size])
             x.set_shape([None, self.input_shape])
             y.set_shape([None, self.output_size])
@@ -155,7 +155,7 @@ class DataGenerator:
                 t = tf.reshape(t, [-1, 3])
             if not self.softmasking:
                 x = x[:, :5]
-            
+
             if y.shape[-1] != self.output_size:
                 y = self._reformat_labels(y)
 
@@ -180,14 +180,14 @@ class DataGenerator:
             real_w = self.get_seq_mask(seq_len, transcripts=t,
                                     tx_filter=self.tx_filter,
                                     r_u=self.tx_filter_region,
-                                    r_f=self.tx_filter_region//2) 
+                                    r_f=self.tx_filter_region//2)
 
-            default_w = tf.ones([seq_len], dtype=tf.float32)         
+            default_w = tf.ones([seq_len], dtype=tf.float32)
 
             has_tx = tf.size(t) > 0
-            w = tf.where(has_tx, real_w, default_w)                 
-            
-            w = tf.expand_dims(w, axis=-1)                           
+            w = tf.where(has_tx, real_w, default_w)
+
+            w = tf.expand_dims(w, axis=-1)
             w.set_shape([None, 1])
             return X, Y, w
 
@@ -196,7 +196,7 @@ class DataGenerator:
         dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
 
         return dataset
-    
+
     def _reformat_labels(self, y):
         """Reformat label tensor to match the desired output_size using TensorFlow operations.
 
@@ -209,7 +209,7 @@ class DataGenerator:
         batch_size = tf.shape(y)[0]
         seq_len = tf.shape(y)[1]
         input_classes = tf.shape(y)[-1]
-    
+
         # Case 1: Input has 7 classes
         if input_classes == 7:
             if self.output_size == 5:
@@ -275,7 +275,7 @@ class DataGenerator:
                 ], axis=-1)
             else:
                 y_new = y
-                
+
                 # If input_classes already matches output_size, no change needed
         else:
             y_new = y

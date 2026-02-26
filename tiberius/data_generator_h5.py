@@ -32,11 +32,11 @@ class DataLoader_h5(Dataset):
             input_data = file['input'][idx]
             output_data = file['output'][idx]
         if self.output_size == 5:
-            out_new = np.zeros((output_data.shape[0], 5), 
+            out_new = np.zeros((output_data.shape[0], 5),
                                np.float32)
             out_new[:,0] = output_data[:,0]
-            out_new[:,1] = np.sum(output_data[:,1:4], axis=-1)            
-            out_new[:,2] = np.sum(output_data[:,[4, 7, 10, 12]], axis=-1)   
+            out_new[:,1] = np.sum(output_data[:,1:4], axis=-1)
+            out_new[:,2] = np.sum(output_data[:,[4, 7, 10, 12]], axis=-1)
             out_new[:,3] = np.sum(output_data[:,[5, 8, 13]], axis=-1)
             out_new[:,4] = np.sum(output_data[:,[6, 9, 11, 14]], axis=-1)
             output_data = out_new

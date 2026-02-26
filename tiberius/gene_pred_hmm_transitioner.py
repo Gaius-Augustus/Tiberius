@@ -11,7 +11,7 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
     """ Defines which transitions between HMM states are allowed and how they are initialized.
             Assumed order of states: Ir, I0, I1, I2, E0, E1, E2
     """
-    def __init__(self, 
+    def __init__(self,
                 num_models=1,
                 initial_exon_len=100,
                 initial_intron_len=10000,
@@ -31,7 +31,7 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
         self.indices = self.make_transition_indices()
         self.starting_distribution_init = starting_distribution_init
         self.starting_distribution_trainable = starting_distribution_trainable
-        self.transitions_trainable = transitions_trainable  
+        self.transitions_trainable = transitions_trainable
         self.num_transitions = len(self.indices)
         self.reverse = False
         if init is None:
@@ -69,23 +69,23 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
         """ Automatically called when the owner cell is created.
         """
         pass #nothing to do here in this case
-        
+
 
     def build(self, input_shape=None):
         if self.built:
             return
         #just 1 HMM or multiple HMMs with the same architecture and shared transition parameters
         #non-shared transition parameters or even distinct architectures are possible but current not implemented
-        self.transition_kernel = self.add_weight(shape=[1, self.num_transitions],  
+        self.transition_kernel = self.add_weight(shape=[1, self.num_transitions],
                                         initializer = self.init,
                                         trainable=self.transitions_trainable,
                                         name="transition_kernel")
-        self.starting_distribution_kernel = self.add_weight(shape=[1,1,self.num_states], 
-                                                           initializer=self.starting_distribution_init, 
+        self.starting_distribution_kernel = self.add_weight(shape=[1,1,self.num_states],
+                                                           initializer=self.starting_distribution_init,
                                                            name="starting_distribution_kernel",
                                                            trainable=self.starting_distribution_trainable)
         self.built = True
-        
+
 
     def recurrent_init(self):
         """ Automatically called before each recurrent run. Should be used for setups that
@@ -96,12 +96,12 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
 
 
     def make_A_sparse(self, values=None):
-        """Computes state-wise transition probabilities from kernels. Applies a softmax to the kernel values of 
+        """Computes state-wise transition probabilities from kernels. Applies a softmax to the kernel values of
             all outgoing edges of a state.
         Args:
             values: If not None, the values of the sparse tensor are set to this. Otherwise, the kernel is used.
         Returns:
-            A dictionary that maps transition types to probabilies. 
+            A dictionary that maps transition types to probabilies.
         """
         if values is None:
             values = tf.reshape(self.transition_kernel, [-1])
@@ -114,11 +114,11 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
         probs_vec = tf.gather_nd(dense_probs, ordered_indices)
         A_sparse =  tf.sparse.SparseTensor(
                                         indices=ordered_indices,
-                                        values=probs_vec, 
+                                        values=probs_vec,
                                         dense_shape=[1, self.num_states, self.num_states])
         return A_sparse
 
-    
+
     def make_A(self):
         A = tf.sparse.to_dense(self.make_A_sparse(), default_value=0.)
         A = tf.repeat(A, self.num_models, axis=0)
@@ -127,7 +127,7 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
 
     def make_log_A(self):
         A_sparse = self.make_A_sparse()
-        log_A_sparse = tf.sparse.map_values(tf.math.log, A_sparse)  
+        log_A_sparse = tf.sparse.map_values(tf.math.log, A_sparse)
         log_A = tf.sparse.to_dense(log_A_sparse, default_value=-1e3)
         log_A = tf.repeat(log_A, self.num_models, axis=0)
         return log_A
@@ -135,11 +135,11 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
 
     def make_initial_distribution(self):
         return tf.repeat(tf.nn.softmax(self.starting_distribution_kernel), self.num_models, axis=1)
-        
-        
+
+
     def call(self, inputs):
-        """ 
-        Args: 
+        """
+        Args:
                 inputs: Shape (k, b, q)
         Returns:
                 Shape (k, b, q)
@@ -149,12 +149,12 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
             return tf.matmul(inputs, self.A_transposed)
         else:
             return tf.matmul(inputs, self.A)
-    
+
 
     def get_prior_log_densities(self):
          # Can be used for regularization in the future.
         return {"none" : 0.}
-    
+
     def duplicate(self, model_indices=None, share_kernels=False):
         init = ConstantInitializer(self.transition_kernel.numpy())
         starting_distribution_init = ConstantInitializer(self.starting_distribution_kernel.numpy())
@@ -164,13 +164,13 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
                                                           initial_ir_len=self.initial_ir_len,
                                                           starting_distribution_init=starting_distribution_init,
                                                           starting_distribution_trainable=self.starting_distribution_trainable,
-                                                          transitions_trainable=self.transitions_trainable) 
+                                                          transitions_trainable=self.transitions_trainable)
         if share_kernels:
             transitioner_copy.transition_kernel = self.transition_kernel
             transitioner_copy.starting_distribution_kernel = self.starting_distribution_kernel
             transitioner_copy.built = True
         return transitioner_copy
-    
+
 
     def make_transition_indices(self, model_index=0):
         """ Returns 3D indices (model_index, from_state, to_state) for the kernel of a sparse transition matrix.
@@ -194,13 +194,13 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
         init = []
         for edge in self.indices:
             #edge = (model, from, to), ingore model for now
-            if self.is_intergenic_loop(edge):  
+            if self.is_intergenic_loop(edge):
                 p_loop = 1 - 1. / self.initial_ir_len
                 init.append(-np.log(1/p_loop-1))
-            elif self.is_intron_loop(edge, k):   
+            elif self.is_intron_loop(edge, k):
                 p_loop = 1 - 1. / self.initial_intron_len
                 init.append(-np.log(1/p_loop-1))
-            elif self.is_exon_transition(edge, k): 
+            elif self.is_exon_transition(edge, k):
                 p_next_exon = 1 - 1. / self.initial_exon_len
                 init.append(-np.log(1/p_next_exon-1))
             elif self.is_exon_1_out_transition(edge, k):
@@ -228,11 +228,11 @@ class SimpleGenePredHMMTransitioner(tf.keras.layers.Layer):
         return cls(**config)
 
 
-                
+
 
 class GenePredHMMTransitioner(SimpleGenePredHMMTransitioner):
     """ Extends the simple HMM with start- and stop-states that enforce biological structure.
-            Assumed order of states: Ir, I0, I1, I2, E0, E1, E2, 
+            Assumed order of states: Ir, I0, I1, I2, E0, E1, E2,
                                     START, EI0, EI1, EI2, IE0, IE1, IE2, STOP
     """
     def __init__(self, use_experimental_prior=False, **kwargs):
@@ -244,7 +244,7 @@ class GenePredHMMTransitioner(SimpleGenePredHMMTransitioner):
         self.use_experimental_prior = use_experimental_prior
         if use_experimental_prior:
             self.alpha = self.make_prior_alpha()
-    
+
 
     def make_transition_indices(self, model_index=0):
         """ Returns 3D indices (model_index, from_state, to_state) for the kernel of a sparse transition matrix.
@@ -298,7 +298,7 @@ class GenePredHMMTransitioner(SimpleGenePredHMMTransitioner):
         A0 = tf.sparse.to_dense(A0_sparse, default_value=0.)[0]
         return self.gather_binary_probs_for_prior(A0) * n
 
-    
+
     def get_prior_log_densities(self):
         # Regularizes the transition probabilities based on the values given as initial distribution.
         # The dirichlet parameters are chosen based on n prior draws from the initial distribution.
@@ -311,7 +311,7 @@ class GenePredHMMTransitioner(SimpleGenePredHMMTransitioner):
             return {i : priors[i] for i in range(1+6*self.k)}
         else:
             return {"none" : 0.}
-    
+
 
     def duplicate(self, model_indices=None, share_kernels=False):
         init = ConstantInitializer(self.transition_kernel.numpy())
@@ -331,9 +331,9 @@ class GenePredHMMTransitioner(SimpleGenePredHMMTransitioner):
 
 
 class GenePredMultiHMMTransitioner(GenePredHMMTransitioner):
-    """ The same as GenePredHMMTransitioner, but with multiple (sub-)HMMs that share the same architecture, but 
-        not parameters. 
-        The same order of states as GenePredHMMTransitioner except that each state other than Ir is multiplied k times: 
+    """ The same as GenePredHMMTransitioner, but with multiple (sub-)HMMs that share the same architecture, but
+        not parameters.
+        The same order of states as GenePredHMMTransitioner except that each state other than Ir is multiplied k times:
         Ir, I0*k, I1*k, I2*k, E0*k, E1*k, E2*k, START*k, EI0*k, EI1*k, EI2*k, IE0*k, IE1*k, IE2*k, STOP*k
             Args:
                 k: number of gene model copies that share an IR state.
@@ -345,7 +345,7 @@ class GenePredMultiHMMTransitioner(GenePredHMMTransitioner):
         self.init_component_sd = init_component_sd
         super(GenePredMultiHMMTransitioner, self).__init__(**kwargs)
         self.init = ConstantInitializer(self.make_transition_init(k, init_component_sd))
-    
+
 
     def make_transition_indices(self, model_index=0):
         """ Returns 3D indices (model_index, from_state, to_state) for the kernel of a sparse transition matrix.
@@ -358,20 +358,20 @@ class GenePredMultiHMMTransitioner(GenePredHMMTransitioner):
         IE = list(range(1+10*self.k, 1+13*self.k))
         STOP = list(range(1+13*self.k, 1+14*self.k))
         indices = [(Ir, Ir)]
-        for hmm in range(self.k): 
-            indices.extend([(Ir, START[hmm]), (STOP[hmm], Ir), 
+        for hmm in range(self.k):
+            indices.extend([(Ir, START[hmm]), (STOP[hmm], Ir),
                             (START[hmm], E[self.k+hmm]), (E[self.k+hmm], STOP[hmm])])
             for cds in range(3):
-                indices.extend([(E[self.k*cds+hmm], E[self.k*((cds+1)%3)+hmm]), 
-                                (E[self.k*cds+hmm], EI[self.k*cds+hmm]), 
-                                (EI[self.k*cds+hmm], I[self.k*cds+hmm]), 
-                                (I[self.k*cds+hmm], I[self.k*cds+hmm]), 
-                                (I[self.k*cds+hmm], IE[self.k*cds+hmm]), 
+                indices.extend([(E[self.k*cds+hmm], E[self.k*((cds+1)%3)+hmm]),
+                                (E[self.k*cds+hmm], EI[self.k*cds+hmm]),
+                                (EI[self.k*cds+hmm], I[self.k*cds+hmm]),
+                                (I[self.k*cds+hmm], I[self.k*cds+hmm]),
+                                (I[self.k*cds+hmm], IE[self.k*cds+hmm]),
                                 (IE[self.k*cds+hmm], E[self.k*cds+hmm])])
         indices = np.concatenate([np.full((len(indices), 1), model_index, dtype=np.int64), indices], axis=1)
         assert len(indices)==1+22*self.k
         return indices
-    
+
 
     def duplicate(self, model_indices=None, share_kernels=False):
         init = ConstantInitializer(self.transition_kernel.numpy())
@@ -383,7 +383,7 @@ class GenePredMultiHMMTransitioner(GenePredHMMTransitioner):
                                                     initial_ir_len=self.initial_ir_len,
                                                     starting_distribution_init=self.starting_distribution_init,
                                                     starting_distribution_trainable=self.starting_distribution_trainable,
-                                                    transitions_trainable=self.transitions_trainable) 
+                                                    transitions_trainable=self.transitions_trainable)
         if share_kernels:
             transitioner_copy.transition_kernel = self.transition_kernel
             transitioner_copy.starting_distribution_kernel = self.starting_distribution_kernel

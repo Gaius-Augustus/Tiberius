@@ -40,11 +40,11 @@ def load_clamsa_data(clamsa_prefix, seq_names, seq_len=None):
             numb_chunks = clamsa_array.shape[0] // seq_len
             clamsa_array_new = clamsa_array[:numb_chunks*seq_len].reshape(numb_chunks, seq_len, 4)
             clamsa_chunks.append(clamsa_array_new)
-           
+
         clamsa_chunks = np.concatenate(clamsa_chunks, axis=0)
         return np.concatenate([clamsa_chunks[::-1,::-1, [1,0,3,2]], clamsa_chunks], axis=0)
 
-def get_species_data_hmm(genome_path='', annot_path='', species='', 
+def get_species_data_hmm(genome_path='', annot_path='', species='',
             seq_len=500004, overlap_size=0, transition=False,
             min_seq_len=500000):
 
@@ -67,9 +67,9 @@ def get_species_data_hmm(genome_path='', annot_path='', species='',
 
     return fasta, ref_anno
 
-def write_h5(fasta, ref, out, ref_phase=None, split=100, 
+def write_h5(fasta, ref, out, ref_phase=None, split=100,
                     trans=False, clamsa=np.array([])):
-    fasta = fasta.astype(np.int32)          
+    fasta = fasta.astype(np.int32)
     ref = ref.astype(np.int32)
 
     file_size = fasta.shape[0] // split
@@ -85,7 +85,7 @@ def write_h5(fasta, ref, out, ref_phase=None, split=100,
             f.create_dataset('output', data=ref[indices[k::split]], compression='gzip', compression_opts=9)
 
 def write_numpy(fasta, ref, out, ref_phase=None, split=100, trans=False, clamsa=np.array([])):
-    fasta = fasta.astype(np.int32)          
+    fasta = fasta.astype(np.int32)
 
     file_size = fasta.shape[0] // split
     indices = np.arange(fasta.shape[0])
@@ -95,14 +95,14 @@ def write_numpy(fasta, ref, out, ref_phase=None, split=100, trans=False, clamsa=
     for k in range(split):
         print(f'Writing numpy split {k+1}/{split}')
         if clamsa.any():
-            np.savez(f'{out}_{k}.npz', array1=fasta[indices[k::split],:,:], 
+            np.savez(f'{out}_{k}.npz', array1=fasta[indices[k::split],:,:],
                      array2=ref[indices[k::split],:,:], array3=clamsa[indices[k::split],:,:] )
         else:
             ref_arr = []
-            for i in indices[k::split]:                
+            for i in indices[k::split]:
                 ref_arr.append(ref.get_onehot(i))
 
-            np.savez(f'{out}_{k}.npz', array1=fasta[indices[k::split],:,:], 
+            np.savez(f'{out}_{k}.npz', array1=fasta[indices[k::split],:,:],
                      array2=np.array(ref_arr), )
 
 
@@ -150,10 +150,10 @@ def write_tf_record(fasta, ref, out, split=100, clamsa=np.array([]),
             }))
         serialized_example = example.SerializeToString()
         del example, feature_bytes_x, feature_bytes_y
-        return serialized_example    
-    
+        return serialized_example
+
     def write_split(k):
-        with tf.io.TFRecordWriter(f'{out}_{k}.tfrecords', 
+        with tf.io.TFRecordWriter(f'{out}_{k}.tfrecords',
             options=tf.io.TFRecordOptions(compression_type='GZIP')) as writer:
             for i in indices[k::split]:
                 serialized_example = create_example(i)
@@ -166,7 +166,7 @@ def write_tf_record(fasta, ref, out, split=100, clamsa=np.array([]),
 
 def main():
     args = parseCmd()
-    fasta, ref = get_species_data_hmm(genome_path=args.fasta, annot_path=args.gtf, 
+    fasta, ref = get_species_data_hmm(genome_path=args.fasta, annot_path=args.gtf,
                 species=args.species, seq_len=args.wsize,
                 overlap_size=0, transition=True,
                 min_seq_len=args.min_seq_len)
@@ -198,7 +198,7 @@ def parseCmd():
     """
     parser = argparse.ArgumentParser(description="""
     USAGE: write_tfrecord_species.py --gtf annot.gtf --fasta genome.fa --wsize 9999 --out tfrecords/speciesName
-    
+
     This script will write input and output data as 100 tfrecord files as tfrecords/speciesName_i.tfrecords""")
     parser.add_argument('--species', type=str, default='',
         help='')
@@ -219,13 +219,13 @@ def parseCmd():
     parser.add_argument('--seq_names',  type=str, default='',
         help='')
     parser.add_argument('--h5', action='store_true',
-        help='') 
+        help='')
     parser.add_argument('--np', action='store_true',
         help='')
     parser.add_argument('--no_tx_ids', action='store_true',
         help='Dont store transcript IDs and the overlap range for each trainings example.')
-    
-    
+
+
     return parser.parse_args()
 
 if __name__ == '__main__':

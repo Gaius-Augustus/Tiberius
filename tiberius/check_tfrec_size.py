@@ -15,20 +15,20 @@ def check_tfrecord_sequence_length(tfrecord_path, expected_length):
         bool: True if all sequences have the expected length, False otherwise.
     """
 
-    generator = DataGenerator(file_path=[tfrecord_path], 
-          batch_size=1, 
+    generator = DataGenerator(file_path=[tfrecord_path],
+          batch_size=1,
           shuffle=False,
           repeat=False,
           filter=False,
           output_size=15,
           hmm_factor=0,
           clamsa=False ,
-          oracle=False 
+          oracle=False
       )
-    
+
     # r = generator.__next__()
     # print(r.shape[0])
-    for record in generator: 
+    for record in generator:
         if record[0][0].shape[0] != expected_length or record[1][0].shape[0] != expected_length:
             print(record[0].shape, record[1].shape)
             return False

@@ -8,21 +8,21 @@ from learnMSA.msa_hmm.Utility import deserialize
 from learnMSA.msa_hmm.Initializers import ConstantInitializer
 from tiberius.gene_pred_hmm_emitter import SimpleGenePredHMMEmitter, GenePredHMMEmitter
 from tiberius.gene_pred_hmm_transitioner import SimpleGenePredHMMTransitioner, GenePredHMMTransitioner, GenePredMultiHMMTransitioner
-    
+
 
 
 
 class GenePredHMMLayer(HmmLayer):
     """A layer that implements a gene prediction HMM.
     Args:
-        num_models: The number of semi-independent HMMs. Currently, the HMMs share architecture and transition parameters, 
+        num_models: The number of semi-independent HMMs. Currently, the HMMs share architecture and transition parameters,
                     but allow independent emission parameters for the gene structure classes output by previous layers.
         num_copies: The number of gene model copies that share an IR state.
-        start_codons: The allowed start codons. A list of pairs. The first element of each pair is a string that is a triplet over the alphabet ACGTN. 
+        start_codons: The allowed start codons. A list of pairs. The first element of each pair is a string that is a triplet over the alphabet ACGTN.
                     The second entry is the probability of that triplet. All probabilities must sum to 1.
         stop_codons: The allowed stop codons. Same format as `start_codons`.
-        intron_begin_pattern: The allowed start patterns in introns. Same format as `start_codons`. 
-                    Since only the first 2 nucleotides of an intron are relevant, give 3-mers of the form "N.." where N indicates 
+        intron_begin_pattern: The allowed start patterns in introns. Same format as `start_codons`.
+                    Since only the first 2 nucleotides of an intron are relevant, give 3-mers of the form "N.." where N indicates
                     that any nucleotide that comes last in the previous exon is allowed.
         intron_end_pattern: The allowed end patterns in introns. Same format as `start_codons`.
                     Since only the last 2 nucleotides of an intron are relevant, give 3-mers of the form "..N" where N indicates
@@ -31,7 +31,7 @@ class GenePredHMMLayer(HmmLayer):
         initial_intron_len: The initial expected length of introns.
         initial_ir_len: The initial expected length of intergenic regions.
         emitter_init: The initializer for the class emission parameters. Default: Kernel for the standard 15 class HMM.
-        starting_distribution_init: The initializer for the starting distribution. 
+        starting_distribution_init: The initializer for the starting distribution.
         trainable_emissions: Whether the emission parameters should be trainable.
         trainable_transitions: Whether the transition parameters should be trainable.
         trainable_starting_distribution: Whether the starting distribution should be trainable.
@@ -40,14 +40,14 @@ class GenePredHMMLayer(HmmLayer):
         parallel_factor: The number of chunks the input is split into to process them in parallel. Must devide the length of the input.
                         Increases speed and GPU utilization but also memory usage.
     """
-    def __init__(self, 
+    def __init__(self,
                 num_models=1,
                 num_copies=1,
                 start_codons=[("ATG", 1.)],
                 stop_codons=[("TAG", .34), ("TAA", 0.33), ("TGA", 0.33)],
                 intron_begin_pattern=[("NGT", 0.99), ("NGC", 0.01)],
                 intron_end_pattern=[("AGN", 1.)],
-                initial_exon_len=200, 
+                initial_exon_len=200,
                 initial_intron_len=4500,
                 initial_ir_len=10000,
                 emitter_init=None,
@@ -66,7 +66,7 @@ class GenePredHMMLayer(HmmLayer):
         self.intron_begin_pattern = intron_begin_pattern
         self.intron_end_pattern = intron_end_pattern
         if emitter_init is None:
-            emitter_init = make_15_class_emission_kernel(smoothing=1e-2, 
+            emitter_init = make_15_class_emission_kernel(smoothing=1e-2,
                                                          num_models=num_models,
                                                          num_copies=num_copies)
             self.emitter_init = ConstantInitializer(emitter_init)
@@ -121,7 +121,7 @@ class GenePredHMMLayer(HmmLayer):
         # configure the cell
         self.cell = HmmCell([emitter.num_states]*self.num_models,
                             dim=input_shape[-1],
-                            emitter=emitter, 
+                            emitter=emitter,
                             transitioner=transitioner,
                             use_fake_step_counter=True,
                             name="gene_pred_hmm_cell")
@@ -140,23 +140,23 @@ class GenePredHMMLayer(HmmLayer):
 
 
     def call(self, inputs, nucleotides=None, embeddings=None, training=False, use_loglik=True):
-        """ 
+        """
         Computes the state posterior log-probabilities.
-        Args: 
+        Args:
                 inputs: Shape (batch, len, alphabet_size)
                 nucleotides: Shape (batch, len, 5) one-hot encoded nucleotides with N in the last position.
         Returns:
                 State posterior log-probabilities (without loglik if use_loglik is False). The order of the states is Ir, I0, I1, I2, E0, E1, E2.
                 Shape (batch, len, number_of_states) if num_models=1 and (batch, len, num_models, number_of_states) if num_models>1.
-        """ 
+        """
 
         stacked_inputs = self.concat_inputs(inputs, nucleotides)
 
-        log_post, prior, _ = self.state_posterior_log_probs(stacked_inputs, 
-                                                            return_prior=True, 
-                                                            training=training, 
-                                                            no_loglik=not use_loglik) 
-        
+        log_post, prior, _ = self.state_posterior_log_probs(stacked_inputs,
+                                                            return_prior=True,
+                                                            training=training,
+                                                            no_loglik=not use_loglik)
+
         if training:
             prior = tf.reduce_mean(prior)
             self.add_loss(prior)
@@ -166,9 +166,9 @@ class GenePredHMMLayer(HmmLayer):
 
 
     def viterbi(self, inputs, nucleotides):
-        """ 
+        """
         Computes the most likely state sequence.
-        Args: 
+        Args:
                 inputs: Shape (batch, len, alphabet_size)
                 nucleotides: Shape (batch, len, 5) one-hot encoded nucleotides with N in the last position.
         Returns:
@@ -221,7 +221,7 @@ class3_emission_matrix = np.array([[[1., 0., 0.]] + [[0., 1., 0.]]*3 + [[0., 0.,
 def make_5_class_emission_kernel(smoothing=0.01, introns_shared=False, num_copies=1, num_models=1, noise_strength=0.001):
     # input classes: IR, I, E0, E1, E2
     # states: Ir, I0, I1, I2, E0, E1, E2, START, EI0, EI1, EI2, IE0, IE1, IE2, STOP
-    # Returns: shape (1,1 + num_copies*(14 - 2*introns_shared),5) 
+    # Returns: shape (1,1 + num_copies*(14 - 2*introns_shared),5)
     assert smoothing > 0, "Smoothing can not be exactly zero to prevent numerical issues."
     n = 5
     if introns_shared:
@@ -243,7 +243,7 @@ def make_5_class_emission_kernel(smoothing=0.01, introns_shared=False, num_copie
 def make_15_class_emission_kernel(smoothing=0.1, num_copies=1, num_models=1, noise_strength=0.001):
     # input classes: IR, I, E0, E1, E2
     # states: Ir, I0, I1, I2, E0, E1, E2, START, EI0, EI1, EI2, IE0, IE1, IE2, STOP
-    # Returns: shape (num_models, 1 + num_copies*(14 - 2*introns_shared), 15) 
+    # Returns: shape (num_models, 1 + num_copies*(14 - 2*introns_shared), 15)
     assert smoothing > 0, "Smoothing can not be exactly zero to prevent numerical issues."
     n = 15
     probs = np.eye(n)
@@ -266,7 +266,7 @@ def add_noise(probs, noise_strength=0.001):
     return probs
 
 
-#a matrix that can be multiplied to the state posterior probabilities of the full model 
+#a matrix that can be multiplied to the state posterior probabilities of the full model
 # with 1+14*k many states
 # input states Ir, I0*k, I1*k, I2*k, E0*k, E1*k, E2*k, START*k, EI0*k, EI1*k, EI2*k, IE0*k, IE1*k, IE2*k, STOP*k
 # output states IR, I, E0, E1, E2

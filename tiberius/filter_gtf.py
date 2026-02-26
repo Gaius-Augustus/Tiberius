@@ -2,8 +2,8 @@
 # Authors: Lars Gabriel
 #
 # Merge a number of GTF files and filter their transcripts.
-# 
-# 
+#
+#
 # ==============================================================
 
 import sys, os, re, json, sys, csv
@@ -40,13 +40,13 @@ def main():
     fasta_file = args.fasta
     gtf_files = args.gtf.split(',')
     output_gtf = args.out
-    
+
     anno_outp = Anno('', f'anno')
 
     # Load the genome sequence from the FASTA file
     genome = SeqIO.to_dict(SeqIO.parse(fasta_file, "fasta"))
-    
-    # Load GFF file    
+
+    # Load GFF file
     for i, gtf in enumerate(gtf_files):
         anno_inp = Anno(gtf, f'anno{i}')
         anno_inp.addGtf()
@@ -56,7 +56,7 @@ def main():
         for tx_id, tx in anno_inp.transcripts.items():
             exons = tx.get_type_coords('CDS', frame=False)
             filt=False
-            
+
             # filter out tx with inframe stop codons
             if args.filter_inframestop:
                 coding_seq, prot_seq = assemble_transcript(exons, genome[tx.chr], tx.strand )
@@ -65,16 +65,16 @@ def main():
             # filter out transcripts with cds len shorter than args.filter_short
             if not filt and tx.get_cds_len() < args.filter_short:
                 filt = True
-                
+
             if not filt:
                 out_tx[tx_id] = tx
         # print(len(out_tx))
         anno_outp.add_transcripts(out_tx, f'anno{i}')
-        
+
     anno_outp.find_genes()
     anno_outp.rename_tx_ids()
     anno_outp.write_anno(output_gtf)
-    
+
     prot_seq_out = ""
     coding_seq_out = ""
     if args.protseq or args.codingseq:
@@ -85,14 +85,14 @@ def main():
                 coding_seq_out +=f">{tx_id}\n{coding_seq}\n"
             if args.protseq:
                 prot_seq_out +=f">{tx_id}\n{prot_seq}\n"
-    
+
     if args.codingseq:
         with open(args.codingseq, 'w+') as f:
             f.write(coding_seq_out.strip())
     if args.protseq:
         with open(args.protseq, 'w+') as f:
             f.write(prot_seq_out.strip())
-        
+
 def parseCmd():
     """Parse command line arguments
 
@@ -116,7 +116,7 @@ def parseCmd():
         help='Filter out transcripts with in-frame stop codons.')
     parser.add_argument('-S', '--filter_short', type=int, default='',
         help='Filter out transcripts with in-frame stop codons.')
-    
+
     return parser.parse_args()
 
 if __name__ == '__main__':

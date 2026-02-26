@@ -2,21 +2,21 @@ import os, sys
 import numpy as np
 import subprocess as sp
 
-class Wig_util:    
+class Wig_util:
     def __init__(self):
         self.wig_arrays = None
         pass
-    
+
     def addWig2numpy(self, wig_file, seq_lens, strand='+'):
         """Args:
             wig_file: Path to WIG file
             seq_lens: List of pairs of (Sequence name, Sequence length)
-            srand: 
+            srand:
         """
         wig_seq_dict = {}
         with open(wig_file, 'r') as f_wig:
             wig_content = f_wig.read().split('fixedStep')
-            
+
         for k, section in enumerate(wig_content[1:]):
             section = section.strip().split('\n')
             # print(section[0])
@@ -25,7 +25,7 @@ class Wig_util:
             current_seq = chrom_info.get('chrom')
             pos = int(chrom_info.get('start')) - 1
             step = int(chrom_info.get('step'))
-            
+
             if not current_seq in wig_seq_dict:
                 wig_seq_dict[current_seq] = {}
             # print(section[0])
@@ -35,7 +35,7 @@ class Wig_util:
                     wig_seq_dict[current_seq][str(pos)] = []
                 wig_seq_dict[current_seq][str(pos)].append(val)
                 pos += step
-        
+
         if not self.wig_arrays:
             self.wig_arrays = {}
             for s_n, s_l in seq_lens:
@@ -46,15 +46,15 @@ class Wig_util:
             i = 0
         else:
             i = 1
-        
+
         for seq in wig_seq_dict:
-            for pos in wig_seq_dict[seq]:                
-                if seq in self.wig_arrays and 0 <= int(pos) < self.wig_arrays[seq].shape[0]:    
+            for pos in wig_seq_dict[seq]:
+                if seq in self.wig_arrays and 0 <= int(pos) < self.wig_arrays[seq].shape[0]:
                     if self.wig_arrays[seq][int(pos), 2+i] > 0:
                         print(seq, pos)
                     self.wig_arrays[seq][int(pos), i] = np.mean(wig_seq_dict[seq][pos])
                     self.wig_arrays[seq][int(pos), 2+i] = len(wig_seq_dict[seq][pos])
-    
+
 #         for k, section in enumerate(wig_content[1:]):
 #             section = section.strip().split('\n')
 #             # print(section[0])
@@ -73,15 +73,15 @@ class Wig_util:
 #                     self.wig_arrays[current_seq][pos, 2] = 0.
 #                 # print( self.wig_arrays[current_seq][pos])
 #                 pos += step  # Increment the start position for the next value
-                
+
 #                 if t > 200:
 #                     exit()
-                    
+
     def addWig2numpy_old(self, wig_file, seq_lens, strand='+'):
         """Args:
             wig_file: Path to WIG file
             seq_lens: List of pairs of (Sequence name, Sequence length)
-            srand: 
+            srand:
         """
         if not self.wig_arrays:
             self.wig_arrays = {}
@@ -93,10 +93,10 @@ class Wig_util:
             i = 0
         else:
             i = 1
-         
+
         with open(wig_file, 'r') as f_wig:
             wig_content = f_wig.read().split('fixedStep')
-        
+
         for k, section in enumerate(wig_content[1:]):
             section = section.strip().split('\n')
             # print(section[0])
@@ -115,7 +115,7 @@ class Wig_util:
                     self.wig_arrays[current_seq][pos, 2] = 0.
                 # print( self.wig_arrays[current_seq][pos])
                 pos += step  # Increment the start position for the next value
-                        
+
     def write_wigs(self, out_dir, prefix='', bw=False):
         for i, strand in enumerate(['plus', 'minus']):
             for phase in [0, 1, 2]:
@@ -124,7 +124,7 @@ class Wig_util:
                     # print(phase, seq_name)
                     # pos = phase+1
                     for pos in range((phase)%3,self.wig_arrays[seq_name].shape[0],4):
-                    # for v in self.wig_arrays[seq_name][phase:-3:3, i]:                        
+                    # for v in self.wig_arrays[seq_name][phase:-3:3, i]:
                         if self.wig_arrays[seq_name][pos, i] > np.log(1e-5):
                             # print(self.wig_arrays[seq_name][pos-3, i],self.wig_arrays[seq_name][pos, i])
                             if pos == (phase+1)%3 or \
@@ -134,7 +134,7 @@ class Wig_util:
                         # pos += 3
                 with open(f'{out_dir}/{prefix}_{(phase+1)%3}-{strand}.wig', 'w+') as f_wig:
                     f_wig.write(out_str)
-                    
+
     def get_chunks(self, chunk_len, sequence_names):
         # Use a list comprehension to construct all_chunks
         all_chunks = [

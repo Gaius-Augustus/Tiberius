@@ -270,7 +270,7 @@ class PredictionGTF:
                 sys.exit(1)
             relevant_keys = ['units', 'filter_size', 'kernel_size',
                 'numb_conv', 'numb_lstm', 'dropout_rate',
-                'pool_size', 'stride', 'lstm_mask', 'clamsa',
+                'pool_size', 'lstm_mask', 'clamsa',
                 'output_size', 'residual_conv',
                 'clamsa_kernel', 'lru_layer']
             relevant_args = {key: config[key] for key in relevant_keys if key in config}
@@ -280,7 +280,10 @@ class PredictionGTF:
             elif "softmasking" in config:
                 self.softmask = config["softmasking"]
             self.lstm_model = lstm_model(**relevant_args, softmasking=self.softmask)
-            self.lstm_model.load_weights(f"{self.model_path}/weights.h5")
+            weights_h5  = f"{self.model_path}/weights.h5"
+            if not os.path.exists(weights_h5):
+                weights_h5 = f"{self.model_path}/model.weights.h5"
+            self.lstm_model.load_weights(weights_h5)
 
             if self.model_path_hmm:
                 model_hmm = keras.models.load_model(
@@ -462,9 +465,9 @@ class PredictionGTF:
 
 
     def predict_function(
-                        self,
-                        fasta: b2m.struct.FASTA
-                ) -> tuple[np.ndarray, np.ndarray]:
+                self,
+                fasta: b2m.struct.FASTA
+            ) -> tuple[np.ndarray, np.ndarray]:
 
         x_one_hot = fasta.one_hot(
             pad_index = 4,
@@ -475,24 +478,33 @@ class PredictionGTF:
 
         lstm_out_fwd = self.lstm_prediction(x_one_hot)
 
+        # # Get bw tracks
+        # write_bigwig_from_lstm(lstm_out_fwd, "lstm_fwd_cds_lstmtrain.bw", chrom_size=50000400,chrom="Chr1",
+        #                 value="cds_sum" )
+        # write_bigwig_from_lstm(lstm_out_fwd, "lstm_fwd_intron_lstmtrain.bw", chrom_size=50000400,chrom="Chr1",
+        #                 value="intron_sum" )
+        # write_bigwig_from_lstm(lstm_out_fwd, "lstm_fwd_ir_lstmtrain.bw", chrom_size=50000400,chrom="Chr1",
+        #                 value="intergenic" )
+        # exit()
+
         hmm_out_fwd = self.hmm_prediction(
             x_one_hot, lstm_out_fwd,
         )
 
-        fasta_bwd = fasta.complement(in_place=False)
-        x_one_hot_bwd = fasta_bwd.one_hot(
-            pad_index = 4,
-            repeats = "track" if self.softmask else "omit",
-            N = "track",
-            dtype = np.float32,
-        )
-        x_one_hot_bwd = x_one_hot_bwd[:, ::-1, :]
-        lstm_out_bwd = self.lstm_prediction(x_one_hot_bwd)
+        # fasta_bwd = fasta.complement(in_place=False)
+        # x_one_hot_bwd = fasta_bwd.one_hot(
+        #     pad_index = 4,
+        #     repeats = "track" if self.softmask else "omit",
+        #     N = "track",
+        #     dtype = np.float32,
+        # )
+        # x_one_hot_bwd = x_one_hot_bwd[:, ::-1, :]
+        # lstm_out_bwd = self.lstm_prediction(x_one_hot_bwd)
 
-        hmm_out_bwd = self.hmm_prediction(
-            x_one_hot_bwd, lstm_out_bwd
-        )
-        return hmm_out_fwd,  hmm_out_bwd[:,::-1]
+        # hmm_out_bwd = self.hmm_prediction(
+        #     x_one_hot_bwd, lstm_out_bwd
+        # )
+        return hmm_out_fwd, None# hmm_out_bwd[:,::-1]
 
 
 
@@ -504,7 +516,7 @@ class PredictionGTF:
     ) -> b2m.struct.Annotation:
         annotation = b2m.tools.GTF_from_model(
             fasta,
-            predict_func=self.predict_function_old,
+            predict_func=self.predict_function,
             repredict_exon_at_boundary=None,
             liberal=True,
             starting_tx_id=starting_tx_id,
@@ -728,6 +740,6 @@ class PredictionGTF:
             parallel=self.parallel_factor,
             mode=HMMMode.VITERBI,
             training=False,
-            emitter_epsilon=0.001,
+            emitter_epsilon=0.01,
         )
         self.gene_pred_hmm_layer.build((self.adapted_batch_size, self.seq_len, inp_size))

@@ -3,7 +3,6 @@ from hidten import HMMMode
 
 
 class HMMBlock(AnnotationHMM):
-
     def __init__(
         self,
         mode: HMMMode,
@@ -19,7 +18,7 @@ class HMMBlock(AnnotationHMM):
             emitter_eye=emitter_epsilon,
             train_emitter=False,
             initial_exon_len=200,
-            initial_intron_len=30_000,
+            initial_intron_len=200,
             initial_ir_len=200,
             transitioner_share_frames=False,
             transitioner_share_noncoding=False,

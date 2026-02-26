@@ -68,7 +68,7 @@ class Transcript:
 
     def set_gene_id(self, new_gene_id):
         self.gene_id = new_gene_id
-        
+
     def get_type_coords(self, type, frame=True):
         """
             Get the coordinates and reading frame of the coding regions
@@ -103,7 +103,7 @@ class Transcript:
     def get_cds_len(self):
         cds = self.get_type_coords('CDS', False)
         return sum([c[1] - c[0] + 1 for c in cds])
-        
+
     def get_cds_coords(self):
         """
             Get the coordinates and reading frame of the coding regions
@@ -247,17 +247,17 @@ class Transcript:
 
     def redo_phase(self):
         if 'CDS' in self.transcript_lines:
-            self.transcript_lines['CDS'] = sorted(self.transcript_lines['CDS'], 
+            self.transcript_lines['CDS'] = sorted(self.transcript_lines['CDS'],
                                                 key=lambda x: x[3], reverse=self.strand=='-')
             phase = 0
             for line in self.transcript_lines['CDS']:
                 line[7] = phase
                 phase = (3 - (line[4] - line[3] + 1 - phase)%3)%3
-    
-    def check_splits(self):        
+
+    def check_splits(self):
         for k in self.transcript_lines.keys():
-            self.transcript_lines[k] = sorted(self.transcript_lines[k], 
-                                              key=lambda x: x[3])            
+            self.transcript_lines[k] = sorted(self.transcript_lines[k],
+                                              key=lambda x: x[3])
             new_list = [self.transcript_lines[k][0]]
             for i in range(1, len(self.transcript_lines[k])):
                 if new_list[-1][4] == self.transcript_lines[k][i][3]-1:
@@ -265,7 +265,7 @@ class Transcript:
                 else:
                     new_list.append(self.transcript_lines[k][i])
             self.transcript_lines[k] = new_list
-                    
+
     def get_gtf(self, prefix=''):
         """
             Creates gtf output for the transcript.
@@ -294,11 +294,11 @@ class Transcript:
                     g[8] = f'transcript_id \"{prefix + self.id}\"; gene_id \"{self.gene_id}"; cds_type={cds_type};'
                 elif not k in ['transcript', 'gene']:
                     g[8] = f'transcript_id \"{prefix + self.id}\"; gene_id \"{self.gene_id}";'
-                gtf.append(g) 
+                gtf.append(g)
 
         if not 'exon' in self.transcript_lines.keys():
-            for g in self.transcript_lines['CDS']: 
-                gtf.append(g[:2] + ['exon'] + g[3:])                                
+            for g in self.transcript_lines['CDS']:
+                gtf.append(g[:2] + ['exon'] + g[3:])
 
         gtf = sorted(gtf, key=lambda g: (g[3],g[4]))
         if tx_line:

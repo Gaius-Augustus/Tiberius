@@ -89,7 +89,7 @@ def main(argv = None) -> None:
     # Load the config file (you can use json or any other method)
     with open(config_path, 'r') as f:
         config = json.load(f)
-    
+
     # load species list
     with open(args.species_list, 'r') as f:
         species = [line.strip() for line in f if line.strip()]
@@ -102,14 +102,14 @@ def main(argv = None) -> None:
         raise FileNotFoundError(f"No tfRecords found in {args.data_dir} for species {species}")
 
     # create data generator
-    generator = DataGenerator(file_path=file_paths, 
-          batch_size=args.batch_size, 
+    generator = DataGenerator(file_path=file_paths,
+          batch_size=args.batch_size,
           shuffle=False,
           repeat=False,
           filter=config["filter"],
           output_size=config["output_size"],
           hmm_factor=0,
-          seq_weights=config["seq_weights"], 
+          seq_weights=config["seq_weights"],
           softmasking=config["softmasking"],
           clamsa=False if not "clamsa" in config else config["clamsa"],
           oracle=False if 'oracle' not in config else config['oracle'],
@@ -127,11 +127,11 @@ def main(argv = None) -> None:
     for epoch in epochs_dirs:
         print(str(epoch))
         model = keras.models.load_model(
-                    str(epoch), 
+                    str(epoch),
                     custom_objects={
                     'custom_cce_f1_loss': custom_cce_f1_loss(2, args.batch_size),
                     'loss_': custom_cce_f1_loss(2, args.batch_size),
-                    "Cast": Cast}, 
+                    "Cast": Cast},
                     compile=False,
                     )
         use_hmm = any("gene_pred_hmm_layer" in layer.name for layer in model.submodules)

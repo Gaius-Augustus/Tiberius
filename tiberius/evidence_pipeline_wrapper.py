@@ -67,7 +67,7 @@ OPTIONAL_COMMANDS = {
 
 
 def _default_repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent 
+    return Path(__file__).resolve().parent.parent
 
 
 def pipeline_paths(root_override: str | None = None) -> Tuple[Path, Path, Path]:
@@ -278,7 +278,7 @@ def validate_executables(
         else:
             check_command(cmd, desc)
 
-    if check_tool_binaries:        
+    if check_tool_binaries:
         for cmd, desc in OPTIONAL_COMMANDS.items():
             check_command(cmd, desc, mandatory=False)
         tools = build_tool_command_map(params)

@@ -29,12 +29,9 @@ import tiberius.models as models
 from tiberius import DataGenerator
 from tiberius.models import (
     Cast,
-    EpochSave,  # not used anymore, kept for compatibility
-    add_constant_hmm,
     add_hmm_layer,
     custom_cce_f1_loss,
     lstm_model,
-    make_weighted_cce_loss,
 )
 
 # ----------------------------
@@ -49,26 +46,34 @@ strategy = tf.distribute.MirroredStrategy()
 # Loading
 # ----------------------------
 def is_new_epoch_format(p: Path) -> bool:
-    return p.is_dir() and (p / "weights.h5").exists()
+    return p.is_dir() and ((p / "weights.h5").exists() or (p / "model.weights.h5").exists())
 
 def load_backbone_from_new_format(epoch_dir: Path, config: dict) -> tf.keras.Model:
     """
     Builds backbone from model_layers.json (preferred) and loads weights.h5.
     Falls back to rebuilding from config if model_layers.json is missing.
     """
-    layers_json = epoch_dir / "model_layers.json"
+    with (epoch_dir / "config.json").open("w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2, sort_keys=True)
+
     weights_h5  = epoch_dir / "weights.h5"
+    if not weights_h5.exists():
+        weights_h5 = epoch_dir / "model.weights.h5"
 
-    if layers_json.exists():
-        backbone = keras.models.model_from_json(
-            layers_json.read_text(encoding="utf-8"),
-            custom_objects={"Cast": Cast},
-        )
-    else:
-        # fallback: rebuild from config (less robust if hyperparams changed)
-        backbone = build_backbone(config, head="none")
+    relevant_keys = ['units', 'filter_size', 'kernel_size',
+                'numb_conv', 'numb_lstm', 'dropout_rate',
+                'pool_size', 'lstm_mask', 'clamsa',
+                'output_size', 'residual_conv',
+                'clamsa_kernel', 'lru_layer']
 
-    backbone.load_weights(str(weights_h5))
+    relevant_args = {key: config[key] for key in relevant_keys if key in config}
+
+    if "inp_size" in config:
+        softmask = config["inp_size"]==6
+    elif "softmasking" in config:
+        softmask = config["softmasking"]
+    backbone = lstm_model(**relevant_args, softmasking=softmask)
+    backbone.load_weights(weights_h5)
     return backbone
 
 def load_any_model_or_epoch(path: str | None, config: dict) -> tf.keras.Model | None:
@@ -186,7 +191,7 @@ def ensure_dir(p: Path) -> None:
 class EpochFolderSaver(tf.keras.callbacks.Callback):
     """
     Saves per-epoch artifacts into:
-      {model_save_dir}/epoch_XX/weights.h5           (backbone only)
+      {model_save_dir}/epoch_XX/model.weights.h5           (backbone only)
       {model_save_dir}/epoch_XX/model_config.json   (full config dict)
       {model_save_dir}/epoch_XX/model_layers.json   (backbone model JSON)
     """
@@ -212,7 +217,7 @@ class EpochFolderSaver(tf.keras.callbacks.Callback):
         ensure_dir(epoch_dir)
 
         # 1) backbone weights only
-        weights_path = epoch_dir / "weights.h5"
+        weights_path = epoch_dir / "model.weights.h5"
         self.backbone_model.save_weights(str(weights_path))
 
         # 2) config as model_config.json
@@ -321,8 +326,6 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
     # Base loss (for non-HMM outputs or LSTM output in multi-loss)
     if config.get("loss_f1_factor"):
         base_loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
-    elif config.get("loss_weights"):
-        base_loss = make_weighted_cce_loss(config["loss_weights"], config["batch_size"])
     else:
         base_loss = tf.keras.losses.CategoricalCrossentropy()
 
@@ -404,7 +407,7 @@ def build_backbone(config: dict[str, Any], head: HeadType) -> tf.keras.Model:
             relevant_keys = [
                 "units", "filter_size", "kernel_size",
                 "numb_conv", "numb_lstm", "dropout_rate",
-                "pool_size", "stride", "lstm_mask", "clamsa",
+                "pool_size", "lstm_mask", "clamsa",
                 "output_size", "residual_conv", "softmasking",
                 "clamsa_kernel", "lru_layer",
             ]
@@ -419,7 +422,7 @@ def build_backbone(config: dict[str, Any], head: HeadType) -> tf.keras.Model:
     relevant_keys = [
         "units", "filter_size", "kernel_size",
         "numb_conv", "numb_lstm", "dropout_rate",
-        "pool_size", "stride", "lstm_mask", "clamsa",
+        "pool_size", "lstm_mask", "clamsa",
         "output_size", "residual_conv", "softmasking",
         "clamsa_kernel", "lru_layer",
     ]
@@ -451,14 +454,6 @@ def attach_head(
     for layer in backbone.layers:
         layer.trainable = bool(config.get("trainable_lstm", True))
 
-    if config.get("constant_hmm", False):
-        return add_constant_hmm(
-            backbone,
-            seq_len=config["sample_size"],
-            batch_size=config["batch_size"],
-            output_size=config["output_size"],
-        )
-
     # Optionally seed HMM params from a previously trained HMM model
     gene_pred_layer = None
     model_load_hmm = config.get("model_load_hmm")
@@ -479,11 +474,6 @@ def attach_head(
         output_size=config["output_size"],
         num_hmm=config.get("num_hmm_layers", 1),
         hmm_factor=config["hmm_factor"],
-        share_intron_parameters=config.get("hmm_share_intron_parameters", False),
-        trainable_nucleotides_at_exons=config.get("hmm_nucleotides_at_exons", False),
-        trainable_emissions=config.get("hmm_trainable_emissions", False),
-        trainable_transitions=config.get("hmm_trainable_transitions", False),
-        trainable_starting_distribution=config.get("hmm_trainable_starting_distribution", False),
         include_lstm_in_output=config.get("multi_loss", False),
     )
 
@@ -607,11 +597,6 @@ def main():
             "residual_conv": True,
             "hmm_loss_weight_mul": 0.1,
             "hmm_dense": 32,
-            "hmm_share_intron_parameters": False,
-            "hmm_nucleotides_at_exons": False,
-            "hmm_trainable_transitions": False,
-            "hmm_trainable_starting_distribution": False,
-            "hmm_trainable_emissions": False,
             "constant_hmm": False,
             "num_hmm_layers": 1,
             "clamsa": bool(args.clamsa),

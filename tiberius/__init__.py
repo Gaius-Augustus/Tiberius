@@ -22,36 +22,7 @@ __all__ = [
 ]
 
 def __getattr__(name: str):
-    if name == "GenePredHMMLayer" or name in {
-        "make_15_class_emission_kernel",
-        "make_5_class_emission_kernel",
-        "make_aggregation_matrix",
-        "ReduceOutputSize",
-    }:
-        from .gene_pred_hmm import (
-            GenePredHMMLayer,
-            make_15_class_emission_kernel,
-            make_5_class_emission_kernel,
-            make_aggregation_matrix,
-            ReduceOutputSize,
-        )
-        return locals()[name]
 
-    if name == "GenePredHMMEmitter":
-        from .gene_pred_hmm_emitter import GenePredHMMEmitter
-        return GenePredHMMEmitter
-
-    if name in {
-        "GenePredHMMTransitioner",
-        "GenePredMultiHMMTransitioner",
-        "SimpleGenePredHMMTransitioner",
-    }:
-        from .gene_pred_hmm_transitioner import (
-            GenePredHMMTransitioner,
-            GenePredMultiHMMTransitioner,
-            SimpleGenePredHMMTransitioner,
-        )
-        return locals()[name]
 
     if name == "GenomeSequences":
         from .genome_fasta import GenomeSequences
@@ -65,8 +36,8 @@ def __getattr__(name: str):
         from .genome_anno import Anno
         return Anno
 
-    if name in {"make_weighted_cce_loss", "custom_cce_f1_loss", "lstm_model", "Cast"}:
-        from .models import make_weighted_cce_loss, custom_cce_f1_loss, lstm_model, Cast
+    if name in {"custom_cce_f1_loss", "lstm_model", "Cast"}:
+        from .models import custom_cce_f1_loss, lstm_model, Cast
         return locals()[name]
 
     if name == "DataGenerator":

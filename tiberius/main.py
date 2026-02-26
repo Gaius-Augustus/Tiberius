@@ -284,13 +284,12 @@ def run_tiberius(args):
                         "If it fails, please use a sequence length <= 500004 (--seq_len).\n")
 
 
-    from tiberius import make_weighted_cce_loss, PredictionGTF
+    from tiberius import PredictionGTF
 
     parallel_factor = compute_parallel_factor(seq_len) if args.parallel_factor == 0 else args.parallel_factor
     logging.info(f'HMM parallel factor: {parallel_factor}')
     start_time = time.time()
 
-    tf.keras.utils.get_custom_objects()["weighted_cce_loss"] = make_weighted_cce_loss()
 
     pred_gtf = PredictionGTF(
         model_path_lstm_old=args.model_lstm_old,

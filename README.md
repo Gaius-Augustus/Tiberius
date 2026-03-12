@@ -177,13 +177,18 @@ python tiberius.py --show_cfg --model_cfg diatoms
 
 **We generally recommend using unmasked models** as the safer default. Softmasked models can be fragile: if the target genome was masked differently than the training data (e.g., different repeat library or masking tool), accuracy may degrade. Softmasking can provide a small benefit when predicting for species that are distant from the training species, as shown in the original paper for mammalian parameters. See [softmasking_workflow](docs/softmasking_workflow.md) for how to mask repeats and [model_cfg](model_cfg/README.md) for which models require softmasking.
 
-**Using local weight files:** Instead of a model config, you can pass a local `.h5` weight file directly with `--model`. In this case softmasking is **enabled by default**. If your weights were trained without softmasking, you **must** pass `--no_softmasking` explicitly:
+**Using local model:**
+Instead of providing a predefined model configuration, you can pass a local model directory via `--model`. The directory must contain:
+
+- `model_config.json` – the model parameters (see `docs/config.json` for an example)
+- `model.weights.h5` – the trained model weights
+
+If the weights were trained without softmasking, you must explicitly disable softmasking during prediction by passing `--no_softmasking`.
 
 ```shell
-# Local weights trained without softmasking
-python tiberius.py --genome genome.fasta --model weights.h5 --no_softmasking --out tiberius.gtf
+# Example: local weights trained without softmasking
+python tiberius.py --genome genome.fasta --model model/ --no_softmasking --out tiberius.gtf
 ```
-
 ### *Ab Initio* Gene Prediction
 
 To run Tiberius with `tiberius.py`, you need to provide a FASTA file containing the genomic sequences and a model config file (or a local weight file, see above).

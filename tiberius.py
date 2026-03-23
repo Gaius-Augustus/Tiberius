@@ -14,6 +14,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 console = Console()
+
 SCRIPT_ROOT = Path(__file__).resolve().parent
 SINGULARITY_IMAGE_URI = "docker://larsgabriel23/tiberius:latest"
 SINGULARITY_IMAGE_PATH = SCRIPT_ROOT / "singularity" / "tiberius.sif"
@@ -224,10 +225,10 @@ def run_tiberius_in_singularity(args):
         cmd += ["--nvccli"]
     cmd += [
         "--nv",
-        str(image_path), "python3", 
+        str(image_path), "python3",
         str(Path(__file__).resolve())
         ]
-    
+
     passthrough = [arg for arg in sys.argv[1:] if arg != "--singularity"]
     cmd.extend(passthrough)
     env = os.environ.copy()
@@ -251,7 +252,7 @@ def validate_mode(args) -> str:
     if args.list_cfg:
         return "list_cfg"
 
-    if args.nf_config or args.params_yaml:        
+    if args.nf_config or args.params_yaml:
         return "nextflow"
 
     missing = []
@@ -317,7 +318,7 @@ def list_available_configs(cfg_dir: Path) -> None:
 
     console.print(table)
 
-def main():    
+def main():
     args = parseCmd()
     args = hydrate_args_from_params(args)
     if args.model_cfg:

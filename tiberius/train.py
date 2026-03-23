@@ -149,10 +149,6 @@ class PrintLr(tf.keras.callbacks.Callback):
         print(f"Epoch {epoch+1}: Learning rate is {tf.keras.backend.get_value(lr_t):.6f}")
 
 
-# ----------------------------
-# Helpers: resume logic + saving
-# ----------------------------
-
 _EPOCH_DIR_RE = re.compile(r"^epoch_(\d+)$")
 
 
@@ -191,9 +187,9 @@ def ensure_dir(p: Path) -> None:
 class EpochFolderSaver(tf.keras.callbacks.Callback):
     """
     Saves per-epoch artifacts into:
-      {model_save_dir}/epoch_XX/model.weights.h5           (backbone only)
-      {model_save_dir}/epoch_XX/model_config.json   (full config dict)
-      {model_save_dir}/epoch_XX/model_layers.json   (backbone model JSON)
+      {model_save_dir}/epoch_XX/model.weights.h5
+      {model_save_dir}/epoch_XX/model_config.json
+      {model_save_dir}/epoch_XX/model_layers.json
     """
     def __init__(
         self,
@@ -473,8 +469,12 @@ def attach_head(
         gene_pred_layer,
         output_size=config["output_size"],
         num_hmm=config.get("num_hmm_layers", 1),
-        hmm_factor=config["hmm_factor"],
+        hmm_factor=config.get("hmm_factor", 99),
         include_lstm_in_output=config.get("multi_loss", False),
+        emitter_epsilon=config.get("hmm_emitter_epsilon", 0.01),
+        initial_exon_len=config.get("hmm_initial_exon_len", 200),
+        initial_intron_len=config.get("hmm_initial_intron_len", 4500),
+        initial_ir_len=config.get("hmm_initial_ir_len", 10000),
     )
 
 
@@ -520,7 +520,7 @@ def train_model(
         # Logging
         csv_logger = CSVLogger(str(model_save_dir / "training.log"), append=True, separator=";")
 
-        # Save callback (NEW format)
+        # Save callback
         epoch_saver = EpochFolderSaver(
             model_save_dir=model_save_dir,
             backbone_model=backbone,            # <- never includes HMM
@@ -597,7 +597,6 @@ def main():
             "residual_conv": True,
             "hmm_loss_weight_mul": 0.1,
             "hmm_dense": 32,
-            "constant_hmm": False,
             "num_hmm_layers": 1,
             "clamsa": bool(args.clamsa),
             "clamsa_kernel_size": 7,
@@ -607,6 +606,10 @@ def main():
             "sgd": False,
             "oracle": False,
             "lru_layer": False,
+            "hmm_emitter_epsilon": 0.0,
+            "hmm_initial_exon_len": 200,
+            "hmm_initial_intron_len": 4500,
+            "hmm_initial_ir_len": 10000,
         }
 
     # Normalize paths / args
@@ -627,7 +630,6 @@ def main():
     mask_tx_list = read_species(config["mask_tx_list_file"]) if config.get("mask_tx_list_file") else []
 
     data_path = Path(args.data)
-    ensure_dir(data_path)
 
     # Tfrecord paths
     species = read_species(str(args.train_species_file))

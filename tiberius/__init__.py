@@ -3,11 +3,6 @@ from ._version import __version__
 __all__ = [
     "__version__",
     # Optional: export “public” symbols too
-    "GenePredHMMLayer",
-    "GenePredHMMEmitter",
-    "GenePredHMMTransitioner",
-    "GenePredMultiHMMTransitioner",
-    "SimpleGenePredHMMTransitioner",
     "GenomeSequences",
     "GeneStructure",
     "Annotation",

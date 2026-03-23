@@ -6,6 +6,7 @@ clamsa: False
 tiberius_version: 1.1.6
 date: "2025-10-24"
 comment: "Monocot training weights trained by Tomas Bruna (JGI)."
+default_seq_len: 400_050
 training_species: [
    Aamericanusv1.1
    AdonaxvarAD10v1.1_A1

@@ -2,12 +2,11 @@ import sys
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import (Conv1D, Conv1DTranspose, LSTM,
+from tensorflow.keras.layers import (Conv1D, LSTM,
                                 Dense, Bidirectional, Dropout, Activation, Input,
                                 Reshape, LayerNormalization)
 from tensorflow import keras
 from tensorflow.keras import backend as K
-from learnMSA.msa_hmm.Initializers import ConstantInitializer
 from learnMSA.msa_hmm.Training import Identity
 from tiberius.hmm import HMMBlock
 from hidten import HMMMode
@@ -307,11 +306,16 @@ def reduce_lstm_output_5(x, new_size=3):
     return x_out
 
 def add_hmm_layer(model,
-                  gene_pred_layer=None,
-                  output_size=5,
-                  num_hmm=1,
-                  hmm_factor=9,
-                  include_lstm_in_output=False):
+                gene_pred_layer=None,
+                output_size=5,
+                num_hmm=1,
+                hmm_factor=9,
+                include_lstm_in_output=False,
+                emitter_epsilon: float = 0.0,
+                initial_exon_len: int = 200,
+                initial_intron_len: int = 4500,
+                initial_ir_len: int = 10000,
+                ):
     """Add trainable HMM layer to existing hel_model.
 
     Parameters:
@@ -347,12 +351,17 @@ def add_hmm_layer(model,
         parallel=hmm_factor,
         mode=HMMMode.POSTERIOR,
         training=True,
-        emitter_epsilon=0.01,
+        emitter_epsilon=emitter_epsilon,
+        initial_exon_len=initial_exon_len,
+        initial_intron_len=initial_intron_len,
+        initial_ir_len=initial_ir_len,
     )
     y_hmm = gene_pred_layer(x, nuc, training=True)
 
     y = Reshape((-1, output_size) if num_hmm == 1 else (-1, num_hmm, output_size),
                 name='hmm_out')(y_hmm) #make sure the last dimension is not None
+
+    y = Activation(safe_clipped_log, name='hmm_out_safe_clipped_log')(y)
 
     model_hmm = Model(
         inputs=inputs,
@@ -360,3 +369,10 @@ def add_hmm_layer(model,
     )
 
     return model_hmm
+
+
+def safe_clipped_log(x):
+    from hidten.tf.util import safe_log
+    y = safe_log(x)
+    y = tf.clip_by_value(y, -30, 0)
+    return y

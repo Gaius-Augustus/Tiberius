@@ -8,7 +8,10 @@ class HMMBlock(AnnotationHMM):
         mode: HMMMode,
         parallel: int,
         training: bool,
-        emitter_epsilon: float = 0.0,
+        emitter_epsilon: float = 0.01,
+        initial_exon_len: int = 200,
+        initial_intron_len: int = 4500,
+        initial_ir_len: int = 10000,
     ) -> None:
         self.mode = mode
         self.parallel = parallel
@@ -17,12 +20,13 @@ class HMMBlock(AnnotationHMM):
             use_reverse_strand=False,
             emitter_eye=emitter_epsilon,
             train_emitter=False,
-            initial_exon_len=200,
-            initial_intron_len=200,
-            initial_ir_len=200,
+            initial_exon_len=initial_exon_len,
+            initial_intron_len=initial_intron_len,
+            initial_ir_len=initial_ir_len,
             transitioner_share_frames=False,
             transitioner_share_noncoding=False,
-            train_transitioner=False,
+            train_transitions=False,
+            train_start_dist=False
         )
 
     def call(self, x, nuc):

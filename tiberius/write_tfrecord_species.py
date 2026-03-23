@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
 
-import sys, json, os, re, sys, csv, argparse
+import sys, os, sys, argparse
 from tiberius.genome_fasta import GenomeSequences
 from tiberius.annotation_gtf import Annotation
-import subprocess as sp
 import numpy as np
 import tensorflow as tf
-import numpy as np
 import sys
 from tiberius.wig_class import Wig_util
-import h5py
 import gc
-import time
 
 
 def get_clamsa_track(file_path, seq_len=500004, prefix=''):
@@ -44,8 +40,8 @@ def load_clamsa_data(clamsa_prefix, seq_names, seq_len=None):
         clamsa_chunks = np.concatenate(clamsa_chunks, axis=0)
         return np.concatenate([clamsa_chunks[::-1,::-1, [1,0,3,2]], clamsa_chunks], axis=0)
 
-def get_species_data_hmm(genome_path='', annot_path='', species='',
-            seq_len=500004, overlap_size=0, transition=False,
+def get_species_data_hmm(genome_path='', annot_path='',
+            seq_len=500004, overlap_size=0,
             min_seq_len=500000):
 
     fasta = GenomeSequences(fasta_file=genome_path,
@@ -63,26 +59,7 @@ def get_species_data_hmm(genome_path='', annot_path='', species='',
     ref_anno = Annotation(annot_path,
                 seq_names, seqs, seq_len, )
     ref_anno.read_inputfile()
-
-
     return fasta, ref_anno
-
-def write_h5(fasta, ref, out, ref_phase=None, split=100,
-                    trans=False, clamsa=np.array([])):
-    fasta = fasta.astype(np.int32)
-    ref = ref.astype(np.int32)
-
-    file_size = fasta.shape[0] // split
-    indices = np.arange(fasta.shape[0])
-    np.random.shuffle(indices)
-    if ref_phase:
-        ref_phase = ref_phase.astype(np.int32)
-    for k in range(split):
-        # Create a new HDF5 file with compression
-        with h5py.File(f'{out}_{k}.h5', 'w') as f:
-            # Create datasets with GZIP compression
-            f.create_dataset('input', data=fasta[indices[k::split]], compression='gzip', compression_opts=9)  # Maximum compression
-            f.create_dataset('output', data=ref[indices[k::split]], compression='gzip', compression_opts=9)
 
 def write_numpy(fasta, ref, out, ref_phase=None, split=100, trans=False, clamsa=np.array([])):
     fasta = fasta.astype(np.int32)
@@ -167,8 +144,8 @@ def write_tf_record(fasta, ref, out, split=100, clamsa=np.array([]),
 def main():
     args = parseCmd()
     fasta, ref = get_species_data_hmm(genome_path=args.fasta, annot_path=args.gtf,
-                species=args.species, seq_len=args.wsize,
-                overlap_size=0, transition=True,
+                seq_len=args.wsize,
+                overlap_size=0,
                 min_seq_len=args.min_seq_len)
 
     # print('Loaded FASTA and GTF', fasta.shape, ref.shape)
@@ -181,9 +158,7 @@ def main():
         else:
             write_tf_record(fasta, ref, args.out, clamsa=clamsa)
     else:
-        if args.h5:
-            write_h5(fasta, ref, args.out)
-        elif args.np:
+        if args.np:
             write_numpy(fasta, ref, args.out)
         else:
             add_tx_ids = not args.no_tx_ids
@@ -217,8 +192,6 @@ def parseCmd():
     parser.add_argument('--clamsa',  type=str, default='',
         help='')
     parser.add_argument('--seq_names',  type=str, default='',
-        help='')
-    parser.add_argument('--h5', action='store_true',
         help='')
     parser.add_argument('--np', action='store_true',
         help='')

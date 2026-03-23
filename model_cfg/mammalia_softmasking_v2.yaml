@@ -5,6 +5,7 @@ softmasking: True
 clamsa: False
 tiberius_version: 1.1.5
 date: "2025-05-12"
+default_seq_len: 400_050
 comment: "# Lars Gabriel, May 12th 2025\n Training weights from the original Tiberius paper: https://doi.org/10.1093/bioinformatics/btae685\n Saved in a different format as the original weights."
 training_species: [
   Aotus_nancymaae

@@ -5,6 +5,7 @@ softmasking: False
 clamsa: False
 tiberius_version: 1.1.7
 date: "2025-11-10"
+default_seq_len: 400_050
 comment: "Mario Stanke, Nov 10th 2025\n. This was trained on vertebrates including fish,
  birds,  lizards and mammals. It should be preferred on non-mammalian vertebrates genomes over the mammalian version of Tiberius but is slightly worse on mammals:
                  Group   Training  Mean Locus F1
@@ -16,7 +17,7 @@ comment: "Mario Stanke, Nov 10th 2025\n. This was trained on vertebrates includi
  Non-Mammal Vert (n=6) Vertebrate          47.58
 
  Vertebrate: this, Mammal: mammalia_nosofttmasking_v2.yaml
- Tested on 9 vertebrate test species, phylogenetically separated from any training species:  
+ Tested on 9 vertebrate test species, phylogenetically separated from any training species:
  # 3 mammals
  GCF_002263795.3 cow
  GCF_000001405.40 human
@@ -62,7 +63,7 @@ training_species:
   - Saimiri_boliviensis
   - Sorex_araneus
   - Trichechus_manatus
-  # 35 vertebrate, non-mammalian species 
+  # 35 vertebrate, non-mammalian species
   - Acipenser_ruthenus           # GCF_902713425.1
   - Alligator_mississippiensis   # GCF_030867095.1
   - Alosa_sapidissima            # GCF_018492685.1

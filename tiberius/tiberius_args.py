@@ -4,7 +4,7 @@ def parseCmd():
     """Parse command line arguments
 
     Returns:
-        dictionary: Dictionary with arguments
+        argparse.Namespace: Parsed command-line arguments.
     """
     parser = argparse.ArgumentParser(
         description=(
@@ -50,27 +50,31 @@ def parseCmd():
         help='Output GTF file with Tiberius gene prediction.', default='tiberius.gtf')
     tiberius_grp.add_argument('--parallel_factor', type=int, default=0,
         help='Parallel factor used in Viterbi (default uses sqrt(seq_len)).')
-    tiberius_grp.add_argument('--hmm_eps', type=float, default=0,
+
+    tiberius_grp.add_argument('--hmm_eps', type=float, default=0.01,
         help='Deviation from the identity matrix of the HMM emitter.')
+    tiberius_grp.add_argument('--hmm_initial_exon_len', type=int, default=200,
+        help='Sets the transitions of the exon classes in the HMM.')
+    tiberius_grp.add_argument('--hmm_initial_intron_len', type=int, default=4500,
+        help='Sets the transitions of the intron classes in the HMM.')
+    tiberius_grp.add_argument('--hmm_initial_ir_len', type=int, default=10000,
+        help='Sets the transitions of the intergenic region in the HMM.')
+
     tiberius_grp.add_argument('--no_softmasking', action='store_true',
         help='Disable softmasking.')
     tiberius_grp.add_argument('--clamsa', type=str, default='',
         help='Clamsa prefix for additional input features.')
-    tiberius_grp.add_argument('--learnMSA', type=str, default='',
-        help=argparse.SUPPRESS)
     tiberius_grp.add_argument('--codingseq', type=str, default='',
         help='Output coding sequences as FASTA.')
     tiberius_grp.add_argument('--protseq', type=str, default='',
         help='Output protein sequences as FASTA.')
-    tiberius_grp.add_argument('--strand', type=str, default='+,-',
-        help='Either "+" or "-" or "+,-".')
-    tiberius_grp.add_argument('--seq_len', type=int, default=500004,
+    tiberius_grp.add_argument('--seq_len', type=int, default=None,
         help='Length of sub-sequences used for parallelizing the prediction.')
-    tiberius_grp.add_argument('--batch_size', type=int, default=16,
+    tiberius_grp.add_argument('--batch_size', type=int, default=None,
         help='Number of sub-sequences per batch.')
     tiberius_grp.add_argument('--id_prefix', type=str, default='',
         help='Prefix for gene and transcript IDs in output GTF file.')
-    tiberius_grp.add_argument('--min_genome_seqlen', type=int, default=0,
+    tiberius_grp.add_argument('--min_genome_seqlen', type=int, default=1000,
         help='Minimum length of input sequences used for predictions.')
     tiberius_grp.add_argument('--singularity', action='store_true',
         help='Run Tiberius inside the Singularity image (auto-download if missing).')

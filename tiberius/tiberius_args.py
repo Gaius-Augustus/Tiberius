@@ -62,7 +62,7 @@ def parseCmd():
 
     tiberius_grp.add_argument('--no_softmasking', action='store_true',
         help='Disable softmasking.')
-    tiberius_grp.add_argument('--clamsa', type=str, default='',
+    tiberius_grp.add_argument('--clamsa', type=str, default=None,
         help='Clamsa prefix for additional input features.')
     tiberius_grp.add_argument('--codingseq', type=str, default='',
         help='Output coding sequences as FASTA.')

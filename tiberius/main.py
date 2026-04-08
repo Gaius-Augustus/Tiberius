@@ -154,7 +154,7 @@ def get_gpu_memory_gb(device_index: int = 0) -> float:
 def compute_auto_batch_size(
     seq_len: int,
     gpu_memory_gb: float,
-    safety_factor: float = 0.98,
+    safety_factor: float = 0.9,
     min_batch_size: int = 1,
     max_batch_size: int | None = None,
 ) -> int:
@@ -165,6 +165,9 @@ def compute_auto_batch_size(
     Calibrated by default with:
         seq_len=500004, batch_size=16 on 80 GB GPU
     """
+    preferred_batch_sizes = [1, 2, 4, 8, 16, 24,
+                            32, 64, 96, 128, 160, 192]
+    max_deviation = 3
     if seq_len <= 0:
         raise ValueError(f"seq_len must be > 0, got {seq_len}")
     if gpu_memory_gb <= 0:
@@ -173,26 +176,27 @@ def compute_auto_batch_size(
         raise ValueError(f"safety_factor must be > 0, got {safety_factor}")
 
     if gpu_memory_gb >= 70:
-        ref_mem, ref_bs = 80.0, 16
+        ref_mem, ref_bs = 80.0, 18
     elif gpu_memory_gb >= 16:
         ref_mem, ref_bs = 25.0, 8
     else:
         ref_mem, ref_bs = 8.0, 2
-    estimated = math.floor(
-        (gpu_memory_gb / ref_mem)
-        * ref_bs
-        * (500_004 / seq_len)
+    estimated = (gpu_memory_gb / ref_mem) \
+        * ref_bs \
+        * (500_004 / seq_len) \
         * safety_factor
-    )
 
     batch_size = max(min_batch_size, estimated)
+    candidates = [b for b in preferred_batch_sizes if abs(b-batch_size) < max_deviation]
+    if candidates:
+        batch_size = min(candidates, key=lambda x: abs(x - batch_size))
 
     if max_batch_size is not None:
         batch_size = min(batch_size, max_batch_size)
-
+    batch_size = int(batch_size+0.5)
     logging.info(
         "Auto-computed batch_size=%s from seq_len=%s and gpu_memory_gb=%.2f "
-        "If a GPU runs out of memory, please set the batch size manually with the --batch_size option.",
+        "If GPU runs out of memory, please set the batch size manually with the --batch_size option.",
         batch_size,
         seq_len,
         gpu_memory_gb,
@@ -201,22 +205,24 @@ def compute_auto_batch_size(
 
 def download_weights(url: str, file_path: str | Path) -> str | Path:
     """Download model weights unless a usable local file already exists."""
+
+    print
     if (
-        (file_path.endswith(".tgz") or file_path.endswith(".tar.gz"))
-        and os.path.exists(file_path[:-4])
-        and not os.path.getsize(file_path[:-4]) == 0
+        file_path.endswith(".tar.gz")
+        and os.path.isdir(file_path[:-7])
+        and  os.listdir(file_path[:-7])
     ):
-        file_path = file_path[:-4]
+        file_path = file_path[:-7]
         logging.info(
-            f"Warning: No model weights provided. Using existing file at {file_path}."
+            f"Using existing model weights file at {file_path} ."
         )
     elif os.path.exists(file_path) and not os.path.getsize(file_path) == 0:
         logging.info(
-            f"Warning: No model weights provided. Using existing file at {file_path}."
+            f"Using existing model weights file at {file_path} ."
         )
     else:
         logging.info(
-            f"Warning: No model weights provided, they will be downloaded to {file_path}."
+            f"Model weights will be downloaded to {file_path} ."
         )
         logging.info(f"Weights for Tiberius model will be downloaded from {url}")
         with requests.get(url, stream=True) as r:
@@ -338,7 +344,6 @@ def run_tiberius(args):
     genome_path = os.path.abspath(args.genome)
     check_file_exists(genome_path)
 
-    clamsa_prefix = args.clamsa if not config else config["clamsa"]
 
     if config:
         model_path = resolve_weight_download(config)
@@ -349,10 +354,19 @@ def run_tiberius(args):
         )
         sys.exit(1)
 
+    clamsa_prefix = args.clamsa
+
+    if config:
+        if clamsa_prefix is not None and not config["clamsa"]:
+            logging.error("Error: ClaMSA input data was provided but the model provided does not support ClaMSA input.")
+        if clamsa_prefix is not None and not config["clamsa"]:
+            logging.error("Error: A model that requires ClaMSA input is used but no ClaMSA input was provided using --clamsa .")
+
+
     tf = import_tensorflow()
     check_tf_version(tf.__version__)
 
-    if args.seq_len > 500_004:
+    if seq_len > 500_004:
         logging.error(
             f"\nWARNING: The sequence length {args.seq_len} can be too long for TensorFlow version {tf.__version__}. "
             "If it fails, please use a sequence length <= 500004 (--seq_len).\n"
@@ -404,6 +418,12 @@ def run_tiberius(args):
                     inframe_stop_codons=True,
                     out_of_bounds=False,
                 )
+        b2m.tools.check_min_coding_length(
+            annot, 200, remove=True
+        )
+        b2m.tools.check_inframe_stop_codons(
+            annot, fasta, remove=True
+        )
         if args.codingseq:
             annot.extract_to_file(
                 target="coding",
@@ -420,6 +440,11 @@ def run_tiberius(args):
                 mode='a',
             )
         return annot
+
+    clamsa=None
+    if clamsa_prefix:
+        clamsa = pred_gtf.load_clamsa_data(clamsa_prefix=clamsa_prefix, seq_names=seq,
+                            strand="+", chunk_len=seq_len, pad=True)
 
     b2m.tools.annotate.annotate_genome(
         fasta = Path(genome_path).expanduser(),

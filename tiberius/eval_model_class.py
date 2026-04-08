@@ -276,7 +276,7 @@ class PredictionGTF:
         ) -> tuple[np.ndarray, np.ndarray]:
         # fwd prediction
         indices_fwd = np.where(np.isin(fasta.evidence[:,0], [0, 2]))[0]
-        hmm_out_fwd_expand = np.empty((fasta.N,fasta.T), dtype=np.int32)
+        hmm_out_fwd_expand = np.empty((fasta.N, fasta.T), dtype=np.int32)
         if indices_fwd.size > 0:
             x_one_hot_fwd = fasta.one_hot(
                     pad_index = 4,

@@ -6,6 +6,7 @@ units: 186
 clamsa: False
 tiberius_version: 1.1.7
 date: "2026-02-15"
+default_seq_len: 500_040
 comment: "Training for insects (no softmasking) by Katharina Hoff.
 
           -------------------------------------------------------------------------------------
@@ -51,7 +52,7 @@ comment: "Training for insects (no softmasking) by Katharina Hoff.
           Locus level          |   64.5   51.2   57.1 |   68.0   50.4   57.9 |   +3.4   -0.8   +0.8 |
           -------------------------------------------------------------------------------------------
 
-          Accuracy relative to the insect parameters for masked genomes (using NCBI masking, 
+          Accuracy relative to the insect parameters for masked genomes (using NCBI masking,
           comparison on 10 common species):
 
                                         insecta       | insecta_unmasked_v2  |         delta        |
@@ -63,8 +64,8 @@ comment: "Training for insects (no softmasking) by Katharina Hoff.
           Locus level          |   63.0   55.4   59.0 |   68.0   50.4   57.9 |   +4.9   -5.0   -1.1 |
           -------------------------------------------------------------------------------------------
 
-        
-          Accuracy relative to the lepidoptera parameter set (comparison on the 4 common species 
+
+          Accuracy relative to the lepidoptera parameter set (comparison on the 4 common species
           Leptidea sinapis, Nymphalis io, Bombyx mori, Vanessa cardui):
 
                                       lepidoptera     | insecta_unmasked_v2  |         delta        |

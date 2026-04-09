@@ -9,11 +9,12 @@ default_seq_len: 100_080
 comment: |
           Chlorophyta training weights trained by Katharina Hoff.
           Benchmark by Katharina Hoff and Lars Gabriel
-
           (gffcompare v0.12.10) on test species not seen during training.
-
-          Test species benchmark:
-
+          Test species:
+          Species                 | Accession       |
+          Bathycoccus prasinos    | GCF_002220235.1 |
+          Edaphochlamys debaryana | GCA_016858145.1 |
+          Accuracy benchmark:
           Species                 | Tool     | Exon Sn | Exon Pr | Exon F1 | Gene Sn | Gene Pr | Gene F1 |
           Bathycoccus prasinos    | Tiberius | 48.4    | 51.1    | 49.7    | 48.2    | 52.1    | 50.1    |
           Bathycoccus prasinos    | BRAKER3  | 41.2    | 44.4    | 42.7    | 38.5    | 51.2    | 44.0    |
@@ -21,14 +22,11 @@ comment: |
           Edaphochlamys debaryana | BRAKER3  | 61.1    | 89.3    | 72.6    | 45.7    | 60.1    | 51.9    |
           Average                 | Tiberius | 66.3    | 67.0    | 66.6    | 44.7    | 44.9    | 44.7    |
           Average                 | BRAKER3  | 51.2    | 66.8    | 57.6    | 42.1    | 55.7    | 47.9    |
-
           Runtime benchmark (h:mm):
-
           Species                 | Tiberius | BRAKER3 |
           Bathycoccus prasinos    | 0:01     | 10:34   |
           Edaphochlamys debaryana | 0:04     | 24:24   |
           Average                 | 0:03     | 17:29   |
-
 training_species: [
    Ostreococcus_lucimarinus_CCE9901
    Chlamydomonas_reinhardtii
@@ -40,3 +38,4 @@ training_species: [
    Chloropicon_primus
    Tetradesmus_obliquus
 ]
+

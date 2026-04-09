@@ -10,22 +10,26 @@ default_seq_len: 500_040
 comment: |
           Training for insects (no softmasking) by Katharina Hoff.
           Benchmark by Katharina Hoff and Lars Gabriel
-
           (gffcompare v0.12.10) on 11 Insecta test species.
-
           - None of the species were used during Tiberius training
           - Cataglyphis hispanica was used during ANNEVO training
           - Bombyx mori, Drosophila melanogaster, Osmia bicornis and Zerene cesonia
                  were used during training or validation of Helixer
-
-          Species-level benchmark:
-
+          Test species:
+          Species                 | Accession       |
+          Bombyx mori             | GCF_030269925.1 |
+          Cataglyphis hispanica   | GCF_021464435.1 |
+          Colias croceus          | GCF_905220415.1 |
+          Danaus plexippus        | GCF_018135715.1 |
+          Drosophila melanogaster | GCF_000001215.4 |
+          Leptidea sinapis        | GCF_905404315.1 |
+          Nymphalis io            | GCF_905147045.1 |
+          Osmia bicornis          | GCF_907164935.1 |
+          Tribolium castaneum     | GCF_031307605.1 |
+          Vanessa cardui          | GCF_905220365.1 |
+          Zerene cesonia          | GCF_012273895.1 |
+          Accuracy benchmark:
           Species                 | Tool     | Exon Sn | Exon Pr | Exon F1 | Gene Sn | Gene Pr | Gene F1 |
-          Average                 | Helixer  | 79.5    | 72.8    | 75.9    | 42.5    | 36.9    | 39.5    |
-          Average                 | ANNEVO   | 80.5    | 80.6    | 80.5    | 48.7    | 47.3    | 47.9    |
-          Average                 | Tiberius | 83.2    | 85.7    | 84.4    | 68.1    | 50.5    | 57.6    |
-          Average                 | BRAKER3  | 82.1    | 92.1    | 86.7    | 76.4    | 74.7    | 75.4    |
-
           Bombyx mori             | Helixer  | 80.1    | 73.0    | 76.4    | 34.7    | 30.9    | 32.7    |
           Bombyx mori             | ANNEVO   | 80.2    | 80.0    | 80.1    | 41.2    | 40.5    | 40.8    |
           Bombyx mori             | Tiberius | 77.8    | 85.6    | 81.5    | 60.2    | 41.9    | 49.4    |
@@ -70,15 +74,16 @@ comment: |
           Zerene cesonia          | ANNEVO   | 84.5    | 80.8    | 82.6    | 47.6    | 44.7    | 46.1    |
           Zerene cesonia          | Tiberius | 87.3    | 89.3    | 88.3    | 66.0    | 59.0    | 62.3    |
           Zerene cesonia          | BRAKER3  | 73.8    | 93.1    | 82.3    | 71.5    | 73.7    | 72.6    |
-
+          Average                 | Helixer  | 79.5    | 72.8    | 75.9    | 42.5    | 36.9    | 39.5    |
+          Average                 | ANNEVO   | 80.5    | 80.6    | 80.5    | 48.7    | 47.3    | 47.9    |
+          Average                 | Tiberius | 83.2    | 85.7    | 84.4    | 68.1    | 50.5    | 57.6    |
+          Average                 | BRAKER3  | 82.1    | 92.1    | 86.7    | 76.4    | 74.7    | 75.4    |
           Average runtime benchmark across the 11 test species:
-
           Tool     | Runtime (h:mm) |
           Helixer  | 1:14           |
           ANNEVO   | 0:11           |
           Tiberius | 0:12           |
           BRAKER3  | 45:42          |
-
 training_species: [
     Ennomos_fuscantarius
     Sipha_flava

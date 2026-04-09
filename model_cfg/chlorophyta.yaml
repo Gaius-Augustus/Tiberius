@@ -19,12 +19,15 @@ comment: |
           Bathycoccus prasinos    | BRAKER3  | 41.2    | 44.4    | 42.7    | 38.5    | 51.2    | 44.0    |
           Edaphochlamys debaryana | Tiberius | 84.3    | 82.8    | 83.5    | 41.2    | 37.6    | 39.3    |
           Edaphochlamys debaryana | BRAKER3  | 61.1    | 89.3    | 72.6    | 45.7    | 60.1    | 51.9    |
+          Average                 | Tiberius | 66.3    | 67.0    | 66.6    | 44.7    | 44.9    | 44.7    |
+          Average                 | BRAKER3  | 51.2    | 66.8    | 57.6    | 42.1    | 55.7    | 47.9    |
 
           Runtime benchmark (h:mm):
 
           Species                 | Tiberius | BRAKER3 |
           Bathycoccus prasinos    | 0:01     | 10:34   |
           Edaphochlamys debaryana | 0:04     | 24:24   |
+          Average                 | 0:03     | 17:29   |
 
 training_species: [
    Ostreococcus_lucimarinus_CCE9901

@@ -19,6 +19,12 @@ comment: |
           Species-level benchmark:
 
           Species                      | Tool     | Exon Sn | Exon Pr | Exon F1 | Gene Sn | Gene Pr | Gene F1 |
+
+          Average                     | Helixer  | 64.9    | 53.8    | 58.7    | 32.2    | 26.6    | 29.0    |
+          Average                     | ANNEVO   | 66.1    | 62.8    | 64.3    | 35.6    | 35.3    | 35.4    |
+          Average                     | Tiberius | 70.9    | 70.9    | 70.9    | 44.7    | 46.1    | 45.3    |
+          Average                     | BRAKER3  | 63.8    | 74.5    | 68.6    | 43.8    | 54.7    | 48.5    |
+
           Agaricus bisporus            | Helixer  | 67.6    | 57.9    | 62.4    | 23.1    | 18.7    | 20.7    |
           Agaricus bisporus            | ANNEVO   | 74.2    | 68.4    | 71.2    | 32.7    | 31.1    | 31.9    |
           Agaricus bisporus            | Tiberius | 79.6    | 77.5    | 78.5    | 44.0    | 44.3    | 44.1    |
@@ -53,6 +59,7 @@ comment: |
           Puccinia striiformis         | 0:02     | 2:11    | 0:15    | 0:02   |
           Punctularia strigosozonata   | 0:01     | 1:55    | 0:06    | 0:02   |
           Tilletiopsis washingtonensis | 0:01     | 1:41    | 0:03    | 0:01   |
+          Average                      | 0:02     | 1:41    | 0:08    | 0:02   |
 training_species: [
    Aaosphaeria_arxii
   Akanthomyces_muscarius

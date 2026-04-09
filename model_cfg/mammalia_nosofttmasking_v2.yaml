@@ -32,12 +32,18 @@ comment: |
           Homo sapiens          | Tiberius | 85.0    | 90.2    | 87.5    | 71.4    | 61.2    | 65.9    |
           Homo sapiens          | BRAKER3  | 74.0    | 92.0    | 82.0    | 76.5    | 68.4    | 72.2    |
 
+          Average               | Helixer  | 77.4    | 71.0    | 74.1    | 24.6    | 24.0    | 24.3    |
+          Average               | ANNEVO   | 81.5    | 80.3    | 80.9    | 44.4    | 36.6    | 40.1    |
+          Average               | Tiberius | 83.4    | 90.7    | 86.9    | 64.6    | 59.5    | 61.9    |
+          Average               | BRAKER3  | 69.3    | 93.7    | 79.6    | 68.9    | 72.6    | 70.4    |
+
           Runtime benchmark:
 
           Species               | Tiberius | BRAKER3 | Helixer | ANNEVO |
           Bos taurus            | 1:23     | 83:21   | 10:53   | 1:24   |
           Delphinapterus leucas | 1:13     | 76:40   | 11:10   | 1:18   |
           Homo sapiens          | 1:25     | 71:22   | 10:56   | 1:55   |
+          Average               | 1:20     | 77:08   | 11:00   | 1:32   |
 
 training_species: [
   Aotus_nancymaae

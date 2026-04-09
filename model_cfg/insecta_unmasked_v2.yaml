@@ -21,6 +21,11 @@ comment: |
           Species-level benchmark:
 
           Species                 | Tool     | Exon Sn | Exon Pr | Exon F1 | Gene Sn | Gene Pr | Gene F1 |
+          Average                 | Helixer  | 79.5    | 72.8    | 75.9    | 42.5    | 36.9    | 39.5    |
+          Average                 | ANNEVO   | 80.5    | 80.6    | 80.5    | 48.7    | 47.3    | 47.9    |
+          Average                 | Tiberius | 83.2    | 85.7    | 84.4    | 68.1    | 50.5    | 57.6    |
+          Average                 | BRAKER3  | 82.1    | 92.1    | 86.7    | 76.4    | 74.7    | 75.4    |
+
           Bombyx mori             | Helixer  | 80.1    | 73.0    | 76.4    | 34.7    | 30.9    | 32.7    |
           Bombyx mori             | ANNEVO   | 80.2    | 80.0    | 80.1    | 41.2    | 40.5    | 40.8    |
           Bombyx mori             | Tiberius | 77.8    | 85.6    | 81.5    | 60.2    | 41.9    | 49.4    |

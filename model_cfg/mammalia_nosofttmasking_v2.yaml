@@ -6,7 +6,39 @@ clamsa: False
 tiberius_version: 1.1.5
 date: "2025-05-12"
 default_seq_len: 400_050
-comment: "# Lars Gabriel, May 12th 2025\n Training weights from the original Tiberius paper: https://doi.org/10.1093/bioinformatics/btae685\n Saved in a different format as the original weights."
+comment: |
+          Training and benchmarking by Lars Gabriel.
+
+          Updated benchmark from the supplementary data for Tiberius v2.0.0
+          (gffcompare v0.12.10) on 3 mammalian test species not seen during training.
+
+          - None of the species were used during Tiberius and ANNEVO training
+          - Delphinapterus leucas and Homo sapiens
+                 were used during training or validation of Helixer
+
+          Species-level benchmark:
+
+          Species               | Tool     | Exon Sn | Exon Pr | Exon F1 | Gene Sn | Gene Pr | Gene F1 |
+          Bos taurus            | Helixer  | 76.2    | 70.7    | 73.3    | 23.1    | 24.0    | 23.5    |
+          Bos taurus            | ANNEVO   | 81.3    | 82.8    | 82.0    | 46.2    | 41.4    | 43.7    |
+          Bos taurus            | Tiberius | 82.5    | 90.2    | 86.2    | 62.2    | 57.8    | 59.9    |
+          Bos taurus            | BRAKER3  | 67.2    | 94.9    | 78.7    | 64.4    | 77.0    | 70.1    |
+          Delphinapterus leucas | Helixer  | 77.3    | 72.5    | 74.8    | 23.3    | 23.0    | 23.1    |
+          Delphinapterus leucas | ANNEVO   | 80.5    | 77.5    | 79.0    | 39.3    | 30.0    | 34.0    |
+          Delphinapterus leucas | Tiberius | 82.6    | 91.8    | 87.0    | 60.3    | 59.4    | 59.8    |
+          Delphinapterus leucas | BRAKER3  | 66.6    | 94.1    | 78.0    | 65.8    | 72.4    | 68.9    |
+          Homo sapiens          | Helixer  | 78.8    | 69.8    | 74.0    | 27.4    | 25.0    | 26.1    |
+          Homo sapiens          | ANNEVO   | 82.8    | 80.5    | 81.6    | 47.7    | 38.4    | 42.5    |
+          Homo sapiens          | Tiberius | 85.0    | 90.2    | 87.5    | 71.4    | 61.2    | 65.9    |
+          Homo sapiens          | BRAKER3  | 74.0    | 92.0    | 82.0    | 76.5    | 68.4    | 72.2    |
+
+          Runtime benchmark:
+
+          Species               | Tiberius | BRAKER3 | Helixer | ANNEVO |
+          Bos taurus            | 1:23     | 83:21   | 10:53   | 1:24   |
+          Delphinapterus leucas | 1:13     | 76:40   | 11:10   | 1:18   |
+          Homo sapiens          | 1:25     | 71:22   | 10:56   | 1:55   |
+
 training_species: [
   Aotus_nancymaae
   Camelus_bactrianus

@@ -1,0 +1,130 @@
+target_species: "Sordariomycota"
+ncbi_tax_id: 147538
+weights_url: "https://bioinf.uni-greifswald.de/bioinf/tiberius/models/sordariomycota_weights.tar.gz"
+softmasking: True
+clamsa: False
+tiberius_version: 1.1.6
+date: "2025-10-24"
+comment: "!!! This parameter set has been superseded by fungi.yaml !!!
+
+          Sordariomycota training weights trained by the fungal team at JGI.
+          Accuracy benchmark by Katharina Hoff.
+
+          Species-specific accuracy results according to gffcompare 0.12.6 on test species
+          never seen during training of Tiberius:
+
+          ---------------------------------------------------------------------------------------------
+          Species                         | Accession       | CDS Exon    | Intron chain| Locus       |
+                                          |                 | Sens | Prec | Sens | Prec | Sens | Prec |
+          ---------------------------------------------------------------------------------------------
+          Apiospora_hydei                 | GCF_038363865.1 | 53.8 | 55.9 | 34.4 | 34.7 | 37.6 | 39.4 |
+          Apiospora_kogelbergensis        | GCF_038363985.1 | 58.5 | 60.3 | 41.3 | 41.8 | 43.3 | 44.3 |
+          Apiospora_phragmitis            | GCF_038363925.1 | 49.7 | 52.9 | 31.6 | 32.6 | 34.7 | 36.8 |
+          Colletotrichum_aenigma          | GCF_013390185.1 | 76.4 | 73.0 | 66.2 | 61.1 | 64.8 | 58.5 |
+          Colletotrichum_fioriniae        | GCF_027942845.1 | 71.6 | 58.0 | 54.7 | 48.0 | 55.4 | 47.5 |
+          Colletotrichum_gloeosporioides  | GCF_011800055.1 | 71.8 | 72.6 | 56.5 | 55.0 | 58.4 | 55.1 |
+          Colletotrichum_lupini           | GCF_023278565.1 | 34.1 | 67.6 | 32.5 | 43.3 | 34.9 | 45.0 |
+          Colletotrichum_scovillei        | GCF_011075155.1 | 75.7 | 75.7 | 64.8 | 64.4 | 63.3 | 59.6 |
+          Colletotrichum_siamense         | GCF_013390195.1 | 79.0 | 74.0 | 69.4 | 62.9 | 67.7 | 60.1 |
+          Colletotrichum_spaethianum      | GCF_022836535.1 | 65.7 | 54.9 | 45.4 | 40.6 | 45.0 | 44.1 |
+          Colletotrichum_truncatum        | GCF_014235925.1 | 70.3 | 73.0 | 58.5 | 59.8 | 55.0 | 57.7 |
+          Cordyceps_fumosorosea           | GCF_001636725.1 | 76.3 | 73.1 | 65.2 | 60.8 | 65.8 | 62.3 |
+          Cryphonectria_parasitica        | GCF_011745365.1 | 53.0 | 59.2 | 41.1 | 42.9 | 37.5 | 36.1 |
+          Daldinia_childiae               | GCF_008694065.1 | 78.4 | 68.8 | 66.8 | 57.0 | 65.2 | 55.2 |
+          Diaporthe_batatas               | GCF_019321695.1 | 69.1 | 69.1 | 58.2 | 58.8 | 56.9 | 53.6 |
+          Emericellopsis_cladophorae      | GCF_022114955.1 | 67.9 | 67.4 | 56.8 | 52.2 | 58.5 | 52.7 |
+          Fusarium_falciforme             | GCF_026873545.1 | 80.2 | 77.5 | 70.5 | 66.5 | 70.3 | 63.2 |
+          Fusarium_graminearum            | GCF_000240135.3 | 65.4 | 72.6 | 53.3 | 58.8 | 54.0 | 58.1 |
+          Fusarium_keratoplasticum        | GCF_025433545.1 | 81.3 | 78.7 | 71.8 | 67.6 | 71.3 | 64.7 |
+          Fusarium_solani                 | GCF_023522795.1 | 64.7 | 68.6 | 48.6 | 48.0 | 52.6 | 51.4 |
+          Fusarium_tjaetaba               | GCF_013396195.1 | 76.7 | 76.0 | 63.8 | 59.7 | 66.9 | 62.0 |
+          Hirsutella_rhossiliensis        | GCF_020360975.1 | 43.3 | 48.2 | 34.8 | 31.6 | 37.9 | 31.2 |
+          Leptographium_clavigerum        | GCF_000143105.1 | 65.2 | 67.1 | 50.7 | 49.7 | 51.9 | 49.1 |
+          Metarhizium_acridum             | GCF_019434415.1 | 64.5 | 65.8 | 56.1 | 56.0 | 45.6 | 53.3 |
+          Neurospora_tetrasperma          | GCF_000213175.1 | 59.1 | 72.0 | 50.2 | 59.6 | 49.5 | 55.0 |
+          Pestalotiopsis_fici             | GCF_000516985.1 | 80.0 | 80.0 | 70.3 | 68.1 | 69.0 | 68.9 |
+          Phaeoacremonium_minimum         | GCF_000392275.1 | 68.5 | 44.4 | 53.5 | 34.3 | 48.9 | 31.9 |
+          Phialemonium_atrogriseum        | GCF_030411735.1 | 66.1 | 73.6 | 55.8 | 58.2 | 52.1 | 53.8 |
+          Podospora_anserina              | GCF_000226545.1 | 62.8 | 56.7 | 51.6 | 46.4 | 47.8 | 46.6 |
+          Podospora_bellae-mahoneyi       | GCF_035222275.1 | 67.5 | 72.5 | 58.3 | 65.7 | 55.1 | 58.0 |
+          Podospora_pseudoanserina        | GCF_035222485.1 | 67.3 | 71.0 | 57.9 | 64.1 | 54.4 | 56.5 |
+          Podospora_pseudocomata          | GCF_035222375.1 | 67.5 | 70.2 | 58.4 | 64.1 | 54.8 | 56.0 |
+          Podospora_pseudopauciseta       | GCF_035222475.1 | 68.4 | 71.3 | 59.3 | 64.8 | 55.8 | 57.2 |
+          Scedosporium_apiospermum        | GCF_000732125.1 | 70.4 | 64.9 | 56.7 | 52.5 | 53.5 | 37.9 |
+          Sporothrix_brasiliensis         | GCF_000820605.1 | 70.7 | 69.7 | 57.2 | 56.8 | 62.8 | 62.6 |
+          Sporothrix_schenckii            | GCF_000961545.1 | 71.5 | 76.3 | 60.6 | 63.7 | 61.1 | 69.8 |
+          Thermothielavioides_terrestris  | GCF_000226115.1 | 65.4 | 69.7 | 54.2 | 55.2 | 50.4 | 52.5 |
+          Thyridium_curvatum              | GCF_004353045.1 | 72.1 | 73.4 | 57.1 | 54.0 | 58.3 | 56.0 |
+          Trichoderma_asperellum          | GCF_020647865.1 | 72.1 | 81.1 | 63.8 | 70.4 | 59.0 | 67.3 |
+          Trichoderma_atroviride          | GCF_020647795.1 | 68.0 | 73.6 | 58.6 | 61.2 | 50.5 | 59.9 |
+          Trichoderma_gamsii              | GCF_001481775.2 | 75.2 | 75.5 | 63.6 | 62.5 | 63.3 | 62.1 |
+          Verticillium_alfalfae           | GCF_000150825.1 | 48.8 | 53.2 | 31.5 | 33.9 | 33.0 | 35.1 |
+          Verticillium_dahliae            | GCF_000150675.1 | 61.4 | 66.9 | 46.8 | 50.2 | 48.2 | 49.7 |
+          Verticillium_nonalfalfae        | GCF_003724135.2 | 73.8 | 75.5 | 63.8 | 62.1 | 63.3 | 60.9 |
+          ---------------------------------------------------------------------------------------------
+          Average (44 species)            |                 | 67.0 | 68.2 | 55.1 | 54.6 | 54.2 | 53.2 |
+          ---------------------------------------------------------------------------------------------
+
+
+          Accuracy relative to ANNEVO (comparison on 44 common species):
+
+                                         ANNEVO       |    sordariomycota    |         delta        |
+          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+          -------------------------------------------------------------------------------------------
+          Base level           |   95.6   89.9   92.7 |   93.0   91.0   92.0 |   -2.6   +1.1   -0.7 |
+          Exon level           |   70.0   65.3   67.6 |   67.0   68.2   67.6 |   -3.0   +2.9   +0.0 |
+          Intron chain level   |   56.6   53.5   55.0 |   55.1   54.6   54.8 |   -1.5   +1.1   -0.2 |
+          Locus level          |   53.2   50.9   52.0 |   54.2   53.2   53.7 |   +1.0   +2.3   +1.7 |
+          -------------------------------------------------------------------------------------------
+
+
+          Accuracy relative to fungi parameters (comparison on 44 common species):
+
+                                          fungi       |    sordariomycota    |         delta        |
+          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
+          -------------------------------------------------------------------------------------------
+          Base level           |   95.9   90.3   93.1 |   93.0   91.0   92.0 |   -3.0   +0.6   -1.1 |
+          Exon level           |   74.2   73.0   73.6 |   67.0   68.2   67.6 |   -7.2   -4.8   -6.0 |
+          Intron chain level   |   62.7   61.4   62.0 |   55.1   54.6   54.8 |   -7.6   -6.8   -7.2 |
+          Locus level          |   61.0   59.8   60.4 |   54.2   53.2   53.7 |   -6.8   -6.7   -6.7 |
+          -------------------------------------------------------------------------------------------
+"
+training_species: [
+   Eutypa lata UCREL1
+   Erysiphe necator c
+   Cordyceps militaris CM01
+   Colletotrichum higginsianum IMI 349063
+   Ustilaginoidea virens
+   Ophiocordyceps kimflemingae SC16a
+   Beauveria bassiana ARSEF 2860
+   Ophiocordyceps australis Map64
+   Drechmeria coniospora ARSEF 6962
+   Glarea lozoyensis ATCC 20868
+   Ophiocordyceps sinensis IOZ07
+   Metarhizium brunneum ARSEF3297
+   Fusarium proliferatum ET1
+   Trichoderma guizhouense NJAU 4742
+   Metarhizium robertsii ARSEF 23
+   Sporothrix insectorum RCEF 264
+   Beauveria brongniartii RCEF 3172
+   Phaeoacremonium aleophilum UCRPA7
+   Metarhizium album ARSEF 1941
+   Diaporthe ampelina UCDDA912
+   Metarhizium majus ARSEF 297
+   Metarhizium anisopliae ARSEF 549
+   Fusarium mangiferae MRC7560
+   Fusarium fujikuroi IMI 58289
+   Ophiocordyceps camponoti-rufipedis Map16
+   Rhynchosporium commune UK7
+   Ophiostoma piceae UAMH 11346
+   Hirsutella minnesotensis 3608
+   Escovopsis weberi CC031208-10
+   Simplicillium lamellicola cont 1231369 v1.0
+   Trichoderma effusum TUCIM 254 v1.0
+   Hypoxylon sp. FL0543 v1.0
+   Nemania sp. FL0916 v1.0
+   Xylaria sp. FL0933 v1.0
+   Annulohypoxylon sp. FL0455 v1.0
+   Daldinia sp. FL1419 v1.0
+   Annulohypoxylon moriforme CBS 123579 v1.0
+]

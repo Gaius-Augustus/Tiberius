@@ -1,6 +1,6 @@
 ![Docker Pulls](https://img.shields.io/docker/pulls/larsgabriel23/tiberius)
 
-### ⚠️ Important Update Tiberiu 2.0.0 — April 2026
+### ⚠️ Important Update Tiberius 2.0.0 — April 2026
 - **Tiberius models for many new clades are now available.**
 - **Runtime has been reduced by 30%.**
 
@@ -10,7 +10,7 @@ For more information, see the [Tiberius paper](https://academic.oup.com/bioinfor
 
 
 Tiberius is a deep learning-based *ab initio* gene structure prediction tool that end-to-end integrates convolutional
-and long short-term memory layers with a differentiable HMM layer. It can be used to predict gene structures from **genomic sequences only** (*ab initio*), while matching the accuracy of tool that use extrinsic evidence.
+and long short-term memory layers with a differentiable HMM layer. It can be used to predict gene structures from **genomic sequences only** (*ab initio*), while matching the accuracy of tools that use extrinsic evidence.
 
 Additionally, Tiberius provides an evidence mode that generates highly precise gene structures from extrinsic evidence, which are then combined with Tiberius *ab initio* predictions. Tiberius can also be parallelized on HPC systems using Nextflow.
 
@@ -193,7 +193,7 @@ python tiberius.py --singularity --genome input.fasta \
 
 In order to run Tiberius with a local installation omit `--singularity`.
 
-Tiberius produces a GTF or GFF3 file containing the predicted gene structures (default: `tiberius.gff3`). The output format depends on the file ending of the specified `--out` file. It can also generate FASTA-formatted files of coding sequences and protein sequences when locations are specified using the `--codingseq` and `--protseq` options, respectively.
+Tiberius produces a GTF or GFF3 file containing the predicted gene structures (default: `tiberius.gff3`). The output format depends on the file extension of the specified `--out` file. It can also generate FASTA-formatted files of coding sequences and protein sequences when locations are specified using the `--codingseq` and `--protseq` options, respectively.
 
 
 ### Running Tiberius with Nextflow
@@ -238,7 +238,7 @@ python tiberius.py --genome input.fasta --clamsa $clamsa/{prefix} --out output.g
 
 ### Running Tiberius on Different GPUs
 
-Tiberius can run on any GPU with at least 8GB of memory. Tiberius will set the batch size automatically, depending on the model and available GPU memory, However in case this fails or runs out of memory, you will need to adjust the batch size to match the memory capacity of your GPU using the `--batch_size` argument. Below is a list of recommended batch sizes for different GPUs, however this may differ in individual cases:
+Tiberius can run on any GPU with at least 8GB of memory. Tiberius will set the batch size automatically, depending on the model and available GPU memory. However in case this fails or runs out of memory, you will need to adjust the batch size to match the memory capacity of your GPU using the `--batch_size` argument. Below is a list of recommended batch sizes for different GPUs, however this may differ in individual cases:
 - **A100 (80GB):** batch size of 16
 - **RTX 3090 (25GB):** batch size of 8
 - **RTX 2070 (8GB):** batch size of 2
@@ -246,9 +246,9 @@ Tiberius can run on any GPU with at least 8GB of memory. Tiberius will set the b
 
 
 ## Training Tiberius
-We recommend using one of the provided trained models. However, if you want to train Tiberius on your own data, you need at least a genomic sequence file (FASTA) and reference annotations (GTF) for each species. **Note that you can only train on genes with one transcript isoform per gene.** Please remove alternative splicing variants before training. There two ways to train Tiberius:
+We recommend using one of the provided trained models. However, if you want to train Tiberius on your own data, you need at least a genomic sequence file (FASTA) and reference annotations (GTF) for each species. **Note that you can only train on genes with one transcript isoform per gene.** Please remove alternative splicing variants before training. There are two ways to train Tiberius:
 1. Training Tiberius with a large dataset that does not fit into memory. See [training_large_data.md](docs/training_large_data.md) for documentation on how to prepare a dataset and train Tiberius with it.
-2. Training Tiberius with a small dataset that fits into memory. See [example_train_full.ipynb](test_data/Panthera_pardus/example_train_full.ipynb) for an example on how to load data and train Tiberius on a single genome. This can easily be adapted to train Tiberius on several genomes by first loading the data for all genome and then training the model. See [training_large_data.md](docs/training_large_data.md) (Step 1) and [softmasking_workflow.md](docs/softmasking_workflow.md) for the preparation of the genome and annotation files.
+2. Training Tiberius with a small dataset that fits into memory. See [example_train_full.ipynb](test_data/Panthera_pardus/example_train_full.ipynb) for an example on how to load data and train Tiberius on a single genome. This can easily be adapted to train Tiberius on several genomes by first loading the data for all genomes and then training the model. See [training_large_data.md](docs/training_large_data.md) (Step 1) and [softmasking_workflow.md](docs/softmasking_workflow.md) for the preparation of the genome and annotation files.
 
 ## Tiberius Model
 
@@ -259,7 +259,7 @@ Tiberius' model consists of CNN, biLSTM, and a differentiable HMM layer.
 
 ## Annotations from Tiberius
 
- [Tiberius predictions for 1314 mammalian assemblies](https://bioinf.uni-greifswald.de/bioinf/tiberius/genes/tib-tbl.html)
+[Tiberius predictions for 1314 mammalian assemblies](https://bioinf.uni-greifswald.de/bioinf/tiberius/genes/tib-tbl.html)
 
 We also provide example annotations for *Homo sapiens* (genome assembly GCF_000001405.40), *Bos taurus* (genome assembly GCF_000003205.7) and *Delphinapterus leucas* (genome assembly GCF_002288925.1) that were generated at the time of writing the paper with Tiberius using the default weights:
 ```shell
@@ -281,7 +281,7 @@ Make sure TensorFlow is installed with GPU support and that compatible CUDA/cuDN
 python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
 ```
 
-**`--seq_len` warning **
+**`--seq_len` warning**
 In case you set `--seq_len` manually, setting the sequence length to >500,040 can lead to a known TensorFlow error. In this case you have to reduce the `--seq_len` to 500,040 or use the default setting.
 
 **`PackageNotFoundError: No package metadata was found for tiberius`:**

@@ -6,30 +6,63 @@ clamsa: False
 tiberius_version: 1.1.7
 date: "2025-11-10"
 default_seq_len: 400_050
-comment: "Mario Stanke, Nov 10th 2025\n. This was trained on vertebrates including fish,
- birds,  lizards and mammals. It should be preferred on non-mammalian vertebrates genomes over the mammalian version of Tiberius but is slightly worse on mammals:
-                 Group   Training  Mean Locus F1
-     All Species (n=9)     Mammal          33.95
-     All Species (n=9) Vertebrate          47.50
-    Mammals Only (n=3)     Mammal          48.54
-    Mammals Only (n=3) Vertebrate          47.32
- Non-Mammal Vert (n=6)     Mammal          26.66
- Non-Mammal Vert (n=6) Vertebrate          47.58
-
- Vertebrate: this, Mammal: mammalia_nosofttmasking_v2.yaml
- Tested on 9 vertebrate test species, phylogenetically separated from any training species:
- # 3 mammals
- GCF_002263795.3 cow
- GCF_000001405.40 human
- GCF_002288925.2 beluga whale
- # 6 non-mammalian vertebrates
- GCF_016700215.2 chicken
- GCF_963506605.1 lizard
- GCF_900634795.4 Betta splendens
- GCF_007364275.1 Hoplostethus_atlanticus
- GCF_901000725.2 Takifugu_rubripes
- GCF_044704955.1 Pristiophorus_japonicus
-"
+comment: |
+          Training by Mario Stanke, Nov 10th 2025.
+          Benchmarking by Mario Stanke and Lars Gabriel.
+          This model was trained on vertebrates including fish, birds, lizards,
+          and mammals. It should be preferred on non-mammalian vertebrate genomes
+          over the mammalian model.
+          (gffcompare v0.12.10) on 6 non-mammalian vertebrate test species.
+          - None of the species were used during Tiberius and ANNEVO training
+          - Archocentrus centrarchus, Betta splendens, Gallus gallus, Pristiophorus japonicus and Takifugu rubripes
+                 were used during training or validation of Helixer
+          Test species:
+          Species                  | Accession       |
+          Archocentrus centrarchus | GCF_007364275.1 |
+          Betta splendens          | GCF_900634795.4 |
+          Gallus gallus            | GCF_016700215.2 |
+          Pristiophorus japonicus  | GCF_044704955.1 |
+          Takifugu rubripes        | GCF_901000725.2 |
+          Zootoca vivipara         | GCF_963506605.1 |
+          Accuracy benchmark:
+          Species                  | Tool     | Exon Sn | Exon Pr | Exon F1 | Gene Sn | Gene Pr | Gene F1 |
+          Archocentrus centrarchus | Helixer  | 82.2    | 68.7    | 74.8    | 24.2    | 20.7    | 22.3    |
+          Archocentrus centrarchus | ANNEVO   | 84.1    | 80.7    | 82.4    | 43.0    | 40.6    | 41.8    |
+          Archocentrus centrarchus | Tiberius | 88.2    | 86.1    | 87.1    | 64.3    | 53.6    | 58.5    |
+          Archocentrus centrarchus | BRAKER3  | 76.9    | 94.3    | 84.7    | 69.4    | 79.4    | 74.1    |
+          Betta splendens          | Helixer  | 82.5    | 79.0    | 80.7    | 32.3    | 30.0    | 31.1    |
+          Betta splendens          | ANNEVO   | 84.2    | 86.5    | 85.3    | 47.6    | 47.0    | 47.3    |
+          Betta splendens          | Tiberius | 88.8    | 93.5    | 91.1    | 72.2    | 68.3    | 70.2    |
+          Betta splendens          | BRAKER3  | 84.5    | 96.4    | 90.1    | 77.9    | 84.6    | 81.1    |
+          Gallus gallus            | Helixer  | 78.1    | 72.2    | 75.0    | 26.3    | 25.7    | 26.0    |
+          Gallus gallus            | ANNEVO   | 77.3    | 84.5    | 80.7    | 37.6    | 40.3    | 38.9    |
+          Gallus gallus            | Tiberius | 82.1    | 89.9    | 85.8    | 60.3    | 57.9    | 59.1    |
+          Gallus gallus            | BRAKER3  | 76.7    | 96.2    | 85.4    | 69.9    | 82.7    | 75.8    |
+          Pristiophorus japonicus  | Helixer  | 67.6    | 47.0    | 55.4    | 9.6     | 6.4     | 7.7     |
+          Pristiophorus japonicus  | ANNEVO   | 77.9    | 66.2    | 71.6    | 25.4    | 17.5    | 20.7    |
+          Pristiophorus japonicus  | Tiberius | 80.3    | 67.5    | 73.3    | 38.9    | 17.0    | 23.7    |
+          Pristiophorus japonicus  | BRAKER3  | 62.3    | 94.3    | 75.0    | 52.7    | 73.3    | 61.3    |
+          Takifugu rubripes        | Helixer  | 80.9    | 75.7    | 78.2    | 27.2    | 24.8    | 25.9    |
+          Takifugu rubripes        | ANNEVO   | 82.9    | 83.4    | 83.1    | 42.7    | 41.4    | 42.0    |
+          Takifugu rubripes        | Tiberius | 87.1    | 91.2    | 89.1    | 66.6    | 61.8    | 64.1    |
+          Takifugu rubripes        | BRAKER3  | 80.3    | 96.2    | 87.5    | 75.1    | 83.8    | 79.2    |
+          Zootoca vivipara         | Helixer  | 81.2    | 66.4    | 73.1    | 20.3    | 18.6    | 19.4    |
+          Zootoca vivipara         | ANNEVO   | 83.4    | 78.8    | 81.0    | 36.9    | 33.0    | 34.8    |
+          Zootoca vivipara         | Tiberius | 87.3    | 89.0    | 88.1    | 60.0    | 52.5    | 56.0    |
+          Zootoca vivipara         | BRAKER3  | 80.3    | 93.8    | 86.5    | 71.7    | 77.0    | 74.3    |
+          Average                  | Helixer  | 77.5    | 69.2    | 72.9    | 39.4    | 34.9    | 36.9    |
+          Average                  | ANNEVO   | 78.0    | 77.9    | 77.8    | 45.3    | 44.9    | 44.9    |
+          Average                  | Tiberius | 85.6    | 86.2    | 85.8    | 60.4    | 51.9    | 55.3    |
+          Average                  | BRAKER3  | 76.8    | 95.2    | 84.9    | 69.5    | 80.1    | 74.3    |
+          Runtime benchmark:
+          Species                  | Tiberius | BRAKER3 | Helixer | ANNEVO |
+          Archocentrus centrarchus | 0:36     | 40:26   | 3:43    | 0:38   |
+          Betta splendens          | 0:18     | 46:52   | 1:39    | 0:17   |
+          Gallus gallus            | 0:39     | 64:34   | 4:21    | 0:44   |
+          Pristiophorus japonicus  | 3:12     | 34:11   | 21:24   | 4:16   |
+          Takifugu rubripes        | 0:17     | 53:25   | 1:29    | 0:12   |
+          Zootoca vivipara         | 0:49     | 64:03   | 6:06    | 0:52   |
+          Average                  | 0:58     | 50:35   | 2:58    | 0:30   |
 training_species:
   # 31 mammalian species, like in the original Tiberius paper
   - Aotus_nancymaae
@@ -98,3 +131,4 @@ training_species:
   - Scleropages_formosus         # GCF_900964775.1
   - Solea_solea                  # GCF_958295425.1
   - Sparus_aurata                # GCF_900880675.1
+

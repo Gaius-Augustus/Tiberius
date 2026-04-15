@@ -1,4 +1,4 @@
-FROM us-docker.pkg.dev/deeplearning-platform-release/gcr.io/tf-cu113.2-10.py310:latest
+FROM python:3.12-slim
 
 USER root
 
@@ -31,6 +31,27 @@ RUN python3 -m pip install --upgrade \
     "hatchling>=1.26" \
     "packaging>=24.0"
 
+COPY tensorflow-2.17.0+nv25.2-cp312-cp312-linux_x86_64.whl /tmp/
+
+RUN  python3 -m pip install --upgrade \
+	nvidia-cudnn-cu12~=9.0 \
+	nvidia-nccl-cu12 \
+	nvidia-cuda-runtime-cu12~=12.8.0 \
+	nvidia-cuda-nvcc-cu12~=12.8.0 \
+	nvidia-cusparse-cu12 \
+	nvidia-cufft-cu12 \
+	nvidia-cusolver-cu12 
+
+RUN python3 -m pip install --upgrade /tmp/tensorflow-2.17.0+nv25.2-cp312-cp312-linux_x86_64.whl
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN apt update && \
+    apt install --yes --no-install-recommends hisat2  && \
+    apt clean all
 
 RUN pip install "pyfamsa<0.6.0"
 
@@ -38,26 +59,39 @@ RUN pip install pyyaml pyBigWig bio scikit-learn biopython bcbio-gff requests
 
 
 RUN cd /opt && \
-        git clone https://github.com/Gaius-Augustus/Augustus/ && \
-        cd Augustus && \
-        make clean && \
-        make && \
-        make install
+	git clone https://github.com/Gaius-Augustus/Augustus/ && \
+	cd Augustus && \
+	make clean && \
+	make && \
+	make install 
 ENV PATH=${PATH}:/opt/Augustus/bin/
 
 
-RUN cd   /opt   && \
-    git clone https://github.com/Gaius-Augustus/Tiberius && \
-    cd  Tiberius && \
-    pip install . && \
+RUN cd /opt      && \
+    git clone https://github.com/Gaius-Augustus/bricks2marble && \
+    cd bricks2marble && \
+    python -m pip install -e .
+
+RUN cd /opt      && \
+    git clone https://github.com/Gaius-Augustus/hidten && \
+    cd hidten && \
+    python -m pip install -e .
+
+
+RUN cd        /opt      && \
+    git    clone     https://github.com/Gaius-Augustus/Tiberius && \
+    cd Tiberius && \
+    git checkout b2m_hmm && \
+    pip install .[from_source] && \
     chmod +x tiberius.py && \
+    chmod +x tiberius/scripts/* && \
     chmod +x tiberius/*py
 
 RUN mkdir -p /opt/Tiberius/model_weights && chmod -R 777 /opt/Tiberius/model_weights
 
 ENV PATH=${PATH}:/opt/Tiberius/tiberius/
 ENV PATH=${PATH}:/opt/Tiberius/
-
+ENV PATH=${PATH}:/opt/Tiberius/tiberius/scripts
 
 RUN apt update && \
     apt install -yq bamtools && \
@@ -71,12 +105,6 @@ RUN python -m pip install --upgrade \
     "packaging>=24.0"
 
 
-RUN cd /opt && \
-    git clone https://github.com/LarsGab/EvidencePipeline && \
-    cd EvidencePipeline/EvidencePipeline/scripts && \
-    chmod +x *py
-
-ENV PATH=${PATH}:/opt/EvidencePipeline/EvidencePipeline/scripts/
 
 RUN  cd /opt && \
      git clone https://github.com/TransDecoder/TransDecoder
@@ -97,11 +125,11 @@ RUN  cd /opt && \
 ENV PATH=${PATH}:/opt/miniprot-boundary-scorer
 
 
-RUN cd /opt && \
-        wget -O hisat2.zip https://cloud.biohpc.swmed.edu/index.php/s/oTtGWbWjaxsQ2Ho/download && \
-        unzip hisat2.zip
+#RUN cd /opt && \
+#        wget -O hisat2.zip https://cloud.biohpc.swmed.edu/index.php/s/oTtGWbWjaxsQ2Ho/download && \
+#        unzip hisat2.zip
 
-ENV PATH=${PATH}:/opt/hisat2-2.2.1/
+#ENV PATH=${PATH}:/opt/hisat2-2.2.1/
 
 
 RUN cd /opt && \
@@ -138,7 +166,7 @@ ENV PATH="/opt/TransDecoder-TransDecoder-v5.7.1:/opt/TransDecoder-TransDecoder-v
 
 RUN cd /opt && \
     wget https://github.com/bbuchfink/diamond/releases/download/v2.1.16/diamond-linux64.tar.gz && \
-    tar xzf diamond-linux64.tar.gz
+    tar xzf diamond-linux64.tar.gz 
 ENV PATH=${PATH}:/opt/diamond/
 
 RUN cd /opt && \
@@ -161,6 +189,10 @@ RUN cd /opt && \
     chmod +x /usr/local/bin/seqkit && \
     rm seqkit_linux_amd64.tar.gz
 
+RUN cd /opt && \
+	wget -q  https://github.com/gpertea/gffread/releases/download/v0.12.7/gffread-0.12.7.Linux_x86_64.tar.gz && \
+	tar xzf gffread-0.12.7.Linux_x86_64.tar.gz 
+ENV PATH=${PATH}:/opt/gffread-0.12.7.Linux_x86_64
 
 RUN cd /opt && \
     rm *tar.gz
@@ -168,3 +200,7 @@ ENV PATH=/usr/local/bin/:$PATH
 
 
 USER ${NB_UID}
+
+
+
+

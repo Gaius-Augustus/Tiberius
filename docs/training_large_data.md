@@ -19,7 +19,7 @@ Following  will create 100 tfrecords files for each genome in the directory `$tf
 python tiberius/write_tfrecord_species.py --fasta ${SPECIES}.fa --gtf ${SPECIES}.longest.gtf --out $tfrecords/${SPECIES} --wsize ${seq_size}
 ```
 
-If you want to train in *de novo* mode, you have to generate ClaMSA data for each species. See [docs/clamsa_data.md](docs/clamsa_data.md) for instructions on how to generate the data. Afterwards, you should have a directory with files named `$clamsa/{prefix}{seq_name}.npz` for each sequence of your FASTA file and a file with the list of sequence names (`$seq_names`). 
+If you want to train in *de novo* mode, you have to generate ClaMSA data for each species. See [docs/clamsa_data.md](docs/clamsa_data.md) for instructions on how to generate the data. Afterwards, you should have a directory with files named `$clamsa/{prefix}{seq_name}.npz` for each sequence of your FASTA file and a file with the list of sequence names (`$seq_names`).
 You can create tfrecords files with the ClaMSA data with the following command:
 
 ```shell
@@ -30,14 +30,14 @@ python tiberius/write_tfrecord_species.py --fasta ${SPECIES}.fa --gtf ${SPECIES}
 
 ### 3. Species List
 
-Create a list of all species that you want to train on. This list (separated by `\n` ) will be used to search for all tfrecords file that start with the species name as `species.txt`, for example:    
+Create a list of all species that you want to train on. This list (separated by `\n` ) will be used to search for all tfrecords file that start with the species name as `species.txt`, for example:
 ```shell
 Desmodus_rotundus
 Dipodomys_ordii
 Enhydra_lutris
 ```
 
-### 4. (Optional) Prepare validation data. 
+### 4. (Optional) Prepare validation data.
 
 To monitor validation loss and accuracy during training, you can prepare validation examples by repeating steps 1–3 for a validation dataset. Assume you have:
 
@@ -53,14 +53,14 @@ python3 tiberius/validation_from_tfrecords \
     --out val.npz --val_size num_val
 ```
 
-### 5. Training 
+### 5. Training
 
 #### 5.1 Standart Training without HMM Layer
 
 Create a config file that contains the parameters for training, a config file with default parameter is located at `docs/config.json`. You can find descriptions of key parametes in `tiberius/train.py`. Start training:
 
 ```shell
-python tiberius/train.py --data $tfrecords/ --learnMSA $leanMSA  --cfg config.json --train_species_file species.txt --val_data val.npz
+python tiberius/train.py --data $tfrecords/  --cfg config.json --train_species_file species.txt --val_data val.npz
 ```
 
 If you want to train with the HMM layer, you can use the '--hmm' argument. This will however require more memory and slow training down.
@@ -69,25 +69,23 @@ You can also start a training from an existing model by providing the path to th
 
 #### 5.2 Training with HMM Layer
 
-You can start a training with the HMM layer by using the `--hmm` argument. This will require more memory and will slow down training. You will need to reduce batch size compared to the training without the HMM layer. Usually, the training with HMM layer is done after first training without the HMM layer and the HMM layer is added to the model afterwards for fine-tuning. 
-You can start a fine-tuning with the HMM layer by providing the path to the model without the HMM layer with the `--load_lstm` argument and using the `--hmm` argument:
+You can start a training with the HMM layer by using the `--hmm` argument. This will require more memory and will slow down training. You will need to reduce batch size compared to the training without the HMM layer. Usually, the training with HMM layer is done after first training without the HMM layer and the HMM layer is added to the model afterwards for fine-tuning.
+You can start a fine-tuning with the HMM layer by providing the path to the model without the HMM layer with the `--load` argument and using the `--hmm` argument:
 ```shell
-python tiberius/train.py --data $tfrecords/ --learnMSA $leanMSA  --cfg config.json --train_species_file species.txt --val_data val.npz --load_lstm path/to/model_without_hmm --hmm
+python tiberius/train.py --data $tfrecords/ --cfg config.json --train_species_file species.txt --val_data val.npz --load path/to/model_without_hmm --hmm
 ```
 
 #### 5.3 Masking out transcript regions
 
-If you want to mask out transcript regions during training. For this, you have to generate a list of transcript IDs from the preprocessed GTF files (one per line). And provide this list to the `--mask_tx_list` argument of `train.py`. During training, Tiberius will mask out the regions of the transcripts with a flanking region around these transcripts. You can set the number of bases of the flanking regions with `--mask_flank`. This means these regions will not be evaluated by the loss and completly ignored during training. This is useful for transcripts, where you have low confidence that these are correct. However, this feature is not systematically tested and is not yet clear how much the training benefits from this. 
+If you want to mask out transcript regions during training. For this, you have to generate a list of transcript IDs from the preprocessed GTF files (one per line). And provide this list to the `--mask_tx_list` argument of `train.py`. During training, Tiberius will mask out the regions of the transcripts with a flanking region around these transcripts. You can set the number of bases of the flanking regions with `--mask_flank`. This means these regions will not be evaluated by the loss and completly ignored during training. This is useful for transcripts, where you have low confidence that these are correct. However, this feature is not systematically tested and is not yet clear how much the training benefits from this.
 
 Some details on the logic of the masking for the case that a unfiltered transcript overlaps with the flanking region of a filtered transcript:
 - For the actual region of each transcript that is included in `mask_tx_list`, it is guaranteed that the region is masked out
 - For the actual region of each transcript that is not included in `mask_tx_list`, it is guaranteed that the region is not masked out
-- In case a transcript overlaps with the flanking region of a filtered transcript, it is guaranteed that around the unfiltered transcript a region of half `mask_flank` is *not* masked out. In these cases the flanking region around a filtered transcript is reduced.  
+- In case a transcript overlaps with the flanking region of a filtered transcript, it is guaranteed that around the unfiltered transcript a region of half `mask_flank` is *not* masked out. In these cases the flanking region around a filtered transcript is reduced.
 
 #### 5.4 Loading a trained model with Tiberius
-You can load training save points using tiberius.py by providing the path with the appropriate argument:
-- Use `--model_lstm_old` if the model was trained without the HMM layer.
-- If you trained with the HMM layer (`--hmm`), use `--model_old` instead.
+You can load training save points using `tiberius.py` by providing the path to `--model`.
 
 ### 6. (Optional) Validation Loss and Accuracy after Training:
 Once training completes, you can assess each save-point (e.g. epoch_*/ folders) on your validation set to compute validation loss and accuracy.

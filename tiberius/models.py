@@ -7,7 +7,6 @@ from tensorflow.keras.layers import (Conv1D, LSTM,
                                 Reshape, LayerNormalization)
 from tensorflow import keras
 from tensorflow.keras import backend as K
-from learnMSA.msa_hmm.Training import Identity
 from tiberius.hmm import HMMBlock
 from hidten import HMMMode
 

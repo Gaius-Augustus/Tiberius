@@ -141,7 +141,9 @@ class PredictionGTF:
                 self.softmask = config["inp_size"]==6
             elif "softmasking" in config:
                 self.softmask = config["softmasking"]
+
             self.lstm_model = lstm_model(**relevant_args, softmasking=self.softmask)
+
             weights_h5  = f"{self.model_path}/weights.h5"
             if not os.path.exists(weights_h5):
                 weights_h5 = f"{self.model_path}/model.weights.h5"

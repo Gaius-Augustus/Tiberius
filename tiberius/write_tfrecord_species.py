@@ -84,9 +84,12 @@ def write_numpy(fasta, ref, out, ref_phase=None, split=100, trans=False, clamsa=
 
 
 def write_tf_record(fasta, ref, out, split=100, clamsa=np.array([]),
-                    store_txs=False):
+                    balanced_split=None, store_txs=False):
     print(f'Writing TFRecords to {out} with split {split}', file=sys.stderr)
     indices = np.arange(len(fasta.chunks_seq))
+
+    if balanced_split is not None:
+        split =  len(fasta.chunks_seq) // balanced_split
     np.random.shuffle(indices)
     def create_example(i):
         feature_bytes_x = tf.io.serialize_tensor(fasta.get_onehot(i)).numpy()
@@ -163,7 +166,8 @@ def main():
         else:
             add_tx_ids = not args.no_tx_ids
             write_tf_record(fasta, ref, args.out, store_txs=add_tx_ids,
-                        split=args.numb_split)
+                        split=args.numb_split,
+                        balanced_split=args.balanced_split)
 
 def parseCmd():
     """Parse command line arguments
@@ -187,6 +191,8 @@ def parseCmd():
         help='', required=True)
     parser.add_argument('--numb_split', type=int,
         help='', default=100)
+    parser.add_argument('--balanced_split', type=int,
+        help='', default=None)
     parser.add_argument('--min_seq_len', type=int,
         help='Minimum length of input sequences used for training', default=500004)
     parser.add_argument('--clamsa',  type=str, default='',

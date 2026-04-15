@@ -131,22 +131,26 @@ def get_gpu_memory_gb(device_index: int = 0) -> float:
             text=True,
         )
     except FileNotFoundError as exc:
-        raise RuntimeError(
-            "nvidia-smi not found. Cannot auto-detect GPU memory."
-            "Please set the batch size manually with the --batch_size option."
-        ) from exc
+        logging.warning(
+            "nvidia-smi not found. Cannot auto-detect GPU memory.\n"
+            "Batch size is set to the default value of 16."
+        )
+        return None
     except sp.CalledProcessError as exc:
-        raise RuntimeError(
-            f"Failed to query GPU memory with nvidia-smi: {exc}"
-            "Please set the batch size manually with the --batch_size option."
-        ) from exc
+        logging.warning(
+            f"Failed to query GPU memory with nvidia-smi: {exc}\n"
+            "Batch size is set to the default value of 16."
+        )
+        return None
 
     lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
     if device_index >= len(lines):
-        raise RuntimeError(
-            f"GPU index {device_index} out of range. Found {len(lines)} GPU(s)."
-            "Please set the batch size manually with the --batch_size option."
+        logging.warning(
+            f"GPU index {device_index} out of range. Found {len(lines)} GPU(s).\n"
+            "Batch size is set to the default value of 16.\n"
+            "Please set the batch size manually with the --batch_size option if this is not correct."
         )
+        return None
 
     memory_mb = float(lines[device_index])
     return memory_mb / 1024.0
@@ -163,7 +167,7 @@ def compute_auto_batch_size(
     approximately linear scaling in batch_size * seq_len.
 
     Calibrated by default with:
-        seq_len=500004, batch_size=16 on 80 GB GPU
+        seq_len=500400, batch_size=16 on 80 GB GPU
     """
     preferred_batch_sizes = [1, 2, 4, 8, 16, 24,
                             32, 64, 96, 128, 160, 192]
@@ -327,7 +331,7 @@ def run_tiberius(args):
 
     if args.batch_size is None:
         gpu_mem = get_gpu_memory_gb()
-        batch_size = compute_auto_batch_size(seq_len, gpu_mem)
+        batch_size = 16 if gpu_mem is None else compute_auto_batch_size(seq_len, gpu_mem)
     else:
         batch_size = args.batch_size
     log_config.append(f"batch size: {batch_size}")
@@ -366,10 +370,10 @@ def run_tiberius(args):
     tf = import_tensorflow()
     check_tf_version(tf.__version__)
 
-    if seq_len > 500_004:
+    if seq_len > 500_400:
         logging.error(
             f"\nWARNING: The sequence length {args.seq_len} can be too long for TensorFlow version {tf.__version__}. "
-            "If it fails, please use a sequence length <= 500004 (--seq_len).\n"
+            "If it fails, please use a sequence length <= 500400 (--seq_len).\n"
         )
 
     from tiberius.eval_model_class import PredictionGTF
@@ -410,14 +414,7 @@ def run_tiberius(args):
 
     def postprocess(fasta: b2m.struct.Fasta, \
                 annot: b2m.struct.Annotation) -> b2m.struct.Annotation:
-        annot.clean(
-                    fasta=fasta,
-                    min_coding_length=200,
-                    exon_boundaries=False,
-                    coding_repeats=False,
-                    inframe_stop_codons=True,
-                    out_of_bounds=False,
-                )
+
         b2m.tools.check_min_coding_length(
             annot, 200, remove=True
         )

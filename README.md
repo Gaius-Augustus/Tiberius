@@ -292,6 +292,9 @@ pip install .
 pip install -e .
 ```
 
+**Unusually low gene count on repeat-rich genomes:**
+If Tiberius predicts an unexpectedly low number of genes on a genome with a high fraction of repetitive regions, try hardmasking the genome before running Tiberius. For example, mask repeats with [RED](https://github.com/BioinformaticsToolsmith/Red) and then replace all lowercase bases with `N`s.
+
 ## How to Cite
 
 If you use Tiberius in your research, please cite:

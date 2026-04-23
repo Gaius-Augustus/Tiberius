@@ -2,7 +2,7 @@
 
 For training Tiberius with a large dataset we recommend generating tfRecords files. This will allow you to train on a large dataset without having to load the entire dataset into memory. The following steps will guide you through the process of generating tfrecords files from the data of several genomes. For each genome, you need a FASTA file with the genomic sequences (ideally softmasked) and a GTF file with the gene annotations.
 
-For following instructions, we will assume that the files are named after the species as `${SPECIES}.fa` and `${SPECIES}.gtf`. And that [learnMSA](https://github.com/Gaius-Augustus/learnMSA) is installed at `$leanMSA`:
+For following instructions, we will assume that the files are named after the species as `${SPECIES}.fa` and `${SPECIES}.gtf`.:
 
 ### 1. Prepare GTF files
 Remove alternative transcripts from each GTF file. This is necessary because Tiberius does not support alternative splicing. A common way to do this would be to choose the alternative with the longest codeing sequence, you can use for example [`select_single_isoform.py`] for this:

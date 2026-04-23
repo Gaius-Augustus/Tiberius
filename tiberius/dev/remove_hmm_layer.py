@@ -2,7 +2,6 @@
 
 import argparse
 import sys
-from tiberius.gene_pred_hmm import GenePredHMMLayer
 from tiberius.models import custom_cce_f1_loss, Cast
 from pathlib import Path
 import json, tensorflow as tf
@@ -17,7 +16,7 @@ def remove_last_layer(model):
         raise ValueError("The model must have at least two layers to remove the last layer.")
 
     # Rebuild the model by taking the output from the second-to-last layer.
-    # This works for both functional and Sequential models provided that the 
+    # This works for both functional and Sequential models provided that the
     # connectivity can be traced back to model.input.
     new_output = model.layers[-3].output
     new_model = Model(inputs=model.input, outputs=new_output)
@@ -45,7 +44,7 @@ def main():
 
     print(args.input_model)
     try:
-        model = tf.keras.models.load_model(args.input_model, 
+        model = tf.keras.models.load_model(args.input_model,
                         custom_objects={
                         'custom_cce_f1_loss': custom_cce_f1_loss(2, 12),
                         'loss_': custom_cce_f1_loss(2, 12),

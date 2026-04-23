@@ -14,6 +14,10 @@ genome: /path/to/genome.fa   # REQUIRED
 # RNA-Seq short reads (FASTQ)
 # ------------------------------------------------------------
 
+rnaseq_bam: [
+  # path to aligned short read RNA-Seq BAM files, e.g. from VARUS
+]
+
 # Single-end RNA-Seq reads (list of FASTQ files)
 rnaseq_single: [
   # /path/to/sample1.fastq.gz,
@@ -25,7 +29,7 @@ rnaseq_paired: "/path/to/rnaseq/*_{1,2}.fastq.gz"
 # OR:
 # rnaseq_paired: [
 #   [/path/to/sample_R1.fastq.gz, /path/to/sample_R2.fastq.gz]
-#   
+#
 # ]
 
 # ------------------------------------------------------------
@@ -39,7 +43,7 @@ isoseq: "/path/to/isoseq/*.fastq.gz"
 # ]
 
 # ------------------------------------------------------------
-# SRA download 
+# SRA download
 # ------------------------------------------------------------
 
 # Paired-end RNA-Seq SRA run IDs
@@ -87,7 +91,7 @@ tiberius:
   run: true
   min_split_size: 5000000
   max_files: 20
-  # name of the Tiberius configuration available at  
+  # name of the Tiberius configuration available at
   # https://github.com/Gaius-Augustus/Tiberius/tree/main/model_cfg
   # or path to a local configuration file
   model_cfg: model_cfg.yaml

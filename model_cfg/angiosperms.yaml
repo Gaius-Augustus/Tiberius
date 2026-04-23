@@ -1,4 +1,4 @@
-target_species: "Angiospermae"
+target_species: "Mesangiospermae"
 ncbi_tax_id: 1437183
 weights_url: "https://bioinf.uni-greifswald.de/bioinf/tiberius/models/angiosperms.tar.gz"
 softmasking: False

@@ -16,7 +16,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'  # Change to match your project's Python version
+        python-version: '3.12'  # Change to match your project's Python version
 
     - name: Install dependencies
       run: |

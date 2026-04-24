@@ -9,7 +9,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.keras as keras
 from tensorflow.keras.models import Model
-from tiberius import (custom_cce_f1_loss, lstm_model, Cast)
+from tiberius.models import (custom_cce_f1_loss, lstm_model, Cast)
 from hidten import HMMMode
 from tiberius.hmm import HMMBlock
 import bricks2marble as b2m

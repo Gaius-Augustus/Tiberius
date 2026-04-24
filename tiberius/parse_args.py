@@ -13,8 +13,6 @@ def parseCmd():
         help='')
     parser.add_argument('--load', type=str, default='',
         help='')
-    parser.add_argument('--load_lstm', type=str, default='',
-        help='')
     parser.add_argument('--load_hmm', type=str, default='',
         help='')
     parser.add_argument('--hmm', action='store_true',
@@ -28,8 +26,6 @@ def parseCmd():
     parser.add_argument('--val_data',  type=str, default='',
         help='')
     parser.add_argument('--train_species_file',  type=str, default='train_species_filtered.txt',
-        help='')
-    parser.add_argument('--learnMSA',  type=str, default='../learnMSA',
         help='')
     parser.add_argument('--mask_tx_list',  type=str, default='',
         help='File containing a list of transcript IDs (one per line) to be masked during training')

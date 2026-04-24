@@ -25,13 +25,13 @@ class GeneFeature:
         start: int,
         end: int,
         strand: str,
-        phase: int, 
+        phase: int,
     ) -> None:
         self.type = feature_type
         self.start = start
         self.end = end
         self.strand = strand
-        self.phase = phase  
+        self.phase = phase
 
     def to_class_labels(self) -> np.ndarray:
         """Produce a 1D array of integer labels (0-14) for each base in [start, end].
@@ -111,7 +111,7 @@ class Transcript:
         self.features.sort(key=lambda x: x.start)
 
         # Set sequence name and strand from the first feature
-        if self.features:            
+        if self.features:
             # Set start and end based on features
             self.start = self.features[0].start
             self.end = self.features[-1].end
@@ -147,12 +147,12 @@ class Transcript:
         for k, i in enumerate(indices):
             feat = self.features[i]
             if feat.type == 'intron':
-                # calculate phase based on previous feature                
+                # calculate phase based on previous feature
                 try:
-                    feat.phase = self.features[list(indices)[k+1]].phase                                      
+                    feat.phase = self.features[list(indices)[k+1]].phase
                 except IndexError:
                     print(f"Warning: Intron feature {feat.start}-{feat.end} in transcript {self.id} has no next CDS feature. Setting phase to 0.")
- 
+
 
     def to_class_labels(self) -> np.ndarray:
         """Assemble a full integer-label sequence for the transcript.
@@ -161,7 +161,7 @@ class Transcript:
         labels: np.ndarray = np.zeros(length)
         for feat in self.features:
             rel_start: int = feat.start - self.start
-            rel_end: int = feat.end - self.start 
+            rel_end: int = feat.end - self.start
             labels[rel_start:rel_end+1] = feat.to_class_labels()
         labels[0] = 7 if self.strand == '+' else 14
         labels[-1] = 14 if self.strand == '+' else 7
@@ -201,7 +201,7 @@ class Annotation:
         self.seq2chunk_pos.update({
             "+":  {self.seqnames[i] : sum(s // self.chunk_len for s in self.seq_lens + self.seq_lens[:i]) \
                     for i in range(len(self.seqnames))}})
-                    
+
         self.chunk2transcripts = {}
 
     def transcript2chunknumb(self, seq_name: str, start: int, end: int, strand: str) -> List[int]:
@@ -210,7 +210,7 @@ class Annotation:
         """
         start_chunk = self.seq2chunk_pos[strand][seq_name] + start // self.chunk_len
         end_chunk = self.seq2chunk_pos[strand][seq_name] + (end) // self.chunk_len
-        
+
         return [start_chunk, end_chunk]
 
 
@@ -243,7 +243,7 @@ class Annotation:
                     )
                 if transcript_id not in transcript_lines:
                     transcript_lines[transcript_id] = []
-                transcript_lines[transcript_id].append(line.strip())                    
+                transcript_lines[transcript_id].append(line.strip())
 
         for k, (tx_id, tx) in enumerate(transcript_lines.items()):
             # Create a Transcript object for each transcript_id
@@ -260,7 +260,7 @@ class Annotation:
                 if c not in self.chunk2transcripts:
                     self.chunk2transcripts[c] = []
                 self.chunk2transcripts[c].append(k)
-    
+
     def get_chunk_labels(self, chunk_idx: int, get_tx_ids: bool = False) -> np.ndarray:
         """Return a 1D integer-label array of size chunk_len for the specified chunk.
         """
@@ -271,7 +271,7 @@ class Annotation:
             if get_tx_ids:
                 return labels, np.array(tx_out, dtype='<U50')
             return labels
-        for tx_num in self.chunk2transcripts[chunk_idx]:            
+        for tx_num in self.chunk2transcripts[chunk_idx]:
             tx = self.transcripts[tx_num]
             strand = tx.strand
             tx_label = tx.to_class_labels()
@@ -290,7 +290,7 @@ class Annotation:
             if get_tx_ids and strand == '+':
                 tx_out.append([tx.id, str(overlap_start_chunk), str(overlap_end_chunk)])
             elif get_tx_ids and strand == '-':
-                tx_out.append([tx.id, str(self.chunk_len - overlap_end_chunk), 
+                tx_out.append([tx.id, str(self.chunk_len - overlap_end_chunk),
                 str(self.chunk_len - overlap_start_chunk)])
         if strand == '-':
             # reverse the labels for negative strand
@@ -299,7 +299,7 @@ class Annotation:
             return labels, np.array(tx_out, dtype='<U50')
         return labels
 
-    
+
     def get_onehot(self, chunk_idx: int, get_tx_ids: bool = False) -> np.ndarray:
         """Fetch the integer-label chunk (from memory or disk) and convert to one-hot.
         """
@@ -311,7 +311,7 @@ class Annotation:
 
 
 class GeneStructure: # deprecated for now
-    """Handles gene structure information from a gtf file, 
+    """Handles gene structure information from a gtf file,
     prepares one-hot encoded trainings examples"""
 
     def __init__(self, filename='',  np_file='', chunksize=20000, overlap=1000):
@@ -338,7 +338,7 @@ class GeneStructure: # deprecated for now
         # chunks of one hot encoded numpy array fitted to genomic chunks
         self.chunks = None
         self.chunks_phase = None
-        
+
         if self.filename:
             self.read_gtf(self.filename)
         else:
@@ -412,7 +412,7 @@ class GeneStructure: # deprecated for now
                 self.one_hot[strand][seq] = arr
 
         # Group CDS features by transcript_id.
-        # Each gene structure tuple is assumed to be: 
+        # Each gene structure tuple is assumed to be:
         # (chrom, feature, strand, phase, start, end, transcript_id)
         transcripts = defaultdict(lambda: {"CDS": []})
         for gs in self.gene_structures:
@@ -475,7 +475,7 @@ class GeneStructure: # deprecated for now
                 start_pos = exon_info[0][0]-1 if strand == '+' else exon_info[-1][1]-1
                 # position of STOP label
                 stop_pos = exon_info[-1][1]-1 if strand == '+' else exon_info[0][0]-1
-                self.one_hot[strand][chrom][start_pos] = np.zeros(total_labels, dtype=np.int8)                
+                self.one_hot[strand][chrom][start_pos] = np.zeros(total_labels, dtype=np.int8)
                 self.one_hot[strand][chrom][stop_pos] = np.zeros(total_labels, dtype=np.int8)
                 self.one_hot[strand][chrom][start_pos, 7] = 1  # START.
                 self.one_hot[strand][chrom][stop_pos, 14] = 1  # STOP.
@@ -502,7 +502,7 @@ class GeneStructure: # deprecated for now
                         # Set the intron-to-exon (IE) transition at the first base of the next exon.
                         pos_IE = nxt_start - 1 if strand == '+' else cur_end - 1
                         self.one_hot[strand][chrom][pos_IE] = np.zeros(total_labels, dtype=np.int8)
-                        first_frame = (nxt_frames[0]+1)%3  if strand == '+' else (cur_frames[0]+1)%3 
+                        first_frame = (nxt_frames[0]+1)%3  if strand == '+' else (cur_frames[0]+1)%3
                         self.one_hot[strand][chrom][pos_IE, 11 + first_frame] = 1
 
         return self.one_hot
@@ -524,13 +524,13 @@ class GeneStructure: # deprecated for now
         for seq_name in seq_names:
             num_chunks = (len(self.one_hot[strand][seq_name]) - self.overlap) \
                 // (self.chunksize - self.overlap) + 1
-            
+
             if num_chunks-1 == 0:
                 continue
             if coords:
                 chunk_coords += [[
                         seq_name, strand,
-                        i * (self.chunksize - self.overlap)+1, 
+                        i * (self.chunksize - self.overlap)+1,
                         i * (self.chunksize - self.overlap) + self.chunksize] \
                         for i in range(num_chunks)]
             self.chunks += [self.one_hot[strand][seq_name][i * (self.chunksize - self.overlap):\
@@ -544,7 +544,7 @@ class GeneStructure: # deprecated for now
                         if tx_start < (i * (self.chunksize - self.overlap) + self.chunksize) \
                             and tx_end > i * (self.chunksize - self.overlap):
                             chunk_transcripts = [
-                                transcript_id, str(max(tx_start, i * (self.chunksize - self.overlap)+1)), 
+                                transcript_id, str(max(tx_start, i * (self.chunksize - self.overlap)+1)),
                                     str(min(tx_end, i * (self.chunksize - self.overlap) + self.chunksize))]
                             chunk_transcripts = ['', '', ''] if not chunk_transcripts else chunk_transcripts
                             transcript_list.append(chunk_transcripts)
@@ -558,4 +558,3 @@ class GeneStructure: # deprecated for now
         if transcript_ids:
             return self.chunks, np.array(transcript_list, dtype='<U50')
         return self.chunks
-    

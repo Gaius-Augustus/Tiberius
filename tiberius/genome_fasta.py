@@ -18,7 +18,7 @@ one_hot_table[ord('g'), :] = [0, 0, 1, 0, 0, 1]
 one_hot_table[ord('t'), :] = [0, 0, 0, 1, 0, 1]
 
 class GenomeSequences:
-    def __init__(self, fasta_file='', genome=None, np_file='', 
+    def __init__(self, fasta_file='', genome=None, np_file='',
                 chunksize=20000, overlap=1000, min_seq_len=0):
         """Initialize the GenomeSequences object.
 
@@ -37,7 +37,7 @@ class GenomeSequences:
         self.sequences = []
         self.sequence_names = []
         self.one_hot_encoded = None
-        self.chunks_one_hot = None 
+        self.chunks_one_hot = None
         self.chunks_seq = None
         if self.genome:
             self.extract_seqarray()
@@ -70,8 +70,8 @@ class GenomeSequences:
         current_sequence = ""
         for line in lines:
             if line.startswith(">"):
-                if current_sequence:               
-                    if len(current_sequence) >= self.min_seq_len:                             
+                if current_sequence:
+                    if len(current_sequence) >= self.min_seq_len:
                         self.sequences.append(current_sequence)
                     current_sequence = ""
                 self.sequence_names.append(line[1:].strip())
@@ -84,16 +84,16 @@ class GenomeSequences:
         """
         if not seq:
             seq = self.sequence_names
-    
+
         # One-hot encode the sequences
         self.one_hot_encoded = {}
-        
-        for s in seq:       
+
+        for s in seq:
             sequence = self.sequences[self.sequence_names.index(s)]
             # Create combined lookup table
             table = np.zeros((256, 6), dtype=np.int32)
             table[:, 4] = 1
-            
+
             # Set specific labels for A, C, G, T
             table[ord('A'), :] = [1, 0, 0, 0, 0, 0]
             table[ord('C'), :] = [0, 1, 0, 0, 0, 0]
@@ -104,12 +104,12 @@ class GenomeSequences:
             table[ord('c'), :] = [0, 1, 0, 0, 0, 1]
             table[ord('g'), :] = [0, 0, 1, 0, 0, 1]
             table[ord('t'), :] = [0, 0, 0, 1, 0, 1]
-            
+
             # Convert the sequence to integer sequence
             int_seq = np.frombuffer(sequence.encode('ascii'), dtype=np.uint8)
             # Perform one-hot encoding
             self.one_hot_encoded[s] = table[int_seq]
-    
+
     def prep_seq_chunks(self, min_seq_len=0,):
         seq_names = [seq_n for seq, seq_n in zip(self.sequences, self.sequence_names) \
                     if len(seq)>min_seq_len]
@@ -127,32 +127,32 @@ class GenomeSequences:
             chunks_seq_plus.extend(chunks)
             # get reverse complement of the chunks
             chunk_seq_minus.extend([self.reverse_complement(chunk) for chunk in chunks])
-        self.chunks_seq = chunk_seq_minus + chunks_seq_plus        
-    
+        self.chunks_seq = chunk_seq_minus + chunks_seq_plus
+
     def get_onehot(self, i):
         """Get the one-hot encoded representation of a sequence by index.
 
         Arguments:
             i (int): Index of the sequence to retrieve.
-        
+
         Returns:
             np.array: One-hot encoded representation of the sequence.
         """
-        
+
         # one hot encode the i-th element of self.chunks_seq
         # Create combined lookup table
-        
+
         # Convert the sequence to integer sequence
         int_seq = np.frombuffer(self.chunks_seq[i].encode('ascii'), dtype=np.uint8)
         # Perform one-hot encoding
         return one_hot_table[int_seq]
-    
+
     def reverse_complement(self, sequence):
         """Get the reverse complement of a DNA sequence.
 
         Arguments:
             sequence (str): The DNA sequence to reverse complement.
-        
+
         Returns:
             str: The reverse complement of the input sequence.
         """
@@ -168,8 +168,8 @@ class GenomeSequences:
         Arguments:
             sequence_name (str): Name of the sequence to extract chunks from.
             strand (char): Strand direction ('+' for forward, '-' for reverse).
-        
-        Returns: 
+
+        Returns:
             chunks_one_hot (np.array): Flattened chunks of the specified sequence.
             chunk_coords (list): List of coordinates of the chunks if coors is True.
             chunksize (int): Possibly reduced size of each chunk.
@@ -177,7 +177,7 @@ class GenomeSequences:
         chunk_coords = None
         chunksize = self.chunksize
 
-        if not sequence_names: 
+        if not sequence_names:
             sequence_names = self.sequence_names
         sequences_i = [self.one_hot_encoded[i] for i in sequence_names]
 
@@ -211,17 +211,17 @@ class GenomeSequences:
                 num = num_chunks if pad else num_chunks-1
                 chunk_coords += [[
                         seq_name, strand,
-                        i * (chunksize - self.overlap)+1, 
+                        i * (chunksize - self.overlap)+1,
                         i * (chunksize - self.overlap) + chunksize] \
                         for i in range(num)]
-            
+
             last_chunksize = (len(sequence) - self.overlap)%(chunksize - self.overlap)
             if pad and last_chunksize > 0:
                 padding = np.zeros((chunksize, 6),dtype=np.uint8)
                 padding[:,4] = 1
                 padding[0:last_chunksize] = sequence[-last_chunksize:]
                 chunks_one_hot.append(padding)
-            
+
         chunks_one_hot = np.array(chunks_one_hot)
         if strand == '-':
             chunks_one_hot = chunks_one_hot[::-1, ::-1, [3, 2, 1, 0, 4, 5]]

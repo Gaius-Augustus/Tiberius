@@ -25,7 +25,9 @@ workflow RNASEQ_EVIDENCE {
     def DO_SE = DO_SE_LOCAL || (params_map.rnaseq_sra_single && params_map.rnaseq_sra_single.size() > 0)
     def DO_PE = DO_PE_LOCAL || (params_map.rnaseq_sra_paired && params_map.rnaseq_sra_paired.size() > 0)
 
-    if( !(DO_SE || DO_PE) ) {
+    def DO_BAM = params_map.rnaseq_bam && params_map.rnaseq_bam.size() > 0
+
+    if( !(DO_SE || DO_PE || DO_BAM) ) {
         emit:
         hints = empty_file
         asm_gtf = Channel.empty()
@@ -96,7 +98,7 @@ workflow RNASEQ_EVIDENCE {
             CH_PAIRED_LOCAL =
                 Channel.of( tuple(id, [r1, r2]) )
         }
-        
+
         // CH_PAIRED_LOCAL = DO_PE_LOCAL ? Channel.fromFilePairs(params_map.rnaseq_paired, flat:true, checkIfExists:true) : Channel.empty()
         if( params_map.rnaseq_sra_paired ) {
             CH_RNASEQ_SRA_IDS_PAIRED = Channel.from(params_map.rnaseq_sra_paired)
@@ -116,7 +118,10 @@ workflow RNASEQ_EVIDENCE {
         } else CH_SINGLE = CH_SINGLE_LOCAL
     }
 
-    index = HISAT2_BUILD(CH_GENOME)
+    if ( DO_SE || DO_PE) {
+        index = HISAT2_BUILD(CH_GENOME)
+    }
+
     rnaseq_bams = Channel.empty()
 
     if( DO_SE ) {
@@ -131,6 +136,12 @@ workflow RNASEQ_EVIDENCE {
         FILTER_PE(map_pe.sam)
         sort_pe = SAMTOOLS_VIEW_SORT_PAIRED(FILTER_PE.out)
         rnaseq_bams = rnaseq_bams.mix(sort_pe.bam)
+    }
+
+    if( DO_BAM ) {
+        rnaseq_bams = rnaseq_bams.mix(
+            Channel.from(params_map.rnaseq_bam).map { file(it) }
+        )
     }
 
     asm = STRINGTIE_ASSEMBLE_RNA(rnaseq_bams)

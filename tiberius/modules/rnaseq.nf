@@ -17,8 +17,8 @@ process HISAT2_BUILD {
 process HISAT2_MAP_SINGLE {
   label 'container', 'bigmem'
   input:
-    path idxdir         
-    path reads           
+    path idxdir
+    path reads
   output:
     path "${reads.simpleName}.sam", emit: sam
 
@@ -72,7 +72,8 @@ process BAM2HINTS {
   input: path bam; path genome
   output: path "${bam.simpleName}.hints.gff", emit: hints
   script: """
-  ${params.tools.bam2hints} --intronsonly --in=${bam} --out=${bam}.temp
-  ${projectDir}/scripts/filterIntronsFindStrand.pl ${genome} ${bam}.temp --score > ${bam.simpleName}.hints.gff
+  samtools sort -@ ${task.cpus} -o sorted.bam ${bam}
+  ${params.tools.bam2hints} --intronsonly --in=sorted.bam --out=${bam}.temp
+  filterIntronsFindStrand.pl ${genome} ${bam}.temp --score > ${bam.simpleName}.hints.gff
   """
 }

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tiberius"
-version = "1.1.8"
+version = "2.0.0"
 authors = [
   { name="Lars Gabriel", email="lgabriel23@gmx.de" },
   { name="Felix Becker", email="beckerfelix94@gmail.com" },
@@ -14,7 +14,7 @@ authors = [
 ]
 description = "Tiberius is a deep learning gene finder."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
@@ -29,13 +29,13 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest"]
 from_source = [
-  "learnMSA",
+  "bricks2marble[tf]",
+  "tensorflow[and-cuda]>=2.17,<2.21",
   "numpy",
-  "tensorflow[and-cuda]<2.18",  
   "biopython",
-  "pyBigWig",
-  "bcbio-gff",
   "requests",
+  "packaging>=23.0",
+  "pandas"
   ]
 [project.urls]
 Homepage = "https://github.com/Gaius-Augustus/Tiberius"

@@ -9,8 +9,9 @@ process STRINGTIE_ASSEMBLE_RNA {
     path "stringtie_${rnabam.baseName}.gff3", emit: gff3
   script:
   """
-  ${params.tools.stringtie} -p ${params.threads} -o stringtie_${rnabam.baseName}.gtf ${rnabam}
-  ${params.tools.transdecoder_gtf2gff} stringtie_${rnabam.baseName}.gtf > stringtie_${rnabam.baseName}.gff3 
+  samtools sort -@ ${task.cpus} -o sorted.bam ${rnabam}
+  ${params.tools.stringtie} -p ${params.threads} -o stringtie_${rnabam.baseName}.gtf sorted.bam
+  ${params.tools.transdecoder_gtf2gff} stringtie_${rnabam.baseName}.gtf > stringtie_${rnabam.baseName}.gff3
   """
 }
 
@@ -24,7 +25,7 @@ process STRINGTIE_ASSEMBLE_ISO {
   script:
   """
   ${params.tools.stringtie} -p ${params.threads} -o stringtie_${isobam.baseName}.gtf -L ${isobam}
-  ${params.tools.transdecoder_gtf2gff} stringtie_${isobam.baseName}.gtf > stringtie_${isobam.baseName}.gff3 
+  ${params.tools.transdecoder_gtf2gff} stringtie_${isobam.baseName}.gtf > stringtie_${isobam.baseName}.gff3
   """
 }
 
@@ -39,7 +40,7 @@ process STRINGTIE_MERGE {
     path "stringtie.gff3", emit: gff3
 
     script:
-    """    
+    """
     ls ${gtfs} > mergelist.txt
 
     set +e
@@ -71,7 +72,7 @@ process STRINGTIE_MERGE {
 //     label 'container'
 
 //     input:
-//     path gtfs, stageAs: "?/*"               
+//     path gtfs, stageAs: "?/*"
 
 //     output:
 //     path "stringtie.gtf", emit: gtf
@@ -85,7 +86,7 @@ process STRINGTIE_MERGE {
 //         --merge \
 //         -o stringtie.gtf \
 //         mergelist.txt
-//     ${params.tools.transdecoder_gtf2gff} stringtie.gtf > stringtie.gff3 
+//     ${params.tools.transdecoder_gtf2gff} stringtie.gtf > stringtie.gff3
 //     """
 // }
 
@@ -101,6 +102,6 @@ process STRINGTIE_ASSEMBLE_MIX {
   """
   mkdir -p stringtie
   ${params.tools.stringtie} -p ${params.threads} -o stringtie/stringtie.gtf --mix rna.bam isoseq.bam
-  ${params.tools.transdecoder_gtf2gff} stringtie/stringtie.gtf > stringtie/stringtie.gff3 
+  ${params.tools.transdecoder_gtf2gff} stringtie/stringtie.gtf > stringtie/stringtie.gff3
   """
 }

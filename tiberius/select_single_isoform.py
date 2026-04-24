@@ -38,25 +38,25 @@ def main():
     )
     parser.add_argument("input_file", help="Input GTF or GFF3 file")
     args = parser.parse_args()
-    
+
     # Dictionary to hold transcript data:
     # key: transcript_id, value: dict with keys 'gene_id', 'cds_length', and 'lines' (list of tuples (line_number, line))
     transcripts = {}
     header_lines = []  # Save header lines (comments) to print at the top
-    
+
     with open(args.input_file, "r") as infile:
         for lineno, line in enumerate(infile):
             line = line.rstrip("\n")
             if line.startswith("#"):
                 header_lines.append(line)
                 continue
-            
+
             fields = line.split("\t")
             if len(fields) < 9:
                 continue  # skip malformed lines
             seqid, source, feature, start, end, score, strand, phase, attributes_str = fields
             attrs = parse_attributes(attributes_str)
-            
+
             # Determine transcript id.
             transcript_id = None
             if "transcript_id" in attrs:
@@ -71,7 +71,7 @@ def main():
                 if transcript_id and "," in transcript_id:
                     # If there are multiple parents, take the first one.
                     transcript_id = transcript_id.split(",")[0]
-            
+
             # Determine gene id (if available)
             gene_id = None
             if "gene_id" in attrs:
@@ -81,18 +81,18 @@ def main():
             # If still missing, we can optionally set gene_id to transcript_id (treating each transcript as its own gene)
             if gene_id is None:
                 gene_id = transcript_id
-            
+
             # If we couldn't determine a transcript id, skip this feature.
             if transcript_id is None:
                 continue
-            
+
             # Initialize dictionary entry for this transcript if needed.
             if transcript_id not in transcripts:
                 transcripts[transcript_id] = {"gene_id": gene_id, "cds_length": 0, "lines": []}
             else:
                 if transcripts[transcript_id]["gene_id"] is None and gene_id is not None:
                     transcripts[transcript_id]["gene_id"] = gene_id
-            
+
             # If this feature is a CDS, add its length.
             if feature == "CDS":
                 try:
@@ -100,10 +100,10 @@ def main():
                 except ValueError:
                     cds_len = 0
                 transcripts[transcript_id]["cds_length"] += cds_len
-            
+
             # Save the line along with its original line number.
             transcripts[transcript_id]["lines"].append((lineno, line))
-    
+
     # Group transcripts by gene and select the one with the longest CDS for each gene.
     # Map: gene_id -> (transcript_id, cds_length)
     selected_transcripts = {}
@@ -114,7 +114,7 @@ def main():
         else:
             if data["cds_length"] > selected_transcripts[gene][1]:
                 selected_transcripts[gene] = (tid, data["cds_length"])
-    
+
     # Prepare output lines.
     # For each selected transcript, compute overall coordinates and add gene and transcript lines.
     output_lines = []
@@ -127,7 +127,7 @@ def main():
         seqid = None
         source = None
         strand = None
-        
+
         # Determine the transcript's genomic span using all feature lines.
         for _, line in feature_lines:
             fields = line.split("\t")
@@ -151,14 +151,14 @@ def main():
         # If we could not compute coordinates, skip this transcript.
         if min_start is None or max_end is None:
             continue
-        
+
         # Build new gene and transcript feature lines in GTF format.
         # GTF fields: seqid, source, feature, start, end, score, strand, phase, attributes
         gene_attributes = f'gene_id "{gene}";'
         transcript_attributes = f'gene_id "{gene}"; transcript_id "{tid}";'
         gene_line = "\t".join([seqid, source, "gene", str(min_start), str(max_end), ".", strand, ".", gene_attributes])
         transcript_line = "\t".join([seqid, source, "transcript", str(min_start), str(max_end), ".", strand, ".", transcript_attributes])
-        
+
         # Insert the gene and transcript lines before the original transcript features.
         # We assign them artificial line numbers so that they appear before the first original line.
         first_lineno = feature_lines[0][0]
@@ -166,10 +166,10 @@ def main():
         output_lines.append((first_lineno - 0.1, transcript_line))
         for ln, l in feature_lines:
             output_lines.append((ln, l))
-    
+
     # Sort all output lines by their assigned order.
     output_lines.sort(key=lambda x: x[0])
-    
+
     # Print header lines, then output lines.
     for h in header_lines:
         print(h)

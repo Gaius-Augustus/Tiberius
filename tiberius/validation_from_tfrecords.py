@@ -1,7 +1,7 @@
 # ==============================================================
 # Authors: Lars Gabriel
 #
-# Get validation data from tfrecords files. 
+# Get validation data from tfrecords files.
 # Creates a numpy array from sampels from tfrecords files.
 # ==============================================================
 
@@ -32,19 +32,19 @@ def main():
     data_y = []
     data_clamsa = []
 
-    generator = iter(DataGenerator(file_path=file_paths, 
-            batch_size=args.batch_size, 
-            shuffle=True, 
+    generator = iter(DataGenerator(file_path=file_paths,
+            batch_size=args.batch_size,
+            shuffle=True,
             repeat=True,
             filter=False,
             output_size=15,
             hmm_factor=0, clamsa=args.clamsa
       ).get_dataset())
-    
+
     for j in range(args.val_size):
         i = np.random.randint(0, args.batch_size)
         if args.clamsa:
-            example_x, example_y, example_clamsa = next(generator)            
+            example_x, example_y, example_clamsa = next(generator)
             data_clamsa.append(example_clamsa[i][2])
         else:
             example_x, example_y, _ = next(generator)
@@ -63,8 +63,8 @@ def parseCmd():
         dictionary: Dictionary with arguments
     """
     parser = argparse.ArgumentParser(
-        
-        description="""Get validation data from tfrecords files. 
+
+        description="""Get validation data from tfrecords files.
         Creates a numpy array from sampels from tfrecords files.
         The tfrecord files have to be named like <species>_<number>.tfrecords .
     """)
@@ -73,14 +73,14 @@ def parseCmd():
     parser.add_argument('--species', type=str, required=True,
         help='Text file with species names. The tfrecords have to have the species name as prefix.')
     parser.add_argument('--tfrec_per_species', type=int, default=100,
-        help='Number of tfRecord files per species. Default 100.')  
+        help='Number of tfRecord files per species. Default 100.')
     parser.add_argument('--batch_size', type=int, default=200,
-        help='Batch size used by loading tfrecords, lower this if it does not fit into memory.')   
+        help='Batch size used by loading tfrecords, lower this if it does not fit into memory.')
     parser.add_argument('--val_size', type=int, default=2000,
         help='Number of trainings examples in the output.')
-    parser.add_argument('--clamsa', action='store_true')  
+    parser.add_argument('--clamsa', action='store_true')
     parser.add_argument('--out', type=str,
-        help='Output name of numpy array.', default='validation_data')        
+        help='Output name of numpy array.', default='validation_data')
     return parser.parse_args()
 
 if __name__ == '__main__':

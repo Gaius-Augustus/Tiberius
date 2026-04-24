@@ -11,10 +11,10 @@ include { ISOSEQ_EVIDENCE } from './subworkflows/isoseq_evidence.nf'
 include { HC_GENES } from './subworkflows/hc_genes.nf'
 include { TIBERIUS_ONLY } from './subworkflows/tiberius_only.nf'
 
-def inferMode(boolean hasPaired, boolean hasSingle, boolean hasIso, boolean hasProteins) {
-  if ((hasPaired || hasSingle) && hasIso && hasProteins) return 'mixed'
+def inferMode(boolean hasPaired, boolean hasSingle, boolean hasIso, boolean hasBAM, boolean hasProteins) {
+  if ((hasPaired || hasSingle || hasBAM) && hasIso && hasProteins) return 'mixed'
   if (hasIso && hasProteins) return 'isoseq'
-  if (hasPaired || hasSingle && hasProteins) return 'rnaseq'
+  if (hasPaired || hasSingle || hasBAM && hasProteins) return 'rnaseq'
   if (hasProteins && hasProteins) return 'proteins'
   return 'tiberius'
 }
@@ -30,6 +30,8 @@ workflow {
     def hasPaired   = params.rnaseq_paired?.size()  > 0 || params.rnaseq_sra_paired?.size() > 0
     def hasSingle   = params.rnaseq_single?.size()  > 0 || params.rnaseq_sra_single?.size() > 0
     def hasIso      = params.isoseq?.size()         > 0 || params.isoseq_sra?.size() > 0
+    def hasBAM      = params.rnaseq_bam?.size       > 0
+
     def proteinsList = []
     if( params.proteins ) {
       def rawList = (params.proteins instanceof List) ? params.proteins : [params.proteins]
@@ -47,7 +49,7 @@ workflow {
       ? tiberiusRunVal \
       : (tiberiusRunVal?.toString()?.trim()?.toLowerCase() in ['true','1','yes','y'])
 
-    def MODE = params.mode ?: inferMode(hasPaired, hasSingle, hasIso, hasProteins)
+    def MODE = params.mode ?: inferMode(hasPaired, hasSingle, hasIso, hasBAM, hasProteins)
     log.info "Running mode: ${MODE}"
 
     def inp  = INPUTS(params)

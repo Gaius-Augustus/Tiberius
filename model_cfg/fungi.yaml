@@ -5,17 +5,65 @@ softmasking: False
 clamsa: False
 tiberius_version: 1.1.7
 date: "2026-02-06"
-comment: "Fungi training weights trained by Katharina Hoff.
+default_seq_len: 100_080
+comment: |
+          Fungi training weights trained by Katharina Hoff.
+          Benchmarking by Katharina Hoff and Lars Gabriel.
 
-          This training was performed on data from RefSeq originally selected and
-          documented by Ye et al. (2025), the authors of ANNEVO
-          (https://doi.org/10.21203/rs.3.rs-6402260/v1). Different from that
-          data split, we did not use any genomes for validation and testing,
-          simultaneously. Details are listed below.
+          (gffcompare v0.12.10) on fungal test species.
+          - None of the species were used during Tiberius and ANNEVO training
+          - Agaricus bisporus, Parastagonospora nodorum, Punctularia strigosozonata and Tilletiopsis washingtonensis
+                 were used during training or validation of Helixer
 
-          Species-specific accuracy results according to gffcompare 0.12.6 on test species
-          never seen during training of Tiberius:
+          Test species:
+          Species                      | Accession       |
+          Agaricus bisporus            | GCF_000300555.1 |
+          Cryphonectria parasitica     | GCF_011745365.1 |
+          Parastagonospora nodorum     | GCF_000146915.1 |
+          Puccinia striiformis         | GCF_021901695.1 |
+          Punctularia strigosozonata   | GCF_000264995.1 |
+          Tilletiopsis washingtonensis | GCF_003144115.1 |
+          Accuracy benchmark:
+          Species                      | Tool     | Exon Sn | Exon Pr | Exon F1 | Gene Sn | Gene Pr | Gene F1 |
+          Agaricus bisporus            | Helixer  | 67.6    | 57.9    | 62.4    | 23.1    | 18.7    | 20.7    |
+          Agaricus bisporus            | ANNEVO   | 74.2    | 68.4    | 71.2    | 32.7    | 31.1    | 31.9    |
+          Agaricus bisporus            | Tiberius | 79.6    | 77.5    | 78.5    | 44.0    | 44.3    | 44.1    |
+          Agaricus bisporus            | BRAKER3  | 74.6    | 78.2    | 76.4    | 45.7    | 52.4    | 48.8    |
+          Cryphonectria parasitica     | Helixer  | 59.9    | 52.3    | 55.8    | 39.7    | 32.1    | 35.5    |
+          Cryphonectria parasitica     | ANNEVO   | 59.3    | 58.1    | 58.7    | 39.8    | 36.3    | 38.0    |
+          Cryphonectria parasitica     | Tiberius | 62.3    | 65.6    | 63.9    | 45.2    | 43.6    | 44.4    |
+          Cryphonectria parasitica     | BRAKER3  | 59.8    | 65.6    | 62.6    | 45.5    | 47.9    | 46.7    |
+          Parastagonospora nodorum     | Helixer  | 37.5    | 38.0    | 37.7    | 22.3    | 24.2    | 23.2    |
+          Parastagonospora nodorum     | ANNEVO   | 43.0    | 47.0    | 44.9    | 27.9    | 32.5    | 30.0    |
+          Parastagonospora nodorum     | Tiberius | 45.6    | 53.7    | 49.3    | 32.0    | 38.8    | 35.1    |
+          Parastagonospora nodorum     | BRAKER3  | 38.6    | 54.3    | 45.1    | 29.4    | 42.4    | 34.7    |
+          Puccinia striiformis         | Helixer  | 66.1    | 43.2    | 52.3    | 28.5    | 19.4    | 23.1    |
+          Puccinia striiformis         | ANNEVO   | 58.6    | 54.0    | 56.2    | 24.9    | 24.2    | 24.5    |
+          Puccinia striiformis         | Tiberius | 67.9    | 66.3    | 67.1    | 38.4    | 37.3    | 37.8    |
+          Puccinia striiformis         | BRAKER3  | 64.5    | 85.1    | 73.4    | 48.0    | 66.7    | 55.8    |
+          Punctularia strigosozonata   | Helixer  | 74.7    | 61.1    | 67.2    | 30.8    | 24.6    | 27.4    |
+          Punctularia strigosozonata   | ANNEVO   | 76.9    | 68.2    | 72.3    | 35.0    | 31.5    | 33.2    |
+          Punctularia strigosozonata   | Tiberius | 82.3    | 77.5    | 79.8    | 47.4    | 46.0    | 46.7    |
+          Punctularia strigosozonata   | BRAKER3  | 72.4    | 78.5    | 75.3    | 45.5    | 52.2    | 48.6    |
+          Tilletiopsis washingtonensis | Helixer  | 83.4    | 70.6    | 76.5    | 48.9    | 40.6    | 44.4    |
+          Tilletiopsis washingtonensis | ANNEVO   | 84.7    | 80.8    | 82.7    | 53.0    | 56.2    | 54.6    |
+          Tilletiopsis washingtonensis | Tiberius | 87.9    | 85.0    | 86.4    | 61.3    | 66.4    | 63.7    |
+          Tilletiopsis washingtonensis | BRAKER3  | 72.8    | 85.3    | 78.6    | 48.5    | 66.6    | 56.1    |
+          Average                      | Helixer  | 64.9    | 53.8    | 58.7    | 32.2    | 26.6    | 29.0    |
+          Average                      | ANNEVO   | 66.1    | 62.8    | 64.3    | 35.6    | 35.3    | 35.4    |
+          Average                      | Tiberius | 70.9    | 70.9    | 70.9    | 44.7    | 46.1    | 45.3    |
+          Average                      | BRAKER3  | 63.8    | 74.5    | 68.6    | 43.8    | 54.7    | 48.5    |
+          Runtime benchmark:
+          Species                      | Tiberius | BRAKER3 | Helixer | ANNEVO |
+          Agaricus bisporus            | 0:02     | 1:38    | 0:08    | 0:03   |
+          Cryphonectria parasitica     | 0:01     | 1:10    | 0:07    | 0:02   |
+          Parastagonospora nodorum     | 0:01     | 1:30    | 0:06    | 0:02   |
+          Puccinia striiformis         | 0:02     | 2:11    | 0:15    | 0:02   |
+          Punctularia strigosozonata   | 0:01     | 1:55    | 0:06    | 0:02   |
+          Tilletiopsis washingtonensis | 0:01     | 1:41    | 0:03    | 0:01   |
+          Average                      | 0:02     | 1:41    | 0:08    | 0:02   |
 
+          Further benchmarks:
           ---------------------------------------------------------------------------------------------
           Species                         | Accession       | CDS Exon    | Intron chain| Locus       |
                                           |                 | Sens | Prec | Sens | Prec | Sens | Prec |
@@ -253,19 +301,8 @@ comment: "Fungi training weights trained by Katharina Hoff.
           ---------------------------------------------------------------------------------------------
 
 
-          Accuracy relative to ANNEVO (comparison on 228 common species):
-
-                                         ANNEVO       |          fungi       |         delta        |
-          Level                |   Sens   Prec     F1 |   Sens   Prec     F1 |  dSens  dPrec    dF1 |
-          -------------------------------------------------------------------------------------------
-          Base level           |   95.5   90.2   92.8 |   95.4   90.6   93.0 |   -0.0   +0.4   +0.2 |
-          Exon level           |   69.6   65.2   67.3 |   73.9   72.9   73.4 |   +4.3   +7.7   +6.1 |
-          Intron chain level   |   49.8   45.7   47.7 |   56.9   55.1   56.0 |   +7.1   +9.4   +8.3 |
-          Locus level          |   53.1   51.1   52.1 |   60.8   59.8   60.3 |   +7.6   +8.7   +8.2 |
-          -------------------------------------------------------------------------------------------
-
-          On Basidiomycota, this Fungi parameter set achieves more accurate results than the 
-          originally released Basidiomycota data set. Average accuracy results across 35 
+          On Basidiomycota, this Fungi parameter set achieves more accurate results than the
+          originally released Basidiomycota data set. Average accuracy results across 35
           Basidiomycota test species with Tiberius parameter sets for basidiomycota and fungi
           (Acaromyces_ingoldii, Agaricus_bisporus, Cantharellus_anzutake,
           Ceraceosorus_guamensis, Coniophora_puteana, Cryptococcus_depauperatus,
@@ -290,21 +327,21 @@ comment: "Fungi training weights trained by Katharina Hoff.
           Locus level          |   39.8   42.9   41.3 |   47.3   47.4   47.3 |   +7.5   +4.5   +6.1 |
           -------------------------------------------------------------------------------------------
 
-          
-          On Sordariomycota, this Fungi parameter set achieves more accurate results than the 
+
+          On Sordariomycota, this Fungi parameter set achieves more accurate results than the
           originally released Sordariomycota data set (for masked genomes, we here used NCBI masking).
-          Average accuracy results across 44 Sordariomycota test species with Tiberius parameter sets 
+          Average accuracy results across 44 Sordariomycota test species with Tiberius parameter sets
           for sordariomycota and fungi
           (Apiospora_hydei, Apiospora_kogelbergensis, Apiospora_phragmitis,
           Colletotrichum_aenigma, Colletotrichum_fioriniae,
-          Colletotrichum_gloeosporioides, 
+          Colletotrichum_gloeosporioides,
           Colletotrichum_lupini, Colletotrichum_scovillei, Colletotrichum_siamense,
           Colletotrichum_spaethianum, Colletotrichum_truncatum,
           Cordyceps_fumosorosea, Cryphonectria_parasitica,
           Daldinia_childiae, Diaporthe_batatas, Emericellopsis_cladophorae,
           Fusarium_falciforme, Fusarium_graminearum, Fusarium_keratoplasticum,
           Fusarium_solani, Fusarium_tjaetaba, Hirsutella_rhossiliensis,
-          Leptographium_clavigerum, Metarhizium_acridum, 
+          Leptographium_clavigerum, Metarhizium_acridum,
           Neurospora_tetrasperma, Pestalotiopsis_fici, Phaeoacremonium_minimum,
           Phialemonium_atrogriseum, Podospora_anserina, Podospora_bellae-mahoneyi,
           Podospora_pseudoanserina, Podospora_pseudocomata,
@@ -322,11 +359,11 @@ comment: "Fungi training weights trained by Katharina Hoff.
           Intron chain level   |   55.1   54.6   54.8 |   62.7   61.4   62.0 |   +7.6   +6.8   +7.2 |
           Locus level          |   54.2   53.2   53.7 |   61.0   59.8   60.4 |   +6.8   +6.7   +6.7 |
           -------------------------------------------------------------------------------------------
-          
 
-          On Saccharomycota, this Fungi parameter set achieves more accurate results than the 
+
+          On Saccharomycota, this Fungi parameter set achieves more accurate results than the
           originally released Saccharomycota data set (for masked genomes, we here used NCBI masking).
-          Average accuracy results across 36 Saccharomycota test species with Tiberius parameter sets 
+          Average accuracy results across 36 Saccharomycota test species with Tiberius parameter sets
           for saccharomycota and fungi
           (Arxiozyma_heterogenica, Ascoidea_rubescens, Brettanomyces_bruxellensis,
           Brettanomyces_nanus, Candida_dubliniensis, Candida_margitis,
@@ -350,10 +387,10 @@ comment: "Fungi training weights trained by Katharina Hoff.
           Intron chain level   |   28.5   25.2   26.7 |   44.9   38.5   41.5 |  +16.4  +13.3  +14.7 |
           Locus level          |   76.3   75.1   75.7 |   79.4   78.0   78.7 |   +3.2   +2.9   +3.0 |
           -------------------------------------------------------------------------------------------
-          
 
-          On fungi incertae sedis, this parameter set performs slightly better than the 
-          fungi_incertae_sedis parameter set. Average accuracy results across 4 species 
+
+          On fungi incertae sedis, this parameter set performs slightly better than the
+          fungi_incertae_sedis parameter set. Average accuracy results across 4 species
           (Coemansia_reversa_NRRL_1564, Encephalitozoon_cuniculi_GB-M1,
           Phycomyces_blakesleeanus_NRRL_1555_minus, Spizellomyces_punctatus_DAOM_BR117):
 
@@ -432,7 +469,6 @@ comment: "Fungi training weights trained by Katharina Hoff.
           - Tetrapisispora_phaffii (GCF_000236905.1)
           - Wickerhamomyces_ciferrii (GCF_000313485.1)
           - Zygosaccharomyces_rouxii (GCF_000026365.1)
-"
 training_species: [
    Aaosphaeria_arxii
   Akanthomyces_muscarius
@@ -741,3 +777,4 @@ training_species: [
   Zychaea_mexicana
   Zygotorulaspora_mrakii
 ]
+

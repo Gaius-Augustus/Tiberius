@@ -29,8 +29,8 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest"]
 from_source = [
-  "tensorflow[and-cuda]>=2.17,<=2.21",
   "bricks2marble[tf]",
+  "tensorflow[and-cuda]>=2.17,<2.21",
   "numpy",
   "biopython",
   "requests",

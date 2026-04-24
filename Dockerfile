@@ -32,7 +32,7 @@ RUN apt-get update --yes && \
 RUN python3 -m pip install --upgrade \
     pip setuptools wheel \
     "hatchling>=1.26" \
-    "packaging>=24.0" 
+    "packaging>=24.0"
 
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -52,14 +52,13 @@ RUN cd /opt && \
 	cd Augustus && \
 	make clean && \
 	make && \
-	make install 
+	make install
 ENV PATH=${PATH}:/opt/Augustus/bin/
 
 
 RUN cd        /opt      && \
     git      clone        https://github.com/Gaius-Augustus/Tiberius && \
     cd Tiberius && \
-    git checkout b2m_hmm && \
     python3 -m pip install .[from_source] && \
     chmod +x tiberius.py && \
     chmod +x tiberius/scripts/* && \
@@ -160,7 +159,7 @@ ENV PATH="/opt/TransDecoder-TransDecoder-v5.7.1:/opt/TransDecoder-TransDecoder-v
 
 RUN cd /opt && \
     wget https://github.com/bbuchfink/diamond/releases/download/v2.1.16/diamond-linux64.tar.gz && \
-    tar xzf diamond-linux64.tar.gz 
+    tar xzf diamond-linux64.tar.gz
 ENV PATH=${PATH}:/opt/diamond/
 
 RUN cd /opt && \
@@ -185,7 +184,7 @@ RUN cd /opt && \
 
 RUN cd /opt && \
 	wget -q  https://github.com/gpertea/gffread/releases/download/v0.12.7/gffread-0.12.7.Linux_x86_64.tar.gz && \
-	tar xzf gffread-0.12.7.Linux_x86_64.tar.gz 
+	tar xzf gffread-0.12.7.Linux_x86_64.tar.gz
 ENV PATH=${PATH}:/opt/gffread-0.12.7.Linux_x86_64
 
 RUN python3 -m pip install plotly

@@ -71,7 +71,7 @@ Tiberius outputs a **GTF file** or **GFF3 file** with predicted gene structures.
 
 ## Prerequisites
 
-- **Python >= 3.9**
+- **Python >= 3.12**
 - **GPU** with at least 8 GB memory recommended (see [recommended batch sizes](#running-tiberius-on-different-gpus)); Tiberius can also run on CPU, but will be significantly slower
 - **Singularity** (recommended) — or a local installation of all dependencies (TensorFlow with GPU support, etc.)
 - **Nextflow** (only required for HPC parallelization or the evidence pipeline)
@@ -100,7 +100,7 @@ python tiberius.py --singularity --genome input.fasta \
 
 ### Option B: Using Docker
 
-If you have root access (or are in the `docker` group), you can use the Docker image directly. The image includes TensorFlow 2.10 with GPU support and all external tools needed for the evidence pipeline.
+If you have root access (or are in the `docker` group), you can use the Docker image directly. The image includes TensorFlow with GPU support and all external tools needed for the evidence pipeline.
 
 ```shell
 # Pull the image
@@ -128,10 +128,10 @@ If TensorFlow is *not* installed beforehand, `pip install .[from_source]` instal
 
 The following Python libraries are required and installed with `pip install .[from_source]`:
 
-- hidten
-- bricks2marble
+- hidten[tensorflow]
+- bricks2marble[tf]
 - numpy
-- tensorflow[and-cuda]>2.12
+- tensorflow[and-cuda]>=2.17,<=
 - biopython
 - requests
 - packaging>=23.0
@@ -193,7 +193,7 @@ python tiberius.py --singularity --genome input.fasta \
 
 In order to run Tiberius with a local installation omit `--singularity`.
 
-Tiberius produces a GTF or GFF3 file containing the predicted gene structures (default: `tiberius.gff3`). The output format depends on the file extension of the specified `--out` file. It can also generate FASTA-formatted files of coding sequences and protein sequences when locations are specified using the `--codingseq` and `--protseq` options, respectively.
+Tiberius produces a GTF or GFF3 file containing the predicted gene structures (default: `tiberius.gff3`). The output format depends on the file extension of the specified `--out` file but the ouptut file has to end in either `.gtf`, `.gff` or `.gff3`. It can also generate FASTA-formatted files of coding sequences and protein sequences when locations are specified using the `--codingseq` and `--protseq` options, respectively.
 
 
 ### Running Tiberius with Nextflow

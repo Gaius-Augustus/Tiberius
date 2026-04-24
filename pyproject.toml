@@ -14,7 +14,7 @@ authors = [
 ]
 description = "Tiberius is a deep learning gene finder."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
@@ -29,10 +29,9 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest"]
 from_source = [
-  "hidten",
-  "bricks2marble",
+  "tensorflow[and-cuda]>=2.17,<=2.21",
+  "bricks2marble[tf]",
   "numpy",
-  "tensorflow[and-cuda]>2.12",
   "biopython",
   "requests",
   "packaging>=23.0",

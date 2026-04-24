@@ -33,9 +33,9 @@ class MissingConfigFieldError(RuntimeError):
 
 
 def load_model_config(
-    filepath: str | Path,
-    required: tuple[str, ...] = ("weights_url", "softmasking", "clamsa"),
-) -> dict[str, Any]:
+    filepath,
+    required = ("weights_url", "softmasking", "clamsa"),
+):
     """
     Read a YAML model-config file and return its contents as a dict.
 
@@ -51,18 +51,21 @@ def load_model_config(
     dict
         Parsed YAML contents.
     """
-    repo_config = SCRIPT_ROOT.parent / "model_cfg" / filepath
-    if not repo_config.endswith(".yaml"):
-        repo_config += ".yaml"
-    if os.path.exists(repo_config):
-        filepath = repo_config
-    else:
-        raise FileNotFoundError(f"File not found: {filepath}")
+    if not os.path.exists(filepath):
+        repo_config = f"{SCRIPT_ROOT}/../model_cfg/{filepath}"
+        if not repo_config.endswith(".yaml"):
+            repo_config += ".yaml"
+        if os.path.exists(repo_config):
+            filepath = repo_config
+        else:
+            raise FileNotFoundError(f"File not found: {filepath}")
 
-    log_config.append(f"Model Config File: {os.path.abspath(filepath)}")
+
+    logging.info(f'Model Config File: {os.path.abspath(filepath)}')
     with open(filepath, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
+    # Treat absent keys *or* keys explicitly set to null/None as missing
     missing = [k for k in required if data.get(k) is None]
     if missing:
         raise MissingConfigFieldError(

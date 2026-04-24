@@ -238,7 +238,7 @@ def run_tiberius_in_singularity(args):
         cmd += ["--nvccli"]
     cmd += [
         "--nv",
-        "--env CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICES",
+        "--env CUDA_VISIBLE_DEVICES=\"$CUDA_VISIBLE_DEVICES\"",
         " --cleanenv",
         str(image_path), "/usr/bin/python3",
         "/opt/Tiberius/tiberius.py"

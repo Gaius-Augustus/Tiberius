@@ -1,7 +1,9 @@
-FROM python:3.12-slim
+FROM nvcr.io/nvidia/tensorflow:25.02-tf2-py3
 
 USER root
 
+ENV TF_USE_LEGACY_KERAS=0
+RUN python3 -m pip install --upgrade "keras>=3,<4"
 
 RUN apt-get update --yes && \
     apt-get install --yes --no-install-recommends \
@@ -24,25 +26,14 @@ RUN apt-get update --yes && \
       libparallel-forkmanager-perl \
       libyaml-perl \
       libdbd-mysql-perl \
+      wget \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python3 -m pip install --upgrade \
     pip setuptools wheel \
     "hatchling>=1.26" \
-    "packaging>=24.0"
+    "packaging>=24.0" 
 
-COPY tensorflow-2.17.0+nv25.2-cp312-cp312-linux_x86_64.whl /tmp/
-
-RUN  python3 -m pip install --upgrade \
-	nvidia-cudnn-cu12~=9.0 \
-	nvidia-nccl-cu12 \
-	nvidia-cuda-runtime-cu12~=12.8.0 \
-	nvidia-cuda-nvcc-cu12~=12.8.0 \
-	nvidia-cusparse-cu12 \
-	nvidia-cufft-cu12 \
-	nvidia-cusolver-cu12 
-
-RUN python3 -m pip install --upgrade /tmp/tensorflow-2.17.0+nv25.2-cp312-cp312-linux_x86_64.whl
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -53,10 +44,8 @@ RUN apt update && \
     apt install --yes --no-install-recommends hisat2  && \
     apt clean all
 
-RUN pip install "pyfamsa<0.6.0"
-
-RUN pip install pyyaml pyBigWig bio scikit-learn biopython bcbio-gff requests
-
+RUN python3 -m pip install "pyfamsa<0.6.0"
+RUN python3 -m pip install pyyaml pyBigWig bio scikit-learn biopython bcbio-gff requests
 
 RUN cd /opt && \
 	git clone https://github.com/Gaius-Augustus/Augustus/ && \
@@ -67,27 +56,30 @@ RUN cd /opt && \
 ENV PATH=${PATH}:/opt/Augustus/bin/
 
 
-RUN cd /opt      && \
-    git clone https://github.com/Gaius-Augustus/bricks2marble && \
-    cd bricks2marble && \
-    python -m pip install -e .
-
-RUN cd /opt      && \
-    git clone https://github.com/Gaius-Augustus/hidten && \
-    cd hidten && \
-    python -m pip install -e .
-
-
 RUN cd        /opt      && \
-    git    clone     https://github.com/Gaius-Augustus/Tiberius && \
+    git      clone        https://github.com/Gaius-Augustus/Tiberius && \
     cd Tiberius && \
     git checkout b2m_hmm && \
-    pip install .[from_source] && \
+    python3 -m pip install .[from_source] && \
     chmod +x tiberius.py && \
     chmod +x tiberius/scripts/* && \
     chmod +x tiberius/*py
 
 RUN mkdir -p /opt/Tiberius/model_weights && chmod -R 777 /opt/Tiberius/model_weights
+
+#COPY tensorflow*2.17*.whl /tmp/
+
+#RUN  python3 -m pip install --upgrade \
+#        nvidia-cudnn-cu12~=9.0 \
+#        nvidia-nccl-cu12 \
+#        nvidia-cuda-runtime-cu12~=12.8.0 \
+#        nvidia-cuda-nvcc-cu12~=12.8.0 \
+#        nvidia-cusparse-cu12 \
+#        nvidia-cufft-cu12 \
+#        nvidia-cusolver-cu12 \
+#        /tmp/tensorflow-*whl
+
+#RUN rm /tmp/*
 
 ENV PATH=${PATH}:/opt/Tiberius/tiberius/
 ENV PATH=${PATH}:/opt/Tiberius/
@@ -99,7 +91,7 @@ RUN apt update && \
 
 
 
-RUN python -m pip install --upgrade \
+RUN python3 -m pip install --upgrade \
     pip setuptools wheel \
     "hatchling>=1.26" \
     "packaging>=24.0"
@@ -147,6 +139,8 @@ RUN apt-get update --yes && \
       perl \
       libdb-dev \
       zlib1g-dev \
+      curl \
+      cpanminus \
       ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
@@ -193,6 +187,8 @@ RUN cd /opt && \
 	wget -q  https://github.com/gpertea/gffread/releases/download/v0.12.7/gffread-0.12.7.Linux_x86_64.tar.gz && \
 	tar xzf gffread-0.12.7.Linux_x86_64.tar.gz 
 ENV PATH=${PATH}:/opt/gffread-0.12.7.Linux_x86_64
+
+RUN python3 -m pip install plotly
 
 RUN cd /opt && \
     rm *tar.gz

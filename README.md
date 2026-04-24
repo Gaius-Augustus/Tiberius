@@ -41,7 +41,7 @@ Additionally, Tiberius provides an evidence mode that generates highly precise g
 We are providing pre-trained models for the following clades (see [model_cfg/README.md](model_cfg/README.md) for details):
 
 - **Animals:** Mammalia, Vertebrates, Insecta
-- **Plants:** Embryophyta
+- **Plants:** Angiosperms
 - **Fungi:** Fungi
 - **Algae & Protists:** Diatoms, Chlorophyta
 
@@ -131,7 +131,7 @@ The following Python libraries are required and installed with `pip install .[fr
 - hidten[tensorflow]
 - bricks2marble[tf]
 - numpy
-- tensorflow[and-cuda]>=2.17,<=
+- tensorflow[and-cuda]>=2.17
 - biopython
 - requests
 - packaging>=23.0
@@ -178,7 +178,6 @@ Instead of providing a predefined model configuration, you can pass a local mode
 
 - `model_config.json` – the model parameters (see `docs/config.json` for an example)
 - `model.weights.h5` – the trained model weights
-
 
 ### *Ab Initio* Gene Prediction
 

@@ -469,7 +469,6 @@ comment: |
           - Tetrapisispora_phaffii (GCF_000236905.1)
           - Wickerhamomyces_ciferrii (GCF_000313485.1)
           - Zygosaccharomyces_rouxii (GCF_000026365.1)
-
 training_species: [
    Aaosphaeria_arxii
   Akanthomyces_muscarius

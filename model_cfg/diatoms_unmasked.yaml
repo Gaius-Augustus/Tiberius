@@ -1,0 +1,44 @@
+target_species: "Bacillariophyta"
+ncbi_tax_id: 2836
+weights_url: "https://bioinf.uni-greifswald.de/bioinf/tiberius/models/diatoms_unmasked.tar.gz"
+softmasking: False
+clamsa: False
+tiberius_version: 1.1.8
+date: "2026-02-06"
+comment: "Diatom training weights trained by Katharina Hoff.
+          Accuracy results according to gffcompare 0.12.6 on test species
+          never seen during training of Tiberius:
+
+          Tool                              | Exon level  | Intron chain | Locus level |
+          --- Thalassiosira pseudonanaa  https://doi.org/10.1186/s12864-021-07666-3
+                                            | Sens | Prec | Sens  | Prec | Sens | Prec |
+          Tiberius this parametes set       | 74.4 | 79.9 | 65.9  | 76.1 | 66.4 | 69.8 |
+          Tiberius diatoms (softmasking)*   | 77.0 | 75.9 | 65.6  | 70.3 | 68.7 | 66.6 |
+          --- Phaeodactylum_tricornutum.ASM15095v2 ------------
+          Tiberius this parameter set       | 58.2 | 70.0 | 48.9  | 67.8 | 57.2 | 62.3 |
+          Tiberius diatoms (softmasking)    | 60.9 | 67.3 | 50.1  | 63.1 | 59.9 | 60.9 |
+
+          *) The Thalassiosira pseudonana genome was provided unmasked
+          to Tiberius.
+"
+training_species: [
+   Cyclotella_atomus
+   Cyclotella_choctawhatcheeana
+   Conticribra_guillardii
+   Conticribra_weissflogii
+   Skeletonema_menzelii
+   Skeletonema_potamos
+   Discostella_pseudostelligera
+   Discostella_stelligera
+   Stephanodiscus_triporus
+   Cyclostephanos_invisitatus
+   Thalassiosira_mediterranea
+   Cylindrotheca_closterium
+   Pseudo-nitzschia_multistriata
+   Mayamaea_pseudoterrestris
+   Seminavis_robusta
+   Fragilaria_crotonensis
+   Asterionella_formosa
+   Chaetoceros_muellerii
+   Chaetoceros_tenuissimus
+]

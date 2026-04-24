@@ -184,28 +184,41 @@ def resolve_model_cfg(cfg_value: str) -> Path:
     Resolve a model config path. Accepts bare names like 'diatoms' or 'diatoms.yaml'
     and searches the local model_cfg directory if a direct path is not found.
     """
+
+    def resolve_candidate(parent_dir):
+        alt = parent_dir / cfg_value
+        if alt.exists():
+            return alt.resolve()
+
+        stem = candidate.name
+        if stem.endswith(".yaml") or stem.endswith(".yml"):
+            stem = stem.rsplit(".", 1)[0]
+
+        for ext in (".yaml", ".yml"):
+            alt = parent_dir / f"{stem}{ext}"
+            if alt.exists():
+                return alt.resolve()
+        return None
+
     candidate = Path(cfg_value).expanduser()
     if candidate.exists():
         return candidate.resolve()
 
     project_root = Path(__file__).resolve().parent
     cfg_dir = project_root / "model_cfg"
+    cfg_file = resolve_candidate(cfg_dir)
+    if cfg_file is not None:
+        return cfg_file
 
-    alt = cfg_dir / cfg_value
-    if alt.exists():
-        return alt.resolve()
-
-    stem = candidate.name
-    if stem.endswith(".yaml") or stem.endswith(".yml"):
-        stem = stem.rsplit(".", 1)[0]
-
-    for ext in (".yaml", ".yml"):
-        alt = cfg_dir / f"{stem}{ext}"
-        if alt.exists():
-            return alt.resolve()
+    project_root = Path(__file__).resolve().parent
+    cfg_dir = project_root / "model_cfg" / "superseded"
+    cfg_file = resolve_candidate(cfg_dir)
+    if cfg_file is not None:
+        console.print(f"WARNING: The chosen model {cfg_value} is superseded, there may be a newer model available")
+        return cfg_file
 
     console.print(f"[bold red]Model config not found:[/bold red] {cfg_value}")
-    console.print(f"Searched: {candidate}, {cfg_dir}/{cfg_value}, {cfg_dir}/{stem}.yaml/.yml")
+    console.print(f"Searched: {candidate}, {cfg_dir}/{cfg_value}, {cfg_dir}/{candidate.name}.yaml/.yml")
     sys.exit(1)
 
 def run_tiberius_in_singularity(args):

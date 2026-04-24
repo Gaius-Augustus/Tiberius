@@ -47,7 +47,7 @@ def parseCmd():
     tiberius_grp.add_argument('--model_old', type=str,
         help=argparse.SUPPRESS, default='')
     tiberius_grp.add_argument('--out', type=str,
-        help='Output GTF file with Tiberius gene prediction.', default='tiberius.gtf')
+        help='Output GTF file with Tiberius gene prediction, the file must end in .gtf, .gff or .gff3.', default='tiberius.gtf')
     tiberius_grp.add_argument('--parallel_factor', type=int, default=0,
         help='Parallel factor used in Viterbi (default uses sqrt(seq_len)).')
 

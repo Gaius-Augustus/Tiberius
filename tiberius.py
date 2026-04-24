@@ -238,8 +238,10 @@ def run_tiberius_in_singularity(args):
         cmd += ["--nvccli"]
     cmd += [
         "--nv",
-        str(image_path), "python3",
-        str(Path(__file__).resolve())
+        "--env CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICES",
+        " --cleanenv",
+        str(image_path), "/usr/bin/python3",
+        "/opt/Tiberius/tiberius.py"
         ]
 
     passthrough = [arg for arg in sys.argv[1:] if arg != "--singularity"]

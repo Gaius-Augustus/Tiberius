@@ -78,6 +78,8 @@ def parseCmd():
         help='Minimum length of input sequences used for predictions.')
     tiberius_grp.add_argument('--singularity', action='store_true',
         help='Run Tiberius inside the Singularity image (auto-download if missing).')
+    tiberius_grp.add_argument('--cleanup_old_singularity_images', action='store_true',
+        help='Delete locally cached Singularity images that do not match the pinned version.')
 
     nf_grp = parser.add_argument_group("Nextflow Pipeline")
     nf_grp.add_argument('-c', '--nf_config',

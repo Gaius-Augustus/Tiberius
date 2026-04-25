@@ -51,14 +51,13 @@ def load_model_config(
     dict
         Parsed YAML contents.
     """
-    if not os.path.exists(filepath):
-        repo_config = f"{SCRIPT_ROOT}/../model_cfg/{filepath}"
-        if not repo_config.endswith(".yaml"):
-            repo_config += ".yaml"
-        if os.path.exists(repo_config):
-            filepath = repo_config
-        else:
-            raise FileNotFoundError(f"File not found: {filepath}")
+    repo_config = f"{SCRIPT_ROOT}/../model_cfg/{filepath.split('/')[-1]}"
+    if not repo_config.endswith(".yaml"):
+        repo_config += ".yaml"
+    if os.path.exists(repo_config):
+        filepath = repo_config
+    else:
+        raise FileNotFoundError(f"File not found: {filepath}")
 
 
     logging.info(f'Model Config File: {os.path.abspath(filepath)}')

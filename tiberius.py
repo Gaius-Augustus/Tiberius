@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 import os
 import sys
+import json
 import yaml
 import subprocess
 import shutil
+import urllib.error
+import urllib.request
 from copy import deepcopy
 from pathlib import Path
 from tiberius.tiberius_args import parseCmd
@@ -16,8 +19,15 @@ from rich.table import Table
 console = Console()
 
 SCRIPT_ROOT = Path(__file__).resolve().parent
-SINGULARITY_IMAGE_URI = "docker://larsgabriel23/tiberius:latest"
-SINGULARITY_IMAGE_PATH = SCRIPT_ROOT / "singularity" / "tiberius.sif"
+SINGULARITY_IMAGE_REPO = "larsgabriel23/tiberius"
+# Pinned, tested image tag. Bump when a new image is published.
+SINGULARITY_IMAGE_VERSION = "2.0.0"
+SINGULARITY_IMAGE_URI = f"docker://{SINGULARITY_IMAGE_REPO}:{SINGULARITY_IMAGE_VERSION}"
+SINGULARITY_IMAGE_PATH = SCRIPT_ROOT / "singularity" / f"tiberius_{SINGULARITY_IMAGE_VERSION}.sif"
+DOCKER_HUB_TAGS_URL = (
+    f"https://hub.docker.com/v2/repositories/{SINGULARITY_IMAGE_REPO}/tags"
+    "?page_size=100"
+)
 DEFAULT_PARAMS = {
     "threads": 48,
     "outdir": "tiberius_results",
@@ -221,17 +231,104 @@ def resolve_model_cfg(cfg_value: str) -> Path:
     console.print(f"Searched: {candidate}, {cfg_dir}/{cfg_value}, {cfg_dir}/{candidate.name}.yaml/.yml")
     sys.exit(1)
 
+def _parse_semver(tag: str):
+    """Parse '1.2.3' or 'v1.2.3' into a tuple of ints; return None if not semver-shaped."""
+    stripped = tag.lstrip("vV")
+    parts = stripped.split(".")
+    try:
+        return tuple(int(p) for p in parts)
+    except ValueError:
+        return None
+
+
+def _fetch_latest_image_tag(timeout: float = 3.0):
+    """Query Docker Hub for the highest semver-shaped tag. Returns None on any failure."""
+    try:
+        req = urllib.request.Request(
+            DOCKER_HUB_TAGS_URL,
+            headers={"Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            payload = json.load(resp)
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
+        return None
+
+    versions = []
+    for tag_obj in payload.get("results", []):
+        name = tag_obj.get("name", "")
+        parsed = _parse_semver(name)
+        if parsed is not None:
+            versions.append((parsed, name))
+    if not versions:
+        return None
+    versions.sort(key=lambda x: x[0])
+    return versions[-1][1]
+
+
+def _warn_if_newer_image_available():
+    """Print a warning if Docker Hub advertises a newer semver tag than the pinned one."""
+    latest_tag = _fetch_latest_image_tag()
+    if latest_tag is None:
+        return
+    current_parsed = _parse_semver(SINGULARITY_IMAGE_VERSION)
+    latest_parsed = _parse_semver(latest_tag)
+    if current_parsed is None or latest_parsed is None:
+        return
+    if latest_parsed > current_parsed:
+        console.print(
+            f"[yellow][WARNING] A newer Singularity image is available: "
+            f"{latest_tag} (current pinned: {SINGULARITY_IMAGE_VERSION}). "
+            f"Update Tiberius (e.g. 'git pull') to use it.[/yellow]"
+        )
+
+
+def _list_old_image_files(image_dir: Path, current_path: Path):
+    """Return cached tiberius_*.sif files that don't match the pinned version."""
+    if not image_dir.exists():
+        return []
+    current_resolved = current_path.resolve()
+    return sorted(
+        p for p in image_dir.glob("tiberius_*.sif")
+        if p.resolve() != current_resolved
+    )
+
+
+def _cleanup_old_image_files(old_images):
+    for p in old_images:
+        try:
+            p.unlink()
+            console.print(f"[INFO] Removed old Singularity image {p}")
+        except OSError as exc:
+            console.print(f"[yellow][WARNING] Could not remove {p}: {exc}[/yellow]")
+
+
 def run_tiberius_in_singularity(args):
     if os.environ.get("TIBERIUS_IN_SINGULARITY") == "1":
         return False
 
+    _warn_if_newer_image_available()
+
     image_path = SINGULARITY_IMAGE_PATH
+    pulled_now = False
     if not image_path.exists():
         image_path.parent.mkdir(parents=True, exist_ok=True)
         console.print(f"[INFO] Pulling Singularity image to {image_path}")
         subprocess.run(
             ["singularity", "pull", str(image_path), SINGULARITY_IMAGE_URI],
             check=True,
+        )
+        pulled_now = True
+
+    old_images = _list_old_image_files(image_path.parent, image_path)
+    if args.cleanup_old_singularity_images:
+        if old_images:
+            _cleanup_old_image_files(old_images)
+    elif pulled_now and old_images:
+        listing = "\n  ".join(str(p) for p in old_images)
+        console.print(
+            "[yellow][WARNING] Old Singularity image(s) still on disk:\n"
+            f"  {listing}\n"
+            "Pass --cleanup_old_singularity_images to remove them.[/yellow]"
         )
     cmd = ["singularity", "run"]
     if has_nvidia_container_cli():

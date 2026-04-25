@@ -52,6 +52,7 @@ def load_model_config(
         Parsed YAML contents.
     """
     repo_config = f"{SCRIPT_ROOT}/../model_cfg/{filepath.split('/')[-1]}"
+
     if not repo_config.endswith(".yaml"):
         repo_config += ".yaml"
     if os.path.exists(repo_config):

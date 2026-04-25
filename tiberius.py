@@ -21,7 +21,7 @@ console = Console()
 SCRIPT_ROOT = Path(__file__).resolve().parent
 SINGULARITY_IMAGE_REPO = "larsgabriel23/tiberius"
 # Pinned, tested image tag. Bump when a new image is published.
-SINGULARITY_IMAGE_VERSION = "2.0.0"
+SINGULARITY_IMAGE_VERSION = "2.0.1"
 SINGULARITY_IMAGE_URI = f"docker://{SINGULARITY_IMAGE_REPO}:{SINGULARITY_IMAGE_VERSION}"
 SINGULARITY_IMAGE_PATH = SCRIPT_ROOT / "singularity" / f"tiberius_{SINGULARITY_IMAGE_VERSION}.sif"
 DOCKER_HUB_TAGS_URL = (

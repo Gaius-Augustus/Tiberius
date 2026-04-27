@@ -98,7 +98,7 @@ python tiberius.py --singularity --genome input.fasta \
       --model_cfg mammalia_softmasking_v2 --out tiberius.gtf
 ```
 
-The image tag used by `--singularity` is pinned in the launcher and cached as `singularity/tiberius_<version>.sif`. On every `--singularity` run Tiberius checks Docker Hub for newer semver tags and prints a warning if one exists; updating is done with `git pull`, the next run auto-pulls the new image. Old cached `.sif` files are kept for rollback; pass `--cleanup_old_singularity_images` to remove them. See [docs/singularity_image.md](docs/singularity_image.md) for the full lifecycle.
+The image tag used by `--singularity` is pinned in the launcher and cached as `singularity/tiberius_<version>.sif`. On every `--singularity` run Tiberius checks Docker Hub for newer semver tags and prints a warning if one exists; updating is done with `git pull`, the next run auto-pulls the new image. Old cached `.sif` files are kept for rollback; pass `--cleanup_old_singularity_images` to remove them, see [docs/singularity_image.md](docs/singularity_image.md) for more information.
 
 ### Option B: Using Docker
 

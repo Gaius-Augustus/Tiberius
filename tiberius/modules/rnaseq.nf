@@ -20,11 +20,12 @@ process HISAT2_MAP_SINGLE {
     path idxdir
     path reads
   output:
-    path "${reads.simpleName}.sam", emit: sam
+    path "${reads.simpleName}.bam", emit: bam
 
   script:
   """
-  ${params.tools.hisat2} -x ${idxdir}/genome -U ${reads} --dta -p ${task.cpus} -S ${reads.simpleName}.sam
+  ${params.tools.hisat2} -x ${idxdir}/genome -U ${reads} --dta -p ${task.cpus} \
+    | ${params.tools.samtools} sort -@ ${task.cpus} -o ${reads.simpleName}.bam
   """
 }
 
@@ -34,21 +35,13 @@ process HISAT2_MAP_PAIRED {
     path idxdir
     tuple val(sample), path(reads)
   output:
-    path "${sample}.sam", emit: sam
+    path "${sample}.bam", emit: bam
 
   script:
   """
   mkdir -p tmp
-  ${params.tools.hisat2} -x ${idxdir}/genome -1 ${reads[0]} -2 ${reads[1]} --dta -p ${task.cpus} -S ${sample}.sam
-  """
-}
-
-process SAMTOOLS_VIEW_SORT {
-  label 'container', 'bigmem'
-  input: path sam
-  output: path "${sam.baseName}.bam", emit: bam
-  script: """
-  ${params.tools.samtools} view -bS ${sam} | ${params.tools.samtools} sort -@ ${params.threads} -o ${sam.baseName}.bam
+  ${params.tools.hisat2} -x ${idxdir}/genome -1 ${reads[0]} -2 ${reads[1]} --dta -p ${task.cpus} \
+    | ${params.tools.samtools} sort -@ ${task.cpus} -o ${sample}.bam
   """
 }
 

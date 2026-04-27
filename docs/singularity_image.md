@@ -15,7 +15,7 @@ constant in [`tiberius.py`](../tiberius.py):
 
 ```python
 SINGULARITY_IMAGE_REPO    = "larsgabriel23/tiberius"
-SINGULARITY_IMAGE_VERSION = "2.0.0"   # pinned, tested image tag
+SINGULARITY_IMAGE_VERSION = importlib.metadata.version("tiberius")  # pinned current version
 SINGULARITY_IMAGE_URI     = f"docker://{SINGULARITY_IMAGE_REPO}:{SINGULARITY_IMAGE_VERSION}"
 SINGULARITY_IMAGE_PATH    = SCRIPT_ROOT / "singularity" / f"tiberius_{SINGULARITY_IMAGE_VERSION}.sif"
 DOCKER_HUB_TAGS_URL       = f"https://hub.docker.com/v2/repositories/{SINGULARITY_IMAGE_REPO}/tags?page_size=100"

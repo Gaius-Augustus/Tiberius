@@ -1,8 +1,6 @@
 nextflow.enable.dsl=2
 
 include { HISAT2_BUILD; HISAT2_MAP_SINGLE; HISAT2_MAP_PAIRED;
-          SAMTOOLS_VIEW_SORT as SAMTOOLS_VIEW_SORT_SINGLE;
-          SAMTOOLS_VIEW_SORT as SAMTOOLS_VIEW_SORT_PAIRED;
           SAMTOOLS_MERGE as SAMTOOLS_MERGE_RNA;
           BAM2HINTS as BAM2HINTS_RNA } from '../modules/rnaseq.nf'
 
@@ -126,16 +124,14 @@ workflow RNASEQ_EVIDENCE {
 
     if( DO_SE ) {
         map_se = HISAT2_MAP_SINGLE(index.idxdir, CH_SINGLE)
-        FILTER_SE(map_se.sam)
-        sort_se = SAMTOOLS_VIEW_SORT_SINGLE(FILTER_SE.out)
-        rnaseq_bams = rnaseq_bams.mix(sort_se.bam)
+        FILTER_SE(map_se.bam)
+        rnaseq_bams = rnaseq_bams.mix(FILTER_SE.out)
     }
 
     if( DO_PE ) {
         map_pe = HISAT2_MAP_PAIRED(index.idxdir, CH_PAIRED)
-        FILTER_PE(map_pe.sam)
-        sort_pe = SAMTOOLS_VIEW_SORT_PAIRED(FILTER_PE.out)
-        rnaseq_bams = rnaseq_bams.mix(sort_pe.bam)
+        FILTER_PE(map_pe.bam)
+        rnaseq_bams = rnaseq_bams.mix(FILTER_PE.out)
     }
 
     if( DO_BAM ) {

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tiberius"
-version = "2.0.1"
+version = "2.0.2"
 authors = [
   { name="Lars Gabriel", email="lgabriel23@gmx.de" },
   { name="Felix Becker", email="beckerfelix94@gmail.com" },

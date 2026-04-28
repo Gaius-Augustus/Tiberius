@@ -430,10 +430,8 @@ def run_tiberius(args):
         )
         if args.codingseq:
             annot.sequence_to_file(target="coding", path=args.codingseq, mode="a")
-            # _dump_seqs(annot, fasta, args.codingseq, "coding")
         if args.protseq:
             annot.sequence_to_file(target="protein", path=args.codingseq, mode="a")
-            # _dump_seqs(annot, fasta, args.protseq, "protein")
         return annot
 
     clamsa=None
@@ -456,7 +454,7 @@ def run_tiberius(args):
         repredict_func = repred_fun,
         concat_strand_to_reprediction=True,
         log_config=log_config,
-        group_size_limit=100_000_000
+        group_size_limit=args.group_size_limit
     )
 
     end_time = time.time()

@@ -414,26 +414,6 @@ def run_tiberius(args):
     predict_fun = pred_gtf.predict_function
     repred_fun = pred_gtf.repredict_function
 
-    def _write_fasta_record(fh, name: str, seq: str, width: int = 60) -> None:
-        fh.write(f">{name}\n")
-        for i in range(0, len(seq), width):
-            fh.write(seq[i:i+width] + "\n")
-
-    def _dump_seqs(annot, fasta, path: str, target: str) -> None:
-        with open(path, "a") as fh:
-            for seq_ann in annot:
-                try:
-                    seq = fasta[seq_ann.sequence]
-                except KeyError:
-                    continue
-                for tx in seq_ann:
-                    if target == "coding":
-                        out = tx.coding_sequence(seq).string(repeats=False)
-                    else:
-                        out = tx.protein_sequence(seq)
-                    if out:
-                        _write_fasta_record(fh, tx.name, out)
-
     if args.codingseq:
         open(args.codingseq, "w").close()
     if args.protseq:
@@ -449,9 +429,11 @@ def run_tiberius(args):
             annot, fasta, remove=True
         )
         if args.codingseq:
-            _dump_seqs(annot, fasta, args.codingseq, "coding")
+            annot.sequence_to_file(target="coding", path=args.codingseq, mode="a")
+            # _dump_seqs(annot, fasta, args.codingseq, "coding")
         if args.protseq:
-            _dump_seqs(annot, fasta, args.protseq, "protein")
+            annot.sequence_to_file(target="protein", path=args.codingseq, mode="a")
+            # _dump_seqs(annot, fasta, args.protseq, "protein")
         return annot
 
     clamsa=None

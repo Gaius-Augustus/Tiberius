@@ -279,7 +279,14 @@ def resolve_model_paths(args):
 
 def resolve_weight_download(config: Dict[str, Any]) -> str:
     """Resolve or download model weights from config."""
+
+
     model_weights_dir = f"{SCRIPT_DIR}/../model_weights"
+    model_file_name = config["weights_url"].split("/")[-1]
+
+    model_path_exist = f"{model_weights_dir}/{model_file_name.split('.')[0]}"
+    if os.path.exists(model_path_exist):
+        return model_path_exist
 
     if not os.path.exists(model_weights_dir):
         if is_writable(os.path.dirname(model_weights_dir)):
@@ -294,7 +301,6 @@ def resolve_weight_download(config: Dict[str, Any]) -> str:
         )
         sys.exit(1)
 
-    model_file_name = config["weights_url"].split("/")[-1]
     model_path = download_weights(
         config["weights_url"], f"{model_weights_dir}/{model_file_name}"
     )

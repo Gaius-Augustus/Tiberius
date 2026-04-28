@@ -286,6 +286,9 @@ def resolve_weight_download(config: Dict[str, Any]) -> str:
 
     model_path_exist = f"{model_weights_dir}/{model_file_name.split('.')[0]}"
     if os.path.exists(model_path_exist):
+        logging.info(
+            f"Using existing model weights file at {model_path_exist} ."
+        )
         return model_path_exist
 
     if not os.path.exists(model_weights_dir):

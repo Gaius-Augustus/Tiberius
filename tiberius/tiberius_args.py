@@ -59,6 +59,8 @@ def parseCmd():
         help='Sets the transitions of the intron classes in the HMM.')
     tiberius_grp.add_argument('--hmm_initial_ir_len', type=int, default=10000,
         help='Sets the transitions of the intergenic region in the HMM.')
+    tiberius_grp.add_argument('--group_size_limit', type=int, default=100000000,
+        help='This sets the maximum number of groups that can be processed by Brick2Marble at a time. Reducing this value will reduce CPU memory usage.')
 
     tiberius_grp.add_argument('--no_softmasking', action='store_true',
         help='Disable softmasking.')

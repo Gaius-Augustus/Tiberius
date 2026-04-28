@@ -431,7 +431,7 @@ def run_tiberius(args):
         if args.codingseq:
             annot.sequence_to_file(target="coding", fasta=fasta, path=args.codingseq, mode="a")
         if args.protseq:
-            annot.sequence_to_file(target="protein", fasta=fasta, path=args.codingseq, mode="a")
+            annot.sequence_to_file(target="protein", fasta=fasta, path=args.protseq, mode="a")
         return annot
 
     clamsa=None

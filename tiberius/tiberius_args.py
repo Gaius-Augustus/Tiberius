@@ -62,6 +62,16 @@ def parseCmd():
     tiberius_grp.add_argument('--group_size_limit', type=int, default=100000000,
         help='This sets the maximum number of groups that can be processed by Brick2Marble at a time. Reducing this value will reduce CPU memory usage.')
 
+    tiberius_grp.add_argument('--hints', type=str, default='',
+        help='Path to a GFF-like hints file (intron / start / stop) used to '
+             'bias the LSTM output before HMM decoding. Coordinates are '
+             '1-based inclusive. Strand-specific.')
+    tiberius_grp.add_argument('--hint_weight', type=float, default=1.0,
+        help='Multiplicative factor applied to the LSTM probability of the '
+             'classes targeted by each hint at the hint positions, followed '
+             'by per-position renormalization. 1.0 disables hint weighting; '
+             'values >1 push the prediction toward the hinted classes.')
+
     tiberius_grp.add_argument('--no_softmasking', action='store_true',
         help='Disable softmasking.')
     tiberius_grp.add_argument('--clamsa', type=str, default=None,

@@ -12,6 +12,7 @@ from tensorflow.keras.models import Model
 from tiberius.models import (custom_cce_f1_loss, lstm_model, Cast)
 from hidten import HMMMode
 from tiberius.hmm import HMMBlock
+from tiberius.hints import apply_hints
 import bricks2marble as b2m
 import math
 
@@ -45,7 +46,8 @@ class PredictionGTF:
                  hmm_factor=None,
                  annot_path='', genome_path='', genome=None, softmask=False,
                  parallel_factor=1,
-                 lstm_cfg='',):
+                 lstm_cfg='',
+                 hints=None, hint_weight=1.0,):
         """
         Arguments:
             - model_path (str): Path to the main model file that includes a HMM layer.
@@ -67,6 +69,13 @@ class PredictionGTF:
             - softmask (bool): Whether to use softmasking.
             - parallel_factor (int): The parallel factor used for Viterbi.
             - lstm_cfg (str): path to lstm cfg to load weights instead of the whole model
+            - hints (dict | None): Optional dict produced by ``tiberius.hints.load_hints``
+              mapping sequence names to ``(feature, start, end, strand)`` entries.
+              When provided alongside ``hint_weight != 1``, the LSTM class
+              probabilities are biased at the hint positions before HMM decoding.
+            - hint_weight (float): Multiplicative weight applied to the boosted
+              classes at hint positions (followed by per-position renormalization).
+              ``1.0`` disables weighting.
         """
         self.model_path = model_path
         self.model_path_old = model_path_old
@@ -97,6 +106,8 @@ class PredictionGTF:
         self.parallel_factor = parallel_factor
         self.lstm_model = None
         self.inp_size = 15
+        self.hints = hints if hints else None
+        self.hint_weight = hint_weight
 
 
     def load_model(self, summary=True):
@@ -249,6 +260,8 @@ class PredictionGTF:
                 dtype = np.float32,
             )
         lstm_out_fwd = self.lstm_prediction(x_one_hot_fwd)
+        if self.hints and self.hint_weight != 1.0:
+            apply_hints(lstm_out_fwd, fasta, self.hints, self.hint_weight, "+")
 
         hmm_out_fwd = self.hmm_prediction(
             x_one_hot_fwd, lstm_out_fwd,
@@ -264,6 +277,8 @@ class PredictionGTF:
         )
         x_one_hot_bwd = x_one_hot_bwd[:, ::-1, :]
         lstm_out_bwd = self.lstm_prediction(x_one_hot_bwd)
+        if self.hints and self.hint_weight != 1.0:
+            apply_hints(lstm_out_bwd, fasta, self.hints, self.hint_weight, "-")
 
         hmm_out_bwd = self.hmm_prediction(
             x_one_hot_bwd, lstm_out_bwd,

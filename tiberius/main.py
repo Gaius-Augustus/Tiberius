@@ -22,7 +22,7 @@ import yaml
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 log_config = []
-MIN_TF_VERSION = "2.13"
+MIN_TF_VERSION = "2.16"
 SCRIPT_PATH = Path(__file__).resolve()
 SCRIPT_DIR = SCRIPT_PATH.parent
 SCRIPT_ROOT = SCRIPT_DIR
@@ -395,6 +395,24 @@ def run_tiberius(args):
         else args.parallel_factor
     )
     log_config.append(f"HMM parallel factor: {parallel_factor}")
+
+    hints = None
+    if args.hints:
+        from tiberius.hints import load_hints
+        hints_path = os.path.abspath(args.hints)
+        check_file_exists(hints_path)
+        hints = load_hints(hints_path)
+        n_hints = sum(len(v) for v in hints.values())
+        log_config.append(
+            f"Hints: {hints_path} ({n_hints} entries on "
+            f"{len(hints)} sequences, weight={args.hint_weight})"
+        )
+        if args.hint_weight == 1.0:
+            logging.warning(
+                "--hints provided but --hint_weight is 1.0; hints will not "
+                "affect the prediction. Set --hint_weight > 1 to enable."
+            )
+
     logging.info("")
     start_time = time.time()
 
@@ -416,6 +434,8 @@ def run_tiberius(args):
         genome=None,
         softmask=softmasking,
         parallel_factor=parallel_factor,
+        hints=hints,
+        hint_weight=args.hint_weight,
     )
 
     pred_gtf.load_model(summary=0)

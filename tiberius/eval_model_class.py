@@ -12,7 +12,7 @@ from tensorflow.keras.models import Model
 from tiberius.models import (custom_cce_f1_loss, lstm_model, Cast)
 from hidten import HMMMode
 from tiberius.hmm import HMMBlock
-from tiberius.hints import apply_hints
+from tiberius.hints import apply_hints, select_consistent_hint_chains
 import bricks2marble as b2m
 import math
 
@@ -261,7 +261,21 @@ class PredictionGTF:
             )
         lstm_out_fwd = self.lstm_prediction(x_one_hot_fwd)
         if self.hints and self.hint_weight != 1.0:
-            apply_hints(lstm_out_fwd, fasta, self.hints, self.hint_weight, "+")
+            chains = select_consistent_hint_chains(
+                self.hints,
+                max_locus_gap=20000,
+                max_chains_per_locus=1,
+                require_anchored=True,
+            )
+
+            lstm_out_fwd = apply_hints(
+                lstm_out_fwd,
+                fasta,
+                chains,
+                weight=self.hint_weight,
+                strand="+",
+                mode="hard",
+            )
 
         hmm_out_fwd = self.hmm_prediction(
             x_one_hot_fwd, lstm_out_fwd,
@@ -278,7 +292,14 @@ class PredictionGTF:
         x_one_hot_bwd = x_one_hot_bwd[:, ::-1, :]
         lstm_out_bwd = self.lstm_prediction(x_one_hot_bwd)
         if self.hints and self.hint_weight != 1.0:
-            apply_hints(lstm_out_bwd, fasta, self.hints, self.hint_weight, "-")
+            lstm_out_bwd = apply_hints(
+                lstm_out_bwd,
+                fasta,
+                chains,
+                weight=self.hint_weight,
+                strand="-",
+                mode="hard",
+            )
 
         hmm_out_bwd = self.hmm_prediction(
             x_one_hot_bwd, lstm_out_bwd,

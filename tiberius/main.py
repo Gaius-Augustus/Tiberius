@@ -398,19 +398,28 @@ def run_tiberius(args):
 
     hints = None
     if args.hints:
-        from tiberius.hints import load_hints
+        from tiberius.hints import count_intron_hints, load_hints
         hints_path = os.path.abspath(args.hints)
         check_file_exists(hints_path)
         hints = load_hints(hints_path)
         n_hints = sum(len(v) for v in hints.values())
+        n_intron = count_intron_hints(hints)
         log_config.append(
             f"Hints: {hints_path} ({n_hints} entries on "
-            f"{len(hints)} sequences, weight={args.hint_weight})"
+            f"{len(hints)} sequences, intron={n_intron}, "
+            f"weight={args.hint_weight})"
         )
         if args.hint_weight == 1.0:
             logging.warning(
-                "--hints provided but --hint_weight is 1.0; hints will not "
-                "affect the prediction. Set --hint_weight > 1 to enable."
+                "--hints provided but --hint_weight is 1.0; the HMM intron-"
+                "hint emitter will not be activated. Set --hint_weight > 1 "
+                "to enable."
+            )
+        if n_intron == 0:
+            logging.warning(
+                "--hints provided but no intron features were found. "
+                "Only intron hints are currently used by the HMM emitter; "
+                "start / stop hints are ignored."
             )
 
     logging.info("")

@@ -12,7 +12,7 @@ from tensorflow.keras.models import Model
 from tiberius.models import (custom_cce_f1_loss, lstm_model, Cast)
 from hidten import HMMMode
 from tiberius.hmm import HMMBlock
-from tiberius.hints import apply_hints, select_consistent_hint_chains
+from tiberius.hints import build_intron_hint_channels, count_intron_hints
 import bricks2marble as b2m
 import math
 
@@ -47,7 +47,8 @@ class PredictionGTF:
                  annot_path='', genome_path='', genome=None, softmask=False,
                  parallel_factor=1,
                  lstm_cfg='',
-                 hints=None, hint_weight=1.0,):
+                 hints=None, hint_weight=1.0,
+                 intron_hint_emitter=None,):
         """
         Arguments:
             - model_path (str): Path to the main model file that includes a HMM layer.
@@ -70,12 +71,17 @@ class PredictionGTF:
             - parallel_factor (int): The parallel factor used for Viterbi.
             - lstm_cfg (str): path to lstm cfg to load weights instead of the whole model
             - hints (dict | None): Optional dict produced by ``tiberius.hints.load_hints``
-              mapping sequence names to ``(feature, start, end, strand)`` entries.
-              When provided alongside ``hint_weight != 1``, the LSTM class
-              probabilities are biased at the hint positions before HMM decoding.
-            - hint_weight (float): Multiplicative weight applied to the boosted
-              classes at hint positions (followed by per-position renormalization).
-              ``1.0`` disables weighting.
+              mapping sequence names to ``Hint`` entries. Currently only
+              ``intron`` features are consumed; they are turned into the
+              ``(interior, left_border, right_border)`` channels expected by the
+              HMM's ``intron_hint_emitter`` (see ``bricks2marble.tf.hmm``).
+            - hint_weight (float): Legacy alias for ``intron_hint_emitter`` if
+              the latter is not given explicitly. ``1.0`` (or ``None``) disables
+              the intron-hint emitter.
+            - intron_hint_emitter (float | None): Multiplicative factor that
+              up-scales intron / splice-site emission probabilities inside
+              hint regions. Activates the HMM's intron-hint emitter when set
+              to a value other than ``None`` / ``1.0``.
         """
         self.model_path = model_path
         self.model_path_old = model_path_old
@@ -109,6 +115,22 @@ class PredictionGTF:
         self.hints = hints if hints else None
         self.hint_weight = hint_weight
 
+        if intron_hint_emitter is None and hint_weight is not None and hint_weight != 1.0:
+            intron_hint_emitter = float(hint_weight)
+        if intron_hint_emitter is not None and intron_hint_emitter == 1.0:
+            intron_hint_emitter = None
+        self.intron_hint_emitter = intron_hint_emitter
+
+        n_intron_hints = count_intron_hints(self.hints) if self.hints else 0
+        if self.intron_hint_emitter is not None and n_intron_hints == 0:
+            print(
+                "WARNING: intron_hint_emitter requested but no intron hints "
+                "were loaded. The HMM intron-hint emitter will be disabled.",
+                file=sys.stderr,
+            )
+            self.intron_hint_emitter = None
+        self._n_intron_hints = n_intron_hints
+
 
     def load_model(self, summary=True):
         """Loads the model from the given model path.
@@ -128,6 +150,7 @@ class PredictionGTF:
                 initial_exon_len=self.hmm_initial_exon_len,
                 initial_intron_len=self.hmm_initial_intron_len,
                 initial_ir_len=self.hmm_initial_ir_len,
+                intron_hint_emitter=self.intron_hint_emitter,
             )
             }
         if self.model_path:
@@ -252,6 +275,8 @@ class PredictionGTF:
             fasta: b2m.struct.Fasta
         ) -> tuple[np.ndarray, np.ndarray]:
 
+        ih_fwd, ih_bwd = self._build_intron_hint_channels(fasta)
+
         # fwd prediction
         x_one_hot_fwd = fasta.one_hot(
                 pad_index = 4,
@@ -260,25 +285,8 @@ class PredictionGTF:
                 dtype = np.float32,
             )
         lstm_out_fwd = self.lstm_prediction(x_one_hot_fwd)
-        if self.hints and self.hint_weight != 1.0:
-            chains = select_consistent_hint_chains(
-                self.hints,
-                max_locus_gap=20000,
-                max_chains_per_locus=1,
-                require_anchored=False,
-            )
-
-            lstm_out_fwd = apply_hints(
-                lstm_out_fwd,
-                fasta,
-                chains,
-                weight=self.hint_weight,
-                strand="+",
-                mode="hard",
-            )
-
         hmm_out_fwd = self.hmm_prediction(
-            x_one_hot_fwd, lstm_out_fwd,
+            x_one_hot_fwd, lstm_out_fwd, intron_hint=ih_fwd,
         )
 
         # bwd prediction
@@ -291,18 +299,8 @@ class PredictionGTF:
         )
         x_one_hot_bwd = x_one_hot_bwd[:, ::-1, :]
         lstm_out_bwd = self.lstm_prediction(x_one_hot_bwd)
-        if self.hints and self.hint_weight != 1.0:
-            lstm_out_bwd = apply_hints(
-                lstm_out_bwd,
-                fasta,
-                chains,
-                weight=self.hint_weight,
-                strand="-",
-                mode="hard",
-            )
-
         hmm_out_bwd = self.hmm_prediction(
-            x_one_hot_bwd, lstm_out_bwd,
+            x_one_hot_bwd, lstm_out_bwd, intron_hint=ih_bwd,
         )
 
         hmm_out_bwd = hmm_out_bwd[:,::-1]
@@ -312,6 +310,8 @@ class PredictionGTF:
             self,
             fasta: b2m.struct.Fasta
         ) -> tuple[np.ndarray, np.ndarray]:
+        ih_fwd_full, ih_bwd_full = self._build_intron_hint_channels(fasta)
+
         # fwd prediction
         indices_fwd = np.where(np.isin(fasta.evidence[:,0], [0, 2]))[0]
         hmm_out_fwd_expand = np.empty((fasta.N, fasta.T), dtype=np.int32)
@@ -323,10 +323,10 @@ class PredictionGTF:
                     dtype = np.float32,
                 )[indices_fwd]
             lstm_out_fwd = self.lstm_prediction(x_one_hot_fwd)
-
+            ih_fwd = ih_fwd_full[indices_fwd] if ih_fwd_full is not None else None
 
             hmm_out_fwd = self.hmm_prediction(
-                x_one_hot_fwd, lstm_out_fwd,
+                x_one_hot_fwd, lstm_out_fwd, intron_hint=ih_fwd,
             )
             hmm_out_fwd_expand[indices_fwd] = hmm_out_fwd
 
@@ -344,14 +344,28 @@ class PredictionGTF:
             )[indices_bwd]
             x_one_hot_bwd = x_one_hot_bwd[:, ::-1, :]
             lstm_out_bwd = self.lstm_prediction(x_one_hot_bwd)
+            ih_bwd = ih_bwd_full[indices_bwd] if ih_bwd_full is not None else None
 
             hmm_out_bwd = self.hmm_prediction(
-                x_one_hot_bwd, lstm_out_bwd,
+                x_one_hot_bwd, lstm_out_bwd, intron_hint=ih_bwd,
             )
 
             hmm_out_bwd = hmm_out_bwd[:,::-1]
             hmm_out_bwd_expand[indices_bwd] = hmm_out_bwd
         return hmm_out_fwd_expand, hmm_out_bwd_expand
+
+    def _build_intron_hint_channels(
+            self,
+            fasta: b2m.struct.Fasta
+        ) -> tuple[np.ndarray | None, np.ndarray | None]:
+        """Return ``(ih_fwd, ih_bwd)`` arrays of shape ``(N, T, 3)`` or
+        ``(None, None)`` if the intron-hint emitter is not active.
+        """
+        if self.intron_hint_emitter is None or not self.hints:
+            return None, None
+        ih_fwd = build_intron_hint_channels(fasta, self.hints, "+")
+        ih_bwd = build_intron_hint_channels(fasta, self.hints, "-")
+        return ih_fwd, ih_bwd
 
     def get_predictions(
             self,
@@ -454,12 +468,15 @@ class PredictionGTF:
         lstm_predictions = np.concatenate(lstm_predictions, axis=0)
         return np.array(lstm_predictions)
 
-    def hmm_prediction(self, nuc_seq, lstm_predictions,batch_size=None):
+    def hmm_prediction(self, nuc_seq, lstm_predictions, intron_hint=None, batch_size=None):
         """Generates predictions using a HMM model and the viterbi algorithm.
 
         Arguments:
             nuc_seq (np.array): One hot encoded representation of the input nucleotide sequence.
             lstm_predictions (np.array): Class label predictions from a LSTM model
+            intron_hint (np.array | None): Optional ``(N, T, 3)`` array of
+                intron-hint channels appended to ``nuc_seq`` for the HMM's
+                ``intron_hint_emitter`` (interior, left_border, right_border).
             save (bool): A flag to indicate whether the predictions should be saved/loaded to/from a file.
 
         Returns:
@@ -475,8 +492,15 @@ class PredictionGTF:
         for i in range(num_batches):
             start_pos = i * batch_size
             end_pos = (i+1) * batch_size
-            y_hmm = self.predict_vit(nuc_seq[start_pos:end_pos],
-                lstm_predictions[start_pos:end_pos]).numpy().squeeze()
+            ih_batch = (
+                intron_hint[start_pos:end_pos]
+                if intron_hint is not None else None
+            )
+            y_hmm = self.predict_vit(
+                nuc_seq[start_pos:end_pos],
+                lstm_predictions[start_pos:end_pos],
+                intron_hint=ih_batch,
+            ).numpy().squeeze()
             if len(y_hmm.shape) == 1:
                 y_hmm = np.expand_dims(y_hmm,0)
             hmm_predictions.append(y_hmm)
@@ -485,7 +509,7 @@ class PredictionGTF:
 
 
     @tf.function
-    def predict_vit(self, x, y_lstm):
+    def predict_vit(self, x, y_lstm, intron_hint=None):
         """Perform prediction using the Viterbi algorithm on the output of an LSTM model.
 
         This method applies the Viterbi algorithm to the sequence probabilities output by
@@ -494,6 +518,9 @@ class PredictionGTF:
         Args:
             x (tf.Tensor): Input sequence tensor for which the predictions are to be made.
             y_lstm (np.array): LSTM predictions used as input for viterbi.
+            intron_hint (tf.Tensor | None): Optional ``(B, T, 3)`` tensor with
+                ``(interior, left_border, right_border)`` channels concatenated
+                onto ``nuc`` for the HMM's intron-hint emitter.
 
         Returns:
             tf.Tensor: The predicted state sequence tensor after applying Viterbi decoding.
@@ -502,10 +529,11 @@ class PredictionGTF:
             nuc = Cast()(x)
             if y_lstm.ndim == 2:
                 y_lstm = y_lstm[np.newaxis, :, :]
-            y_vit = self.gene_pred_hmm_layer(y_lstm, nuc)
         else:
             nuc = tf.cast(x[:,:,:5], tf.float32)
-            y_vit = self.gene_pred_hmm_layer(y_lstm, nuc)
+        if intron_hint is not None:
+            nuc = tf.concat([nuc, tf.cast(intron_hint, nuc.dtype)], axis=-1)
+        y_vit = self.gene_pred_hmm_layer(y_lstm, nuc)
         return y_vit
 
 
@@ -518,5 +546,6 @@ class PredictionGTF:
             initial_exon_len=self.hmm_initial_exon_len,
             initial_intron_len=self.hmm_initial_intron_len,
             initial_ir_len=self.hmm_initial_ir_len,
+            intron_hint_emitter=self.intron_hint_emitter,
         )
         self.gene_pred_hmm_layer.build((self.adapted_batch_size, self.seq_len, inp_size))

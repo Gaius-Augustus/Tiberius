@@ -63,14 +63,17 @@ def parseCmd():
         help='This sets the maximum number of groups that can be processed by Brick2Marble at a time. Reducing this value will reduce CPU memory usage.')
 
     tiberius_grp.add_argument('--hints', type=str, default='',
-        help='Path to a GFF-like hints file (intron / start / stop) used to '
-             'bias the LSTM output before HMM decoding. Coordinates are '
-             '1-based inclusive. Strand-specific.')
+        help='Path to a GFF-like hints file. Currently only intron features '
+             'are honored: each intron region is fed into the HMM as '
+             '(interior, left_border, right_border) channels which up-scale '
+             'the emission probability of the I / EI / IE states inside the '
+             'region (see --hint_weight). Coordinates are 1-based inclusive '
+             'and strand-specific. Start / stop hints are ignored.')
     tiberius_grp.add_argument('--hint_weight', type=float, default=1.0,
-        help='Multiplicative factor applied to the LSTM probability of the '
-             'classes targeted by each hint at the hint positions, followed '
-             'by per-position renormalization. 1.0 disables hint weighting; '
-             'values >1 push the prediction toward the hinted classes.')
+        help='Factor by which the HMM intron-hint emitter up-scales the '
+             'emission probability of intron / splice-site states inside '
+             'hint regions. 1.0 disables the emitter; values >1 push the '
+             'HMM toward annotating the hinted region as an intron.')
 
     tiberius_grp.add_argument('--no_softmasking', action='store_true',
         help='Disable softmasking.')

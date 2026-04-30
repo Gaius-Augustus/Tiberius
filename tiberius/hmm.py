@@ -12,6 +12,7 @@ class HMMBlock(AnnotationHMM):
         initial_exon_len: int = 200,
         initial_intron_len: int = 4500,
         initial_ir_len: int = 10000,
+        intron_hint_emitter: float | None = None,
     ) -> None:
         self.mode = mode
         self.parallel = parallel
@@ -26,7 +27,8 @@ class HMMBlock(AnnotationHMM):
             transitioner_share_frames=False,
             transitioner_share_noncoding=False,
             train_transitions=False,
-            train_start_dist=False
+            train_start_dist=False,
+            intron_hint_emitter=intron_hint_emitter,
         )
 
     def call(self, x, nuc):

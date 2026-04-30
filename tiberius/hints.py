@@ -123,6 +123,14 @@ def count_intron_hints(hints: Dict[str, List[Hint]]) -> int:
     return sum(1 for hs in hints.values() for h in hs if h.feature == "intron")
 
 
+def count_codon_hints(hints: Dict[str, List[Hint]]) -> Tuple[int, int]:
+    if not hints:
+        return 0, 0
+    n_start = sum(1 for hs in hints.values() for h in hs if h.feature == "start")
+    n_stop  = sum(1 for hs in hints.values() for h in hs if h.feature == "stop")
+    return n_start, n_stop
+
+
 def build_intron_hint_channels(
     fasta,
     hints: Dict[str, List[Hint]],
@@ -202,4 +210,75 @@ def build_intron_hint_channels(
 
     if not arrays:
         return np.zeros((0, 0, 3), dtype=np.float32)
+    return np.concatenate(arrays, axis=0)
+
+
+def build_codon_hint_channels(
+    fasta,
+    hints: Dict[str, List[Hint]],
+    strand: str,
+) -> np.ndarray:
+    """
+    Build the 6-channel ``(start_p1, start_p2, start_p3, stop_p1, stop_p2,
+    stop_p3)`` tensor expected by the HMM's ``codon_hint_emitter`` for one
+    strand.
+
+    Output shape: ``(N_total, T, 6)``. The six channels are mutually
+    exclusive at every position (zero everywhere outside codon hints).
+
+    Frames:
+        ``strand == '+'``: genomic chunk frame.
+            For a codon hint at genomic ``[a, a+3)``,
+            ``p1`` is at ``a``, ``p2`` at ``a+1``, ``p3`` at ``a+2``.
+        ``strand == '-'``: bwd-chunk frame used by Tiberius after
+            ``x_one_hot_bwd[:, ::-1, :]``.
+            For a codon hint at genomic ``[a, a+3)`` on the minus strand,
+            ``p1`` is at the highest genomic position (``a+2``) which
+            becomes the lowest position in bwd-chunk order, ``p2`` at
+            ``a+1``, ``p3`` at ``a``. So in bwd-chunk space
+            ``p1, p2, p3`` are still consecutive ascending, matching the
+            5'→3' reading on the minus strand.
+
+    Hints with ``length == 1`` are accepted as well (only ``p1`` is set);
+    other lengths are skipped.
+    """
+    if strand not in ("+", "-"):
+        raise ValueError(f"Bad strand argument: {strand!r}")
+
+    arrays: List[np.ndarray] = []
+    for seq in fasta:
+        N, T = seq.N, seq.T
+        ch = np.zeros((N, T, 6), dtype=np.float32)
+        for h in hints.get(seq.name, ()) if hints else ():
+            if h.feature == "start":
+                base_channel = 0
+            elif h.feature == "stop":
+                base_channel = 3
+            else:
+                continue
+            if h.strand != strand:
+                continue
+            a = h.start - seq.start
+            b = h.end - seq.start
+            length = b - a
+            if a < 0 or b > seq.size or length not in (1, 3):
+                continue
+
+            if strand == "+":
+                gpos_seq = (a, a + 1, a + 2) if length == 3 else (a,)
+            else:
+                gpos_seq = (b - 1, b - 2, b - 3) if length == 3 else (b - 1,)
+
+            for offset, gpos in enumerate(gpos_seq):
+                chunk = gpos // T
+                if chunk < 0 or chunk >= N:
+                    continue
+                local = gpos % T
+                pos = local if strand == "+" else T - 1 - local
+                ch[chunk, pos, :] = 0.0
+                ch[chunk, pos, base_channel + offset] = 1.0
+        arrays.append(ch)
+
+    if not arrays:
+        return np.zeros((0, 0, 6), dtype=np.float32)
     return np.concatenate(arrays, axis=0)

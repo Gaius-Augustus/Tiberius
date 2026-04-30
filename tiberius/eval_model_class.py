@@ -12,7 +12,9 @@ from tensorflow.keras.models import Model
 from tiberius.models import (custom_cce_f1_loss, lstm_model, Cast)
 from hidten import HMMMode
 from tiberius.hmm import HMMBlock
-from tiberius.hints import build_intron_hint_channels, count_intron_hints
+from tiberius.hints import (build_codon_hint_channels,
+                            build_intron_hint_channels, count_codon_hints,
+                            count_intron_hints)
 import bricks2marble as b2m
 import math
 
@@ -48,7 +50,8 @@ class PredictionGTF:
                  parallel_factor=1,
                  lstm_cfg='',
                  hints=None, hint_weight=1.0,
-                 intron_hint_emitter=None,):
+                 intron_hint_emitter=None,
+                 codon_hint_emitter=None,):
         """
         Arguments:
             - model_path (str): Path to the main model file that includes a HMM layer.
@@ -82,6 +85,14 @@ class PredictionGTF:
               up-scales intron / splice-site emission probabilities inside
               hint regions. Activates the HMM's intron-hint emitter when set
               to a value other than ``None`` / ``1.0``.
+            - codon_hint_emitter (float | None): Multiplicative factor that
+              up-scales the emission probabilities of the start- and stop-
+              codon states (``START``/``E1``/``E2`` for start hints,
+              ``E0``/``E1``/``STOP`` for stop hints) at the three nucleotide
+              positions of the codon. Activates the HMM's codon-hint emitter
+              when set to a value other than ``None`` / ``1.0``. Defaults to
+              the same value as ``intron_hint_emitter`` (so a single
+              ``--hint_weight`` controls both).
         """
         self.model_path = model_path
         self.model_path_old = model_path_old
@@ -121,7 +132,16 @@ class PredictionGTF:
             intron_hint_emitter = None
         self.intron_hint_emitter = intron_hint_emitter
 
+        if codon_hint_emitter is None and hint_weight is not None and hint_weight != 1.0:
+            codon_hint_emitter = float(hint_weight)
+        if codon_hint_emitter is not None and codon_hint_emitter == 1.0:
+            codon_hint_emitter = None
+        self.codon_hint_emitter = codon_hint_emitter
+
         n_intron_hints = count_intron_hints(self.hints) if self.hints else 0
+        n_start_hints, n_stop_hints = (
+            count_codon_hints(self.hints) if self.hints else (0, 0)
+        )
         if self.intron_hint_emitter is not None and n_intron_hints == 0:
             print(
                 "WARNING: intron_hint_emitter requested but no intron hints "
@@ -129,7 +149,21 @@ class PredictionGTF:
                 file=sys.stderr,
             )
             self.intron_hint_emitter = None
+        if (
+            self.codon_hint_emitter is not None
+            and n_start_hints == 0
+            and n_stop_hints == 0
+        ):
+            print(
+                "WARNING: codon_hint_emitter requested but no start/stop "
+                "hints were loaded. The HMM codon-hint emitter will be "
+                "disabled.",
+                file=sys.stderr,
+            )
+            self.codon_hint_emitter = None
         self._n_intron_hints = n_intron_hints
+        self._n_start_hints = n_start_hints
+        self._n_stop_hints = n_stop_hints
 
 
     def load_model(self, summary=True):
@@ -151,6 +185,7 @@ class PredictionGTF:
                 initial_intron_len=self.hmm_initial_intron_len,
                 initial_ir_len=self.hmm_initial_ir_len,
                 intron_hint_emitter=self.intron_hint_emitter,
+                codon_hint_emitter=self.codon_hint_emitter,
             )
             }
         if self.model_path:
@@ -275,7 +310,9 @@ class PredictionGTF:
             fasta: b2m.struct.Fasta
         ) -> tuple[np.ndarray, np.ndarray]:
 
-        ih_fwd, ih_bwd = self._build_intron_hint_channels(fasta)
+        ih_fwd, ih_bwd, ch_fwd, ch_bwd = self._build_hint_channels(fasta)
+        hint_fwd = self._concat_hint_channels(ih_fwd, ch_fwd)
+        hint_bwd = self._concat_hint_channels(ih_bwd, ch_bwd)
 
         # fwd prediction
         x_one_hot_fwd = fasta.one_hot(
@@ -286,7 +323,7 @@ class PredictionGTF:
             )
         lstm_out_fwd = self.lstm_prediction(x_one_hot_fwd)
         hmm_out_fwd = self.hmm_prediction(
-            x_one_hot_fwd, lstm_out_fwd, intron_hint=ih_fwd,
+            x_one_hot_fwd, lstm_out_fwd, hint_channels=hint_fwd,
         )
 
         # bwd prediction
@@ -300,7 +337,7 @@ class PredictionGTF:
         x_one_hot_bwd = x_one_hot_bwd[:, ::-1, :]
         lstm_out_bwd = self.lstm_prediction(x_one_hot_bwd)
         hmm_out_bwd = self.hmm_prediction(
-            x_one_hot_bwd, lstm_out_bwd, intron_hint=ih_bwd,
+            x_one_hot_bwd, lstm_out_bwd, hint_channels=hint_bwd,
         )
 
         hmm_out_bwd = hmm_out_bwd[:,::-1]
@@ -310,7 +347,11 @@ class PredictionGTF:
             self,
             fasta: b2m.struct.Fasta
         ) -> tuple[np.ndarray, np.ndarray]:
-        ih_fwd_full, ih_bwd_full = self._build_intron_hint_channels(fasta)
+        ih_fwd_full, ih_bwd_full, ch_fwd_full, ch_bwd_full = (
+            self._build_hint_channels(fasta)
+        )
+        hint_fwd_full = self._concat_hint_channels(ih_fwd_full, ch_fwd_full)
+        hint_bwd_full = self._concat_hint_channels(ih_bwd_full, ch_bwd_full)
 
         # fwd prediction
         indices_fwd = np.where(np.isin(fasta.evidence[:,0], [0, 2]))[0]
@@ -323,10 +364,13 @@ class PredictionGTF:
                     dtype = np.float32,
                 )[indices_fwd]
             lstm_out_fwd = self.lstm_prediction(x_one_hot_fwd)
-            ih_fwd = ih_fwd_full[indices_fwd] if ih_fwd_full is not None else None
+            hint_fwd = (
+                hint_fwd_full[indices_fwd]
+                if hint_fwd_full is not None else None
+            )
 
             hmm_out_fwd = self.hmm_prediction(
-                x_one_hot_fwd, lstm_out_fwd, intron_hint=ih_fwd,
+                x_one_hot_fwd, lstm_out_fwd, hint_channels=hint_fwd,
             )
             hmm_out_fwd_expand[indices_fwd] = hmm_out_fwd
 
@@ -344,28 +388,53 @@ class PredictionGTF:
             )[indices_bwd]
             x_one_hot_bwd = x_one_hot_bwd[:, ::-1, :]
             lstm_out_bwd = self.lstm_prediction(x_one_hot_bwd)
-            ih_bwd = ih_bwd_full[indices_bwd] if ih_bwd_full is not None else None
+            hint_bwd = (
+                hint_bwd_full[indices_bwd]
+                if hint_bwd_full is not None else None
+            )
 
             hmm_out_bwd = self.hmm_prediction(
-                x_one_hot_bwd, lstm_out_bwd, intron_hint=ih_bwd,
+                x_one_hot_bwd, lstm_out_bwd, hint_channels=hint_bwd,
             )
 
             hmm_out_bwd = hmm_out_bwd[:,::-1]
             hmm_out_bwd_expand[indices_bwd] = hmm_out_bwd
         return hmm_out_fwd_expand, hmm_out_bwd_expand
 
-    def _build_intron_hint_channels(
+    def _build_hint_channels(
             self,
             fasta: b2m.struct.Fasta
-        ) -> tuple[np.ndarray | None, np.ndarray | None]:
-        """Return ``(ih_fwd, ih_bwd)`` arrays of shape ``(N, T, 3)`` or
-        ``(None, None)`` if the intron-hint emitter is not active.
+        ) -> tuple[
+            np.ndarray | None, np.ndarray | None,
+            np.ndarray | None, np.ndarray | None,
+        ]:
+        """Return ``(ih_fwd, ih_bwd, ch_fwd, ch_bwd)`` arrays. Each entry
+        is ``None`` if the corresponding emitter is inactive. The intron
+        arrays have shape ``(N, T, 3)`` and the codon arrays
+        ``(N, T, 6)``.
         """
-        if self.intron_hint_emitter is None or not self.hints:
-            return None, None
-        ih_fwd = build_intron_hint_channels(fasta, self.hints, "+")
-        ih_bwd = build_intron_hint_channels(fasta, self.hints, "-")
-        return ih_fwd, ih_bwd
+        ih_fwd = ih_bwd = ch_fwd = ch_bwd = None
+        if self.hints:
+            if self.intron_hint_emitter is not None:
+                ih_fwd = build_intron_hint_channels(fasta, self.hints, "+")
+                ih_bwd = build_intron_hint_channels(fasta, self.hints, "-")
+            if self.codon_hint_emitter is not None:
+                ch_fwd = build_codon_hint_channels(fasta, self.hints, "+")
+                ch_bwd = build_codon_hint_channels(fasta, self.hints, "-")
+        return ih_fwd, ih_bwd, ch_fwd, ch_bwd
+
+    @staticmethod
+    def _concat_hint_channels(
+            *channels: np.ndarray | None,
+        ) -> np.ndarray | None:
+        """Concatenate any non-None hint channels along the last axis.
+        Returns ``None`` if all inputs are ``None``."""
+        present = [c for c in channels if c is not None]
+        if not present:
+            return None
+        if len(present) == 1:
+            return present[0]
+        return np.concatenate(present, axis=-1)
 
     def get_predictions(
             self,
@@ -468,16 +537,19 @@ class PredictionGTF:
         lstm_predictions = np.concatenate(lstm_predictions, axis=0)
         return np.array(lstm_predictions)
 
-    def hmm_prediction(self, nuc_seq, lstm_predictions, intron_hint=None, batch_size=None):
+    def hmm_prediction(self, nuc_seq, lstm_predictions, hint_channels=None, batch_size=None):
         """Generates predictions using a HMM model and the viterbi algorithm.
 
         Arguments:
             nuc_seq (np.array): One hot encoded representation of the input nucleotide sequence.
             lstm_predictions (np.array): Class label predictions from a LSTM model
-            intron_hint (np.array | None): Optional ``(N, T, 3)`` array of
-                intron-hint channels appended to ``nuc_seq`` for the HMM's
-                ``intron_hint_emitter`` (interior, left_border, right_border).
-            save (bool): A flag to indicate whether the predictions should be saved/loaded to/from a file.
+            hint_channels (np.array | None): Optional ``(N, T, K)`` array of
+                hint channels appended to ``nuc_seq`` for the HMM's hint
+                emitters. ``K`` is the sum of the channel counts of the
+                active hint emitters in the layer order
+                ``intron_hint_emitter`` (3 channels), then
+                ``codon_hint_emitter`` (6 channels).
+            batch_size (int | None): Optional override for the HMM batch size.
 
         Returns:
             HMM predictions (np.array or list of np.array): The predictions generated by the HMM model.
@@ -492,14 +564,14 @@ class PredictionGTF:
         for i in range(num_batches):
             start_pos = i * batch_size
             end_pos = (i+1) * batch_size
-            ih_batch = (
-                intron_hint[start_pos:end_pos]
-                if intron_hint is not None else None
+            hint_batch = (
+                hint_channels[start_pos:end_pos]
+                if hint_channels is not None else None
             )
             y_hmm = self.predict_vit(
                 nuc_seq[start_pos:end_pos],
                 lstm_predictions[start_pos:end_pos],
-                intron_hint=ih_batch,
+                hint_channels=hint_batch,
             ).numpy().squeeze()
             if len(y_hmm.shape) == 1:
                 y_hmm = np.expand_dims(y_hmm,0)
@@ -509,7 +581,7 @@ class PredictionGTF:
 
 
     @tf.function
-    def predict_vit(self, x, y_lstm, intron_hint=None):
+    def predict_vit(self, x, y_lstm, hint_channels=None):
         """Perform prediction using the Viterbi algorithm on the output of an LSTM model.
 
         This method applies the Viterbi algorithm to the sequence probabilities output by
@@ -518,9 +590,9 @@ class PredictionGTF:
         Args:
             x (tf.Tensor): Input sequence tensor for which the predictions are to be made.
             y_lstm (np.array): LSTM predictions used as input for viterbi.
-            intron_hint (tf.Tensor | None): Optional ``(B, T, 3)`` tensor with
-                ``(interior, left_border, right_border)`` channels concatenated
-                onto ``nuc`` for the HMM's intron-hint emitter.
+            hint_channels (tf.Tensor | None): Optional ``(B, T, K)`` tensor of
+                hint channels concatenated onto ``nuc`` for the HMM's hint
+                emitters (intron and / or codon hints, in layer order).
 
         Returns:
             tf.Tensor: The predicted state sequence tensor after applying Viterbi decoding.
@@ -531,8 +603,8 @@ class PredictionGTF:
                 y_lstm = y_lstm[np.newaxis, :, :]
         else:
             nuc = tf.cast(x[:,:,:5], tf.float32)
-        if intron_hint is not None:
-            nuc = tf.concat([nuc, tf.cast(intron_hint, nuc.dtype)], axis=-1)
+        if hint_channels is not None:
+            nuc = tf.concat([nuc, tf.cast(hint_channels, nuc.dtype)], axis=-1)
         y_vit = self.gene_pred_hmm_layer(y_lstm, nuc)
         return y_vit
 
@@ -547,5 +619,6 @@ class PredictionGTF:
             initial_intron_len=self.hmm_initial_intron_len,
             initial_ir_len=self.hmm_initial_ir_len,
             intron_hint_emitter=self.intron_hint_emitter,
+            codon_hint_emitter=self.codon_hint_emitter,
         )
         self.gene_pred_hmm_layer.build((self.adapted_batch_size, self.seq_len, inp_size))

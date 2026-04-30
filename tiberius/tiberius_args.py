@@ -63,17 +63,20 @@ def parseCmd():
         help='This sets the maximum number of groups that can be processed by Brick2Marble at a time. Reducing this value will reduce CPU memory usage.')
 
     tiberius_grp.add_argument('--hints', type=str, default='',
-        help='Path to a GFF-like hints file. Currently only intron features '
-             'are honored: each intron region is fed into the HMM as '
-             '(interior, left_border, right_border) channels which up-scale '
-             'the emission probability of the I / EI / IE states inside the '
-             'region (see --hint_weight). Coordinates are 1-based inclusive '
-             'and strand-specific. Start / stop hints are ignored.')
+        help='Path to a GFF-like hints file. Intron features are fed to '
+             'the HMM as (interior, left_border, right_border) channels '
+             'that boost the I / EI / IE states inside the region. Start '
+             'and stop codon features are fed as 6 channels '
+             '(start_p1..p3, stop_p1..p3) that boost START/E1/E2 and '
+             'E0/E1/STOP at the three nucleotide positions of the codon. '
+             'Coordinates are 1-based inclusive and strand-specific.')
     tiberius_grp.add_argument('--hint_weight', type=float, default=1.0,
-        help='Factor by which the HMM intron-hint emitter up-scales the '
-             'emission probability of intron / splice-site states inside '
-             'hint regions. 1.0 disables the emitter; values >1 push the '
-             'HMM toward annotating the hinted region as an intron.')
+        help='Factor by which the HMM hint emitters up-scale the emission '
+             'probability of intron / splice-site / start / stop states '
+             'inside hint regions. 1.0 disables both emitters. Values >1 '
+             'pull the HMM toward annotating the hinted regions; the per-'
+             'position boost saturates at 3x (introns), 6x (start/stop '
+             'codon edges) and 3x (E1) as the weight grows.')
 
     tiberius_grp.add_argument('--no_softmasking', action='store_true',
         help='Disable softmasking.')

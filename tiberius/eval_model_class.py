@@ -265,7 +265,7 @@ class PredictionGTF:
                 self.hints,
                 max_locus_gap=20000,
                 max_chains_per_locus=1,
-                require_anchored=True,
+                require_anchored=False,
             )
 
             lstm_out_fwd = apply_hints(

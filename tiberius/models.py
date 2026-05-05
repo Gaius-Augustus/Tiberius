@@ -9,7 +9,7 @@ from tensorflow import keras
 from tensorflow.keras import backend as K
 from tiberius.hmm import HMMBlock
 from hidten import HMMMode
-
+from hidten.tf.util import T_TFTensor, safe_log
 
 class Cast(tf.keras.layers.Layer):
     def call(self, x):
@@ -124,6 +124,81 @@ def custom_cce_f1_loss(f1_factor, batch_size,
         combined_loss = cce_loss + f1_factor * (f1_loss + fpr)
         return combined_loss
     return loss_
+
+
+def joint_log_prob_windowed(
+    hmmblock: HMMBlock,
+    *observations: T_TFTensor, # can pass multiple observations of shape (B, T, H, D), internally will be a tuple of tensors
+    states: T_TFTensor,
+    c: int = 0,
+    d: int = None
+) -> T_TFTensor:
+        
+    if d is None:
+        d = tf.shape(observations[0])[1] - 1 # can't be put in the definition because observations doesn't exist yet # [0]: first tensor in the tuple of tensors, [1]: time dimension
+
+    # -----------------------------------------------------
+    # compute emissions and gather the states
+    em_probs = hmmblock.hmm.emission_scores(*[o[:,c+1:d+1,:] for o in observations]) # * because emission_scores takes multiple arguments, not a list, # for each observation in the tuple of tensors
+    B, T, H, Q = tf.unstack(tf.shape(em_probs)) # T = d-c, here: T = 4-2 = 2
+    em_probs = tf.gather(em_probs, states[:,c+1:d+1,:], batch_dims=3) # get actual emission probabilities for the states in the window, states[:,c+1:d+1,:] because we only want the states in the window, batch_dims=3 because we want to gather along the last dimension (Q) and we have 3 dimensions before that (B, T, H)
+    log_em_probs = safe_log(em_probs)
+    log_em_probs = tf.reduce_sum(log_em_probs, axis=-2)
+
+    # -----------------------------------------------------
+
+    # compute the transitions
+    state_transitions = hmmblock.hmm.transitioner.matrix()
+        
+    # gather state pairs
+
+    state_pairs = tf.concat(
+        [states[:, c:d, :, tf.newaxis], states[:, c+1:d+1, :, tf.newaxis]],
+        axis=-1
+    ) # (B, T, H, 2) # here T = 2 (2 transitions in the window)
+
+    state_transitions = tf.broadcast_to(
+        state_transitions, [B, T, H, Q, Q]
+    )
+
+    state_transitions = tf.gather_nd(
+        state_transitions,
+        state_pairs,
+        batch_dims=3
+    )
+    log_state_transitions = safe_log(state_transitions) # (B, T, H)
+    log_state_transitions = tf.reduce_sum(log_state_transitions, axis=-2) # (B, H)
+
+    # -----------------------------------------------------
+
+    # compute the forward and backward probabilities
+    alpha_c = hmmblock.hmm.forward_log(*observations)[:,c,:,:] # (B, H, Q)
+    beta_d = hmmblock.hmm.backward_log(*observations)[:,d,:,:] # (B, H, Q)
+
+    # gather alpha and beta for the states in the window
+    alpha_c = tf.gather(alpha_c, states[:, c, :], batch_dims=2) # (B, H)
+    beta_d = tf.gather(beta_d, states[:, d, :], batch_dims=2) # (B, H)
+
+    # # compute the joint log-probability
+    return log_state_transitions + log_em_probs + alpha_c + beta_d
+    
+def window_loss(
+    hmmblock: HMMBlock, 
+    *observations: T_TFTensor,
+    states: T_TFTensor,
+    c: int = 0,
+    d: int = None
+) -> T_TFTensor: 
+        
+    # log(P(x_{c:d},y)) joint log probability windowed  
+    joint_log_prob_cd = joint_log_prob_windowed(hmmblock, *observations, states=states, c = c, d = d) # (B, H)
+
+    # log likelihood log(P(y)) 
+    log_p_y = hmmblock.hmm.likelihood_log(*observations)
+    log_p_y = tf.squeeze(log_p_y, axis = -1) # remove last dimension, shape becomes (B,H) instead of (B,H,1)
+
+    return log_p_y - joint_log_prob_cd
+
 
 def lstm_model(units=372, filter_size=128,
               kernel_size=9, numb_conv=3,

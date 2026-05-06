@@ -30,14 +30,14 @@ process HC_SUPPORTED {
     --miniprot_gff      ${miniprot_gff} \
     --transdecoder_util ${params.tools.transdecoder_util_orf2genome} \
     --bedtools_path     ${params.tools.bedtools} \
-    --outdir            hc 
+    --outdir            hc
   """
 }
 
 process HC_FORMAT_FILTER {
   publishDir "${params.outdir}", pattern: "training.gff", mode: 'copy'
   label 'container'
-  input: 
+  input:
     path traingff,  stageAs: 'training_original.gff'
     path genome
 

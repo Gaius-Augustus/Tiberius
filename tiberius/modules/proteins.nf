@@ -5,7 +5,7 @@ process MINIPROT_ALIGN {
 
   input: path genome; path proteins
 
-  output: 
+  output:
     path "miniprot/miniprot.aln", emit: aln
 
   script: """
@@ -39,7 +39,7 @@ process MINIPROTHINT_CONVERT {
 
   input: path gff
 
-  output: 
+  output:
     path "miniprot/miniprot.gtf", emit: gtf
     path "miniprot/miniprot_trainingGenes.gff", emit: traingff
 
@@ -53,7 +53,7 @@ process ALN2HINTS {
   input: path gtf
   label 'container'
   output: path "hints_protein.gff", emit: hints
-  
+
   script: """
   aln2hints.pl --in=${gtf} --out=prot_hintsfile.aln2hints.temp.gff --prg=miniprot --priority=4
   cp prot_hintsfile.aln2hints.temp.gff hints_protein.gff
@@ -63,8 +63,8 @@ process ALN2HINTS {
 process PREPROCESS_PROTEINDB {
   label 'container', 'bigmem'
 
-  input: 
-    path proteinDB 
+  input:
+    path proteinDB
     path tiberius_prot
 
   output: path "protein_preprocessed.fa"
@@ -93,8 +93,8 @@ process PREPROCESS_PROTEINDB {
           --evalue 1e-5 \
           --max-target-seqs 200 \
           --very-sensitive \
-          --threads ${params.threads} 
-        
+          --threads ${params.threads}
+
         rank_species_from_diamond.py diamond_hits.tsv 13 > species_rank.tsv
 
         awk '

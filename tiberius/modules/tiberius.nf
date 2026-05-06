@@ -40,7 +40,7 @@ process SPLIT_GENOME {
 
 process MERGE_TIBERIUS {
     label 'container'
-    publishDir {"${params.outdir}/"}, mode:'copy'
+    publishDir "${params.outdir}/", mode:'copy'
 
     input:
       path gff_files, stageAs: "?/*"
@@ -57,10 +57,10 @@ process MERGE_TIBERIUS {
 
 process MERGE_TIBERIUS_TRAIN {
     label 'container'
-    publishDir {"${params.outdir}/"}, mode:'copy'
+    publishDir "${params.outdir}/", mode:'copy'
 
     input:
-      path tiberius 
+      path tiberius
       path traingenes
 
     output:
@@ -75,10 +75,10 @@ process MERGE_TIBERIUS_TRAIN {
 
 process MERGE_TIBERIUS_TRAIN_PRIO {
     label 'container'
-    publishDir {"${params.outdir}/"}, mode:'copy'
+    publishDir "${params.outdir}/", mode:'copy'
 
     input:
-      path tiberius 
+      path tiberius
       path traingenes
 
     output:
@@ -91,14 +91,14 @@ process MERGE_TIBERIUS_TRAIN_PRIO {
     """
 }
 process PROTEIN_FROM_GFF {
-  publishDir {"${params.outdir}/"}, mode:'copy'
-  
+  publishDir "${params.outdir}/", mode:'copy'
+
   label 'container'
 
   input:
-      path tiberius 
+      path tiberius
       path genome
-    
+
   output:
       path "tiberius_proteins.fa"
 

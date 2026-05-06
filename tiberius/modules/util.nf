@@ -4,7 +4,7 @@ process CONCAT_PROTEINS {
   tag "concat_proteins"
 
   input:
-  path proteins, stageAs:  "?/*" 
+  path proteins, stageAs:  "?/*"
 
   output:
   path "proteins_concat.faa"
@@ -38,7 +38,7 @@ process DOWNLOAD_ODB12_PARTITIONS {
 
 
 process CONCAT_HINTS {
-  publishDir "${params.outdir}", mode: 'copy'   
+  publishDir "${params.outdir}", mode: 'copy'
 
   input:
     path(prot)
@@ -59,7 +59,7 @@ process EMPTY_FILE {
     path 'empty.txt'
 
   label 'local_only'
-  
+
   script:
   """
     touch empty.txt
@@ -77,7 +77,7 @@ process CALC_ALIGNMENT_RATE {
 
     """
     pct=\$(samtools flagstat ${aln_file} \\
-        | awk '/ mapped \\(/ { 
+        | awk '/ mapped \\(/ {
               # take 5th field, e.g. (99.79%
               val=\$5
               # remove everything that is not a digit or a dot

@@ -65,6 +65,7 @@ Example:  `mammalia_nosoftmasking_v2.yaml`
 | `clamsa`                           | *boolean*          | `true` if the model was pre‑trained with the CLAMSA track, `false` otherwise.                                                                                                                       |
 | `tiberius_version`                 | *semver string*    | Tiberius version at training time that can load the weights (e.g. `1.1.5`). |
 | `date`                             | *string*           | Date the weights were finalised **in ISO‑8601 format `YYYY-MM-DD`**.                                                                                                                               |
+| `default_seq_len`                  | *integer*          | Default input chunk length (in nucleotides) used at inference if `--seq_len` is not given on the command line (e.g. `400_050`). |
 | `comment`                          | *multiline string* | Free text for provenance & citation. Begin the first line with author.                                                  |
 | `training_species`                 | *YAML sequence*    | Ordered list of Latin binomials (one per line) included in the training set.                                                                                         |
 
@@ -81,6 +82,7 @@ softmasking: true
 clamsa: false
 tiberius_version: 1.1.5
 date: "2025-05-12"
+default_seq_len: 400_050
 comment: |
   # Lars Gabriel, 2025‑05‑12
   Training weights from the original Tiberius paper:

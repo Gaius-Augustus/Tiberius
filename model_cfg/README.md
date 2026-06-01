@@ -9,18 +9,15 @@ Each file is read at runtime by Tiberius and therefore must follow the schema be
 
 | Model name | Target species | Softmasking required | ClaMSA input required|
 | ----------------|------------------|-------------------|------------------|
+| angiosperms | Mesangiospermae | :x: |  :x:|
 | chlorophyta | Chlorophyta | :x: |  :x:|
-| diatoms | Diatoms | :white_check_mark: |  :x:|
-| diatoms_unmasked | Diatoms | :x: |  :x:|
-| eudicotyledons | Eudicotyledons | :white_check_mark: |  :x:|
+| diatoms | Bacillariophyta | :x: |  :x:|
 | fungi | Fungi |  :x:|  :x:|
-| insecta | Insecta | :white_check_mark: |  :x:|
-| insecta_unmasked_v2 | Insecta | :x: |  :x:|
-| monocotyledonae | Monocotyledonae | :white_check_mark: |  :x:|
+| insecta | Insecta | :x: |  :x:|
 | mammalia_softmasking_v2 | Mammalia | :white_check_mark: |  :x:|
 | mammalia_nosofttmasking_v2 | Mammalia | :x: |  :x:|
 | mammalia_clamsa_v2 | Mammalia | :white_check_mark: |  :white_check_mark:|
-| vertebrates | Vertebrates | :x: |  :x:|
+| vertebrates | Vertebrata | :x: |  :x:|
 
 
 ## 2  Superseded parameter sets
@@ -29,10 +26,15 @@ The `superseded/` subdirectory contains older parameter YAML files that have bee
 
 | Model name | Target species | Superseded by |
 | ----------------|------------------|------------------|
+| angiosperms_softmasking | Mesangiospermae | angiosperms |
 | basidiomycota | Basidiomycota | fungi |
+| diatoms_softmasking | Bacillariophyta | diatoms |
+| eudicotyledons | Eudicotyledons | angiosperms |
 | fungi_incertae_sedis | Fungi incertae sedis | fungi |
-| insecta_unmasked | Insecta | insecta_unmasked_v2 |
+| insecta_softmasking | Insecta | insecta |
+| insecta_unmasked | Insecta | insecta |
 | lepidoptera | Lepidoptera | insecta |
+| monocotyledonae | Monocotyledonae | angiosperms |
 | mucoromycota | Mucoromycota | fungi |
 | saccharomycota | Saccharomycota | fungi |
 | sordariomycota | Sordariomycota | fungi |

@@ -6,7 +6,7 @@
 
 # Tiberius: End-to-End Deep Learning with an HMM for Gene Prediction
 
-For more information, see the [Tiberius paper](https://academic.oup.com/bioinformatics/article/40/12/btae685/7903281).
+For more information, see the Tiberius clade training [preprint](https://doi.org/10.64898/2026.04.24.720536) or the original Tiberius [paper](https://academic.oup.com/bioinformatics/article/40/12/btae685/7903281).
 
 
 Tiberius is a deep learning-based *ab initio* gene structure prediction tool that end-to-end integrates convolutional
@@ -298,31 +298,54 @@ If Tiberius predicts an unexpectedly low number of genes on a genome with a high
 
 ## How to Cite
 
-If you use Tiberius in your research, please cite:
+If you use Tiberius, please cite the relevant publication(s).
 
-> Lars Gabriel, Felix Becker, Katharina J Hoff, Mario Stanke, Tiberius: end-to-end deep learning with an HMM for gene prediction, *Bioinformatics*, Volume 40, Issue 12, December 2024, btae685, [https://doi.org/10.1093/bioinformatics/btae685](https://doi.org/10.1093/bioinformatics/btae685)
+### Non mammalian Tiberius models
+
+> Lars Gabriel, Tomáš Brůna, Asees Kaur, Anish Krishnan, Felix Ortmann, Asaf Salamov, Samuel Talbot, Felix Becker, Richard Krieg, Christopher W. Wheat, Igor V. Grigoriev, Mario Stanke, Katharina J. Hoff. "Accurate ab initio gene prediction in eukaryotes with Tiberius in multiple clades". *bioRxiv*. 2026. https://doi.org/10.64898/2026.04.24.720536
+
+<details>
+<summary>BibTeX</summary>
+
+```bibtex
+@article{gabriel2026accurate,
+  author    = {Gabriel, Lars and Br{\r{u}}na, Tom{\'a}{\v{s}} and Kaur, Asees and Krishnan, Anish and Ortmann, Felix and Salamov, Asaf and Talbot, Samuel and Becker, Felix and Krieg, Richard and Wheat, Christopher W. and Grigoriev, Igor V. and Stanke, Mario and Hoff, Katharina J.},
+  title     = {Accurate ab initio gene prediction in eukaryotes with {Tiberius} in multiple clades},
+  journal   = {bioRxiv},
+  year      = {2026},
+  doi       = {10.64898/2026.04.24.720536},
+  publisher = {Cold Spring Harbor Laboratory}
+}
+```
+
+</details>
+
+### Original Tiberius method
+
+> Lars Gabriel, Felix Becker, Katharina J. Hoff, Mario Stanke. "Tiberius: end-to-end deep learning with an HMM for gene prediction". *Bioinformatics*. Volume 40, Issue 12, December 2024, btae685. https://doi.org/10.1093/bioinformatics/btae685
 
 <details>
 <summary>BibTeX</summary>
 
 ```bibtex
 @article{gabriel2024tiberius,
-    author  = {Gabriel, Lars and Becker, Felix and Hoff, Katharina J and Stanke, Mario},
-    title   = {Tiberius: end-to-end deep learning with an {HMM} for gene prediction},
-    journal = {Bioinformatics},
-    volume  = {40},
-    number  = {12},
-    pages   = {btae685},
-    year    = {2024},
-    month   = {12},
-    doi     = {10.1093/bioinformatics/btae685},
+  author  = {Gabriel, Lars and Becker, Felix and Hoff, Katharina J. and Stanke, Mario},
+  title   = {{Tiberius}: end-to-end deep learning with an {HMM} for gene prediction},
+  journal = {Bioinformatics},
+  volume  = {40},
+  number  = {12},
+  pages   = {btae685},
+  year    = {2024},
+  month   = dec,
+  doi     = {10.1093/bioinformatics/btae685}
 }
 ```
 
 </details>
 
-## References
 
+## References
+  - Gabriel, Lars, et al. "Accurate ab initio gene prediction in eukaryotes with Tiberius in multiple clades." 2026, [bioRxiv](https://www.biorxiv.org/content/10.64898/2026.04.24.720536v1.article-metrics)
   - Gabriel, Lars, et al. "Tiberius: End-to-End Deep Learning with an HMM for Gene Prediction." 2024, [*Bioinformatics*](https://academic.oup.com/bioinformatics/article/40/12/btae685/7903281), [bioRxiv](https://www.biorxiv.org/content/early/2024/07/23/2024.07.21.604459)
   - [Popular science podcast on this paper generated with NotebookLM](https://bioinf.uni-greifswald.de/bioinf/tiberius/pod/Tiberius.wav)
   - Processed RefSeq annotations used for training, validation and evaluation as described in the paper.

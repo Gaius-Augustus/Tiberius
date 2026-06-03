@@ -81,6 +81,13 @@ def _read_diamond(tsv_path: Path) -> pd.DataFrame:
     # Ensure numeric columns are numeric
     numeric_cols = [c for c in HEADER_LIST if c not in ("cdsID", "proteinID")]
     df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors="coerce")
+    # DIAMOND escapes embedded whitespace inside subject ids as literal
+    # '\t' / '\n' / '\\'. Strip everything from the first such escape (or
+    # real whitespace) so proteinID matches Biopython's record.id, which
+    # splits FASTA headers at the first whitespace.
+    df["proteinID"] = df["proteinID"].astype(str).str.split(
+        r"\\[tn\\]|\s", n=1, regex=True
+    ).str[0]
     return df
 
 

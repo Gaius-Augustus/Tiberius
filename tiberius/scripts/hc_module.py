@@ -64,7 +64,12 @@ def getting_hc_supported_by_proteins(
                 continue
 
             query_id = part[0]
-            protein_id = part[1]
+            # DIAMOND escapes embedded whitespace in subject ids as the
+            # literal characters '\t' / '\n' / '\\'; collapse to the
+            # accession (the part before the first such escape or real
+            # whitespace) so it matches Biopython's record.id from the
+            # FASTA, which splits at the first whitespace.
+            protein_id = re.split(r"\\[tn\\]|\s", part[1], maxsplit=1)[0]
             aaident = float(part[2])
             align_length = int(part[3])
             q_start = int(part[6])

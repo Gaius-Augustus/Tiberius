@@ -77,7 +77,12 @@ process PREPROCESS_PROTEINDB {
 
     if [[ "\$N_PROT" -le 1000000 ]]; then
         echo "[PREPROCESS_PROTEINDB] <= 1,000,000 proteins – using full DB." >&2
-        ln -s "${proteinDB}" protein_preprocessed.fa
+        # Sanitize headers: keep only the first whitespace-delimited token after '>'.
+        # An embedded tab (e.g. OrthoDB-style headers) survives into DIAMOND's
+        # sseqid as the literal two characters '\\t', breaking downstream
+        # id matching in hc_module.getting_hc_supported_by_proteins.
+        awk '/^>/ { split(substr(\$0,2), a, /[ \\t]/); print ">" a[1]; next } { print }' \
+            "${proteinDB}" > protein_preprocessed.fa
     else
         echo "[PREPROCESS_PROTEINDB] > 1,000,000 proteins – running DIAMOND soft filter." >&2
 
@@ -111,6 +116,7 @@ process PREPROCESS_PROTEINDB {
           sub(/_.*/, "", species)   # species = 101020
           keep = (species in wanted)
         }
+        keep && /^>/ { print ">" id; next }
         keep { print }
       ' ${proteinDB} > protein_preprocessed.fa
     fi

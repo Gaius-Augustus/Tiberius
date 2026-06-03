@@ -4,7 +4,7 @@ weights_url: "https://bioinf.uni-greifswald.de/bioinf/tiberius/models/angiosperm
 softmasking: True
 clamsa: False
 tiberius_version: 1.1.6
-date: "2025-04-15"
+date: "2026-04-15"
 default_seq_len: 200_070
 comment: "Angiosperm training weights trained by Tomas Bruna (JGI)."
 training_species: [

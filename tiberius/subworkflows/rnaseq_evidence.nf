@@ -71,15 +71,10 @@ workflow RNASEQ_EVIDENCE {
                     tuple(id, [r1, r2])
                 }
         }
-        else if (DO_PE_LOCAL) {
-            error "Invalid rnaseq_paired format. Expected glob string, list of pairs, or exactly two files."
-        }
-
         /*
-        * Case 3: user accidentally gives a flat list of two files
+        * Case 3: flat list of exactly two files → treat as ONE library
         *   - r1
         *   - r2
-        * → treat as ONE library (fail-safe)
         */
         else if(
             pe instanceof List &&
@@ -96,8 +91,19 @@ workflow RNASEQ_EVIDENCE {
             CH_PAIRED_LOCAL =
                 Channel.of( tuple(id, [r1, r2]) )
         }
+        else if (DO_PE_LOCAL) {
+            error """Invalid rnaseq_paired format.
+Expected one of:
+  (a) a single glob string, e.g.
+        rnaseq_paired: "/abs/path/RNA/*_{1,2}.fastq.gz"
+  (b) a YAML list of [r1, r2] pairs, e.g.
+        rnaseq_paired:
+          - ["/abs/path/sample1_1.fastq.gz", "/abs/path/sample1_2.fastq.gz"]
+          - ["/abs/path/sample2_1.fastq.gz", "/abs/path/sample2_2.fastq.gz"]
+  (c) a flat list of exactly two FASTQ files (one library).
+Got: ${pe?.getClass()?.simpleName} -> ${pe}"""
+        }
 
-        // CH_PAIRED_LOCAL = DO_PE_LOCAL ? Channel.fromFilePairs(params_map.rnaseq_paired, flat:true, checkIfExists:true) : Channel.empty()
         if( params_map.rnaseq_sra_paired ) {
             CH_RNASEQ_SRA_IDS_PAIRED = Channel.from(params_map.rnaseq_sra_paired)
             CH_RNASEQ_PAIRED_SRA = DOWNLOAD_SRA_PAIRED(CH_RNASEQ_SRA_IDS_PAIRED)

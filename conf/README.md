@@ -45,10 +45,45 @@ odb12Partitions: [
 
 ### RNA-Seq/Iso-Seq (Local)
 Tiberius accepts local long and short read data, add the absolut paths to your files to :
-`rnaseq_single`, `rnaseq_paired`, `isoseq`. 
+`rnaseq_single`, `rnaseq_paired`, `isoseq`.
 
-You can also use a pattern instead of listing all files, for example for paired reads:
-`rnaseq_paired: "/path/to/rnaseq/*_{1,2}.fastq.gz"`
+Use absolute paths. Nextflow does **not** expand `~`, and relative paths are
+resolved against the directory where Nextflow is launched, not the directory
+of `params.yaml`.
+
+#### `rnaseq_paired`
+Three forms are accepted:
+
+1. **Single glob string** (most concise — matches one or many libraries):
+   ```yaml
+   rnaseq_paired: "/abs/path/to/rnaseq/*_{1,2}.fastq.gz"
+   ```
+   A list of glob strings is **not** supported; use one glob that covers
+   all libraries, or switch to the explicit list form below.
+
+2. **List of explicit `[r1, r2]` pairs** (one entry per library):
+   ```yaml
+   rnaseq_paired:
+     - ["/abs/path/RNA/SRR37921248_1.fastq", "/abs/path/RNA/SRR37921248_2.fastq"]
+     - ["/abs/path/RNA/SRR37921249_1.fastq", "/abs/path/RNA/SRR37921249_2.fastq"]
+     - ["/abs/path/RNA/SRR37921250_1.fastq", "/abs/path/RNA/SRR37921250_2.fastq"]
+     - ["/abs/path/RNA/SRR37921251_1.fastq", "/abs/path/RNA/SRR37921251_2.fastq"]
+   ```
+
+3. **Flat list of exactly two FASTQ files** (treated as a single library):
+   ```yaml
+   rnaseq_paired:
+     - /abs/path/sample_R1.fastq.gz
+     - /abs/path/sample_R2.fastq.gz
+   ```
+
+#### `rnaseq_single` and `isoseq`
+Either a glob string or a YAML list of FASTQ files:
+```yaml
+rnaseq_single:
+  - /abs/path/sample_a.fastq.gz
+  - /abs/path/sample_b.fastq.gz
+```
 
 
 ### RNA-Seq/Iso-Seq (SRA-download)

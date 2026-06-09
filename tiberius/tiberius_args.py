@@ -113,7 +113,11 @@ def parseCmd():
     nf_params_grp.add_argument('--rnaseq_single', nargs='*', default=[],
         help='RNA-Seq single-end FASTQ input(s).')
     nf_params_grp.add_argument('--rnaseq_paired', nargs='*', default=[],
-        help='RNA-Seq paired-end FASTQ input(s).')
+        help=('Paired-end RNA-Seq FASTQ input(s). From the CLI pass either a '
+              'single quoted glob (e.g. --rnaseq_paired "RNA/*_{1,2}.fastq.gz") '
+              'or exactly two FASTQ paths for one library '
+              '(--rnaseq_paired r1.fq r2.fq). To list multiple explicit pairs '
+              'use a params.yaml with a list of [r1, r2] pairs.'))
     nf_params_grp.add_argument('--rnaseq_sra_single', nargs='*', default=[],
         help='RNA-Seq single-end SRA accession(s).')
     nf_params_grp.add_argument('--rnaseq_sra_paired', nargs='*', default=[],

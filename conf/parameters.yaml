@@ -24,13 +24,24 @@ rnaseq_single: [
   # /path/to/sample2.fastq.gz,
 ]
 
-# Paired-end RNA-Seq reads (glob, string, or explicit list)
-rnaseq_paired: "/path/to/rnaseq/*_{1,2}.fastq.gz"
-# OR:
-# rnaseq_paired: [
-#   [/path/to/sample_R1.fastq.gz, /path/to/sample_R2.fastq.gz]
+# Paired-end RNA-Seq reads. Use ONE of the three accepted forms:
 #
-# ]
+# (a) Single glob string. Matches one or many libraries via fromFilePairs.
+#     A LIST of globs is NOT supported - use one glob that covers all files.
+rnaseq_paired: "/path/to/rnaseq/*_{1,2}.fastq.gz"
+#
+# (b) Explicit list of [r1, r2] pairs (one entry per library):
+# rnaseq_paired:
+#   - ["/abs/path/sample1_R1.fastq.gz", "/abs/path/sample1_R2.fastq.gz"]
+#   - ["/abs/path/sample2_R1.fastq.gz", "/abs/path/sample2_R2.fastq.gz"]
+#
+# (c) Flat list of exactly two FASTQ files (a single library):
+# rnaseq_paired:
+#   - /abs/path/sample_R1.fastq.gz
+#   - /abs/path/sample_R2.fastq.gz
+#
+# Note: '~' is not expanded; use absolute paths or paths relative to the
+# directory where Nextflow is launched (not to this YAML file).
 
 # ------------------------------------------------------------
 # Iso-Seq long reads (FASTQ)

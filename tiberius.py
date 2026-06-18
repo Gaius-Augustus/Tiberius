@@ -135,7 +135,12 @@ def collect_cli_params(args) -> dict:
     maybe_set("genome", args.genome)
     maybe_set("proteins", args.proteins if args.proteins else None)
     maybe_set("rnaseq_single", args.rnaseq_single if args.rnaseq_single else None)
-    maybe_set("rnaseq_paired", args.rnaseq_paired if args.rnaseq_paired else None)
+    # A 1-element CLI list is a glob string; the pipeline's paired-end channel
+    # expects a CharSequence in glob mode, not a list.
+    rnaseq_paired_val = args.rnaseq_paired or None
+    if isinstance(rnaseq_paired_val, list) and len(rnaseq_paired_val) == 1:
+        rnaseq_paired_val = rnaseq_paired_val[0]
+    maybe_set("rnaseq_paired", rnaseq_paired_val)
     maybe_set("rnaseq_sra_single", args.rnaseq_sra_single if args.rnaseq_sra_single else None)
     maybe_set("rnaseq_sra_paired", args.rnaseq_sra_paired if args.rnaseq_sra_paired else None)
     maybe_set("isoseq", args.isoseq if args.isoseq else None)

@@ -57,13 +57,14 @@ GENERAL_COMMANDS = {
     "java": "Java runtime (version 11 or newer)",
     "singularity": "Singularity/Apptainer runtime",
     "python3": "System Python 3 interpreter",
-    "perl": "Perl interpreter (needed for aln2hints.pl)",
-    "fasterq-dump": "SRA Toolkit fasterq-dump utility",
 }
 
+# Checked only with --check_tools (i.e. when not relying on the container).
 OPTIONAL_COMMANDS = {
     "prefetch": "SRA Toolkit prefetch utility (optional but recommended for SRA downloads)",
 }
+
+SRA_INPUT_KEYS = ("rnaseq_sra_single", "rnaseq_sra_paired", "isoseq_sra")
 
 
 def _default_repo_root() -> Path:
@@ -281,6 +282,10 @@ def validate_executables(
     if check_tool_binaries:
         for cmd, desc in OPTIONAL_COMMANDS.items():
             check_command(cmd, desc, mandatory=False)
+        if any(params.get(k) for k in SRA_INPUT_KEYS):
+            check_command("fasterq-dump", "SRA Toolkit fasterq-dump utility")
+        if params.get("proteins"):
+            check_command("perl", "Perl interpreter (needed for aln2hints.pl)")
         tools = build_tool_command_map(params)
         for key, cmd in tools.items():
             label = TOOL_DESCRIPTIONS.get(key, f"Tool '{key}'")

@@ -179,9 +179,14 @@ def ensure_params_yaml(args):
     if not params.get("genome"):
         console.print("[bold red]A genome file must be specified (via --genome or params).[/bold red]")
         sys.exit(1)
-    if params.get("tiberius", {}).get("run") and not params.get("tiberius", {}).get("model_cfg"):
-        console.print("[bold red]A model config file must be specified (params.tiberius.model_cfg or --model_cfg).[/bold red]")
-        sys.exit(1)
+    tiberius_cfg = params.get("tiberius") or {}
+    if tiberius_cfg.get("run"):
+        if not tiberius_cfg.get("model_cfg"):
+            console.print("[bold red]A model config file must be specified (params.tiberius.model_cfg or --model_cfg).[/bold red]")
+            sys.exit(1)
+        # Resolve bare names (e.g. 'angiosperms') so the Nextflow process can stage the file.
+        tiberius_cfg["model_cfg"] = str(resolve_model_cfg(tiberius_cfg["model_cfg"]))
+        params["tiberius"] = tiberius_cfg
 
     outdir = params.get("outdir") or DEFAULT_PARAMS["outdir"]
     outdir_path = Path(outdir)

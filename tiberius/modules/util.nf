@@ -55,10 +55,10 @@ process CONCAT_HINTS {
 }
 
 process EMPTY_FILE {
+  label 'local_only'
+
   output:
     path 'empty.txt'
-
-  label 'local_only'
 
   script:
   """

@@ -103,7 +103,4 @@ workflow {
 
       OUT_CH = all_hints.hints
     }
-
-  emit:
-    OUT_CH
 }

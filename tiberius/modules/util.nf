@@ -75,6 +75,7 @@ process CALC_ALIGNMENT_RATE {
     output:
     tuple path(aln_file), path("alignment_rate.txt")
 
+    script:
     """
     pct=\$(samtools flagstat ${aln_file} \\
         | awk '/ mapped \\(/ {

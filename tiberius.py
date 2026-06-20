@@ -72,6 +72,20 @@ def has_nvidia_container_cli() -> bool:
     return True
 
 
+def singularity_supports_nvccli() -> bool:
+    # --nvccli requires Singularity >= 3.9 / Apptainer >= 1.0 built with nvccli support.
+    try:
+        result = subprocess.run(
+            ["singularity", "run", "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    return "--nvccli" in (result.stdout + result.stderr)
+
+
 def load_params_yaml(params_path: str) -> tuple[Path, dict]:
     """Load a params YAML file and return (path, data)."""
     params_file = Path(params_path).expanduser().resolve()
@@ -343,7 +357,7 @@ def run_tiberius_in_singularity(args):
             "Pass --cleanup_old_singularity_images to remove them.[/yellow]"
         )
     cmd = ["singularity", "run"]
-    if has_nvidia_container_cli():
+    if has_nvidia_container_cli() and singularity_supports_nvccli():
         cmd += ["--nvccli"]
     cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
     cmd += [

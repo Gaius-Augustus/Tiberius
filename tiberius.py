@@ -363,10 +363,13 @@ def run_tiberius_in_singularity(args):
     cmd = ["singularity", "run"]
     if has_nvidia_container_cli() and singularity_supports_nvccli():
         cmd += ["--nvccli"]
-    cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+    cmd += ["--nv"]
+    # Only forward CUDA_VISIBLE_DEVICES when explicitly set; passing an empty
+    # value hides all GPUs from the container (issue #105).
+    cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if cuda_visible:
+        cmd += ["--env", f"CUDA_VISIBLE_DEVICES={cuda_visible}"]
     cmd += [
-        "--nv",
-        "--env", f"CUDA_VISIBLE_DEVICES={cuda_visible}",
         "--cleanenv",
         str(image_path), "/usr/bin/python3",
         "/opt/Tiberius/tiberius.py"

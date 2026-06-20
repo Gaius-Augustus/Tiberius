@@ -1,8 +1,10 @@
 nextflow.enable.dsl=2
 
-include { 
-    CONCAT_PROTEINS as CONCAT_PROTEINS_1 
+include {
+    CONCAT_PROTEINS as CONCAT_PROTEINS_1
     CONCAT_PROTEINS as CONCAT_PROTEINS_2
+    DECOMPRESS_FASTA as DECOMPRESS_GENOME
+    DECOMPRESS_FASTA as DECOMPRESS_SINGLE_PROTEIN
     DOWNLOAD_ODB12_PARTITIONS} from '../modules/util.nf'
 
 
@@ -16,7 +18,9 @@ workflow INPUTS {
     if( !params_map.genome ) error "params.genome is required"
     def genomeFile = file(params_map.genome)
     if( !genomeFile.exists() ) error "Genome file not found: ${genomeFile}"
-    CH_GENOME = nextflow.Channel.value(genomeFile)
+    CH_GENOME = genomeFile.name.toLowerCase().endsWith('.gz') \
+        ? DECOMPRESS_GENOME(nextflow.Channel.value(genomeFile)) \
+        : nextflow.Channel.value(genomeFile)
 
     // ---- proteins ----
     CH_PROTEINS = nextflow.Channel.empty()
@@ -29,7 +33,10 @@ workflow INPUTS {
         proteinsFiles = proteinsList.collect { file(it) }
         proteinsFiles.each { if( !it.exists() ) error "Proteins file not found: ${it}" }
         if( proteinsFiles.size() == 1 ) {
-            localProteinsCh = nextflow.Channel.value(proteinsFiles[0])
+            def singleProt = proteinsFiles[0]
+            localProteinsCh = singleProt.name.toLowerCase().endsWith('.gz') \
+                ? DECOMPRESS_SINGLE_PROTEIN(nextflow.Channel.value(singleProt)) \
+                : nextflow.Channel.value(singleProt)
         } else if( proteinsFiles.size() > 1 ) {
             localProteinsCh = CONCAT_PROTEINS_1(nextflow.Channel.value(proteinsFiles))
         }

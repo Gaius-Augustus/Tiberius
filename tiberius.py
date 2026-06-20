@@ -168,6 +168,10 @@ def collect_cli_params(args) -> dict:
         tib["model_cfg"] = args.model_cfg
     if args.tiberius_result:
         tib["result"] = args.tiberius_result
+    if args.batch_size:
+        tib["batch_size"] = args.batch_size
+    if args.seq_len:
+        tib["seq_len"] = args.seq_len
     if tib:
         tib["run"] = True
         overrides["tiberius"] = tib

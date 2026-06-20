@@ -1,5 +1,8 @@
 process RUN_TIBERIUS {
     label 'gpu', 'container', 'bigmem'
+    // Cap concurrent GPU tasks; set params.tiberius.max_parallel to e.g. 1
+    // on single-GPU workstations to avoid GPU OOM from parallel chunks.
+    maxForks { params.tiberius?.max_parallel ? (params.tiberius.max_parallel as Integer) : Integer.MAX_VALUE }
 
     memory '180 GB'
     input:
@@ -10,11 +13,14 @@ process RUN_TIBERIUS {
         path "tiberius.${genome.name}.gtf"
 
     script:
+    def extra = ''
+    if (params.tiberius?.batch_size) extra += " --batch_size ${params.tiberius.batch_size}"
+    if (params.tiberius?.seq_len)    extra += " --seq_len ${params.tiberius.seq_len}"
     """
-    tiberius.py \
-        --genome ${genome} \
-        --model_cfg ${model_cfg}\
-        --out tiberius.${genome.name}.gtf
+    tiberius.py \\
+        --genome ${genome} \\
+        --model_cfg ${model_cfg} \\
+        --out tiberius.${genome.name}.gtf${extra}
     """
 }
 

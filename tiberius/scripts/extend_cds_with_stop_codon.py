@@ -23,6 +23,24 @@ from collections import defaultdict
 
 # ------------ Helpers ------------ #
 
+def merge_intervals(intervals):
+    """Merge overlapping OR adjacent (1-based inclusive) intervals.
+
+    Two intervals are merged when a.end + 1 >= b.start, so a CDS that ends one
+    base before a UTR begins collapses into a single exon.
+    """
+    if not intervals:
+        return []
+    sorted_iv = sorted(intervals)
+    merged = [list(sorted_iv[0])]
+    for s, e in sorted_iv[1:]:
+        if s <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], e)
+        else:
+            merged.append([s, e])
+    return [(s, e) for s, e in merged]
+
+
 def parse_attributes(attr_str: str) -> dict:
     """Parse GFF3 attributes column into a dict."""
     attrs = {}
@@ -343,30 +361,37 @@ def rebuild_gff(genes, transcripts, cds_by_tx, utrs_by_tx, gene_children, out_ha
             # sort by genomic coord
             cds_list_sorted = sorted(cds_list, key=lambda f: (f.start, f.end))
 
-            exon_counter = 1
-            cds_counter = 1
+            # Exons span the union of CDS and UTR intervals: a UTR that abuts a
+            # CDS segment (UTR.start == CDS.end + 1, or vice versa) belongs to
+            # the same exon as the CDS.
+            utr_list = utrs_by_tx.get(tx_id, [])
+            cds_intervals = [(f.start, f.end) for f in cds_list_sorted]
+            utr_intervals = [(f.start, f.end) for f in utr_list]
+            exon_intervals = merge_intervals(cds_intervals + utr_intervals)
 
-            for cds_feat in cds_list_sorted:
-                # exon (still exactly matching CDS)
+            template = cds_list_sorted[0]
+            exon_counter = 1
+            for s, e in exon_intervals:
                 exon_attrs = {
                     "ID": f"{tx_id}.exon{exon_counter}",
                     "Parent": tx_id,
                 }
                 exon = Feature(
-                    seqid=cds_feat.seqid,
-                    source=cds_feat.source,
+                    seqid=template.seqid,
+                    source=template.source,
                     ftype="exon",
-                    start=cds_feat.start,
-                    end=cds_feat.end,
-                    score=cds_feat.score,
-                    strand=cds_feat.strand,
+                    start=s,
+                    end=e,
+                    score=".",
+                    strand=template.strand,
                     phase=".",  # exon has no phase
                     attrs=exon_attrs,
                 )
                 out_handle.write("\t".join(exon.to_gff_row()) + "\n")
                 exon_counter += 1
 
-                # CDS
+            cds_counter = 1
+            for cds_feat in cds_list_sorted:
                 cds_attrs = dict(cds_feat.attrs)  # copy
                 cds_attrs["Parent"] = tx_id
                 cds_attrs.setdefault("ID", f"{tx_id}.cds{cds_counter}")

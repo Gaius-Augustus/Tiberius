@@ -1,6 +1,10 @@
 nextflow.enable.dsl=2
 process HISAT2_BUILD {
   label 'container', 'bigmem'
+  // hisat2-build segfaults with very high thread counts on large genomes;
+  // cap at 32, but honour a lower params.threads if the user set one.
+  cpus { Math.min((params.threads ?: 32) as Integer, 32) }
+
   input:
     path genome
 

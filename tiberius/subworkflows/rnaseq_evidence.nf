@@ -25,13 +25,11 @@ workflow RNASEQ_EVIDENCE {
 
     def DO_BAM = params_map.rnaseq_bam && params_map.rnaseq_bam.size() > 0
 
-    if( !(DO_SE || DO_PE || DO_BAM) ) {
-        emit:
-        hints = empty_file
-        asm_gtf = Channel.empty()
-        asm_gff3 = Channel.empty()
-        return
-    }
+    def hints_out    = empty_file
+    def asm_gtf_out  = Channel.empty()
+    def asm_gff3_out = Channel.empty()
+
+    if( DO_SE || DO_PE || DO_BAM ) {
 
     // Build channels (local + SRA)
     CH_PAIRED_LOCAL = Channel.empty()
@@ -151,8 +149,13 @@ Got: ${pe?.getClass()?.simpleName} -> ${pe}"""
     rnaseq_merged = SAMTOOLS_MERGE_RNA(rnaseq_bams.collect())
     rnaseq_hints  = BAM2HINTS_RNA(rnaseq_merged.bam, CH_GENOME)
 
+    hints_out    = rnaseq_hints.hints
+    asm_gtf_out  = asm.gtf
+    asm_gff3_out = asm.gff3
+    }
+
     emit:
-    hints   = rnaseq_hints.hints
-    asm_gtf = asm.gtf
-    asm_gff3= asm.gff3
+    hints    = hints_out
+    asm_gtf  = asm_gtf_out
+    asm_gff3 = asm_gff3_out
 }

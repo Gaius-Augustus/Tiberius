@@ -50,8 +50,9 @@ process MINIPROTHINT_CONVERT {
 }
 
 process ALN2HINTS {
-  input: path gtf
   label 'container'
+
+  input: path gtf
   output: path "hints_protein.gff", emit: hints
 
   script: """

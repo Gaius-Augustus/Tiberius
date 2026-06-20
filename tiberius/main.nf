@@ -20,9 +20,8 @@ def inferMode(boolean hasPaired, boolean hasSingle, boolean hasIso, boolean hasB
 }
 
 workflow {
-  OUT_CH = null
-
   main:
+    def OUT_CH = null
     def outdir = params.outdir ?: "results"
     file(outdir).mkdirs()
 
@@ -104,7 +103,4 @@ workflow {
 
       OUT_CH = all_hints.hints
     }
-
-  emit:
-    OUT_CH
 }

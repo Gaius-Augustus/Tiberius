@@ -244,7 +244,11 @@ def parse_transcripts_from_file(path: str, source_index: int) -> List[Transcript
             if not tid:
                 continue
 
-            internal_id = f"{source_index}:{tid}"
+            # Include seqid + strand in the key because some annotation tools
+            # (e.g. Tiberius) reuse transcript IDs across chromosomes within a
+            # single file. Without these, exons from unrelated loci would be
+            # merged into one synthetic transcript with a spurious mega-span.
+            internal_id = f"{source_index}:{seqid}:{strand}:{tid}"
             if internal_id not in tx_map:
                 tx_map[internal_id] = Transcript(
                     internal_id=internal_id,

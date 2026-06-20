@@ -5,13 +5,6 @@ include { RUN_TIBERIUS; SPLIT_GENOME; PROTEIN_FROM_GFF; MERGE_TIBERIUS; MERGE_TI
 
 workflow PROTEIN_EVIDENCE {
 
-    // Declare in workflow scope so emit: can access them
-    def proteindb_ch
-    def tiberius_gff_ch = Channel.empty()
-    def scored_ch
-    def prot_gtf_ch
-    def prot_hints_ch
-
     take:
     CH_GENOME
     CH_PROTEINS
@@ -19,6 +12,12 @@ workflow PROTEIN_EVIDENCE {
     params_map
 
     main:
+    def proteindb_ch
+    def tiberius_gff_ch = Channel.empty()
+    def scored_ch
+    def prot_gtf_ch
+    def prot_hints_ch
+
     if( !params_map.proteins && !params_map.odb12Partitions ) {
         error "params.proteins or params.odb12Partitions is required for protein evidence modes"
     }

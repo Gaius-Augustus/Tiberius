@@ -72,6 +72,20 @@ def has_nvidia_container_cli() -> bool:
     return True
 
 
+def singularity_supports_nvccli() -> bool:
+    # --nvccli requires Singularity >= 3.9 / Apptainer >= 1.0 built with nvccli support.
+    try:
+        result = subprocess.run(
+            ["singularity", "run", "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    return "--nvccli" in (result.stdout + result.stderr)
+
+
 def load_params_yaml(params_path: str) -> tuple[Path, dict]:
     """Load a params YAML file and return (path, data)."""
     params_file = Path(params_path).expanduser().resolve()
@@ -135,7 +149,12 @@ def collect_cli_params(args) -> dict:
     maybe_set("genome", args.genome)
     maybe_set("proteins", args.proteins if args.proteins else None)
     maybe_set("rnaseq_single", args.rnaseq_single if args.rnaseq_single else None)
-    maybe_set("rnaseq_paired", args.rnaseq_paired if args.rnaseq_paired else None)
+    # A 1-element CLI list is a glob string; the pipeline's paired-end channel
+    # expects a CharSequence in glob mode, not a list.
+    rnaseq_paired_val = args.rnaseq_paired or None
+    if isinstance(rnaseq_paired_val, list) and len(rnaseq_paired_val) == 1:
+        rnaseq_paired_val = rnaseq_paired_val[0]
+    maybe_set("rnaseq_paired", rnaseq_paired_val)
     maybe_set("rnaseq_sra_single", args.rnaseq_sra_single if args.rnaseq_sra_single else None)
     maybe_set("rnaseq_sra_paired", args.rnaseq_sra_paired if args.rnaseq_sra_paired else None)
     maybe_set("isoseq", args.isoseq if args.isoseq else None)
@@ -149,6 +168,10 @@ def collect_cli_params(args) -> dict:
         tib["model_cfg"] = args.model_cfg
     if args.tiberius_result:
         tib["result"] = args.tiberius_result
+    if args.batch_size:
+        tib["batch_size"] = args.batch_size
+    if args.seq_len:
+        tib["seq_len"] = args.seq_len
     if tib:
         tib["run"] = True
         overrides["tiberius"] = tib
@@ -174,9 +197,14 @@ def ensure_params_yaml(args):
     if not params.get("genome"):
         console.print("[bold red]A genome file must be specified (via --genome or params).[/bold red]")
         sys.exit(1)
-    if params.get("tiberius", {}).get("run") and not params.get("tiberius", {}).get("model_cfg"):
-        console.print("[bold red]A model config file must be specified (params.tiberius.model_cfg or --model_cfg).[/bold red]")
-        sys.exit(1)
+    tiberius_cfg = params.get("tiberius") or {}
+    if tiberius_cfg.get("run"):
+        if not tiberius_cfg.get("model_cfg"):
+            console.print("[bold red]A model config file must be specified (params.tiberius.model_cfg or --model_cfg).[/bold red]")
+            sys.exit(1)
+        # Resolve bare names (e.g. 'angiosperms') so the Nextflow process can stage the file.
+        tiberius_cfg["model_cfg"] = str(resolve_model_cfg(tiberius_cfg["model_cfg"]))
+        params["tiberius"] = tiberius_cfg
 
     outdir = params.get("outdir") or DEFAULT_PARAMS["outdir"]
     outdir_path = Path(outdir)
@@ -333,12 +361,15 @@ def run_tiberius_in_singularity(args):
             "Pass --cleanup_old_singularity_images to remove them.[/yellow]"
         )
     cmd = ["singularity", "run"]
-    if has_nvidia_container_cli():
+    if has_nvidia_container_cli() and singularity_supports_nvccli():
         cmd += ["--nvccli"]
-    cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+    cmd += ["--nv"]
+    # Only forward CUDA_VISIBLE_DEVICES when explicitly set; passing an empty
+    # value hides all GPUs from the container (issue #105).
+    cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if cuda_visible:
+        cmd += ["--env", f"CUDA_VISIBLE_DEVICES={cuda_visible}"]
     cmd += [
-        "--nv",
-        "--env", f"CUDA_VISIBLE_DEVICES={cuda_visible}",
         "--cleanenv",
         str(image_path), "/usr/bin/python3",
         "/opt/Tiberius/tiberius.py"

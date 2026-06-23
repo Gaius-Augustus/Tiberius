@@ -91,8 +91,14 @@ process PREPROCESS_PROTEINDB {
           --in "${proteinDB}" \
           --db prot_db
 
+        # gffread emits '.' for internal stop codons in malformed CDS predictions;
+        # DIAMOND rejects them. Replace with '*' (canonical stop) so the query
+        # is valid and the species-ranking pass can still run.
+        awk '/^>/{print; next} {gsub(/\\./, "*"); print}' \
+            "${tiberius_prot}" > tiberius_proteins.clean.fa
+
         diamond blastp \
-          --query "${tiberius_prot}" \
+          --query tiberius_proteins.clean.fa \
           --db prot_db \
           --out diamond_hits.tsv \
           --outfmt 6 qseqid sseqid pident length evalue bitscore qlen slen \

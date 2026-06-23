@@ -48,7 +48,7 @@ workflow HC_GENES {
         td_scored_gff
     )
 
-    train_final = HC_FORMAT_FILTER(hc.training_gff, params_map.genome)
+    train_final = HC_FORMAT_FILTER(hc.training_gff, CH_GENOME)
 
     emit:
     train_gff = train_final

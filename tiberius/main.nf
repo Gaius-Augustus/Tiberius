@@ -93,7 +93,7 @@ workflow {
         def tr = HC_GENES(asm_gtf, inp.genome, pe.proteindb, asm_gff3, pe.scored_gff, params)
         train_final = tr.train_gff
       } else {
-        train_final = HC_FORMAT_FILTER(pe.prot_traingff, params.genome)
+        train_final = HC_FORMAT_FILTER(pe.prot_traingff, inp.genome)
       }
 
       if( tiberiusRun ) {

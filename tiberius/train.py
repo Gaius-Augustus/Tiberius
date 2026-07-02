@@ -30,8 +30,8 @@ from tiberius import DataGenerator
 from tiberius.models import (
     Cast,
     add_hmm_layer,
+    build_backbone_from_config,
     custom_cce_f1_loss,
-    lstm_model,
 )
 
 # ----------------------------
@@ -60,19 +60,11 @@ def load_backbone_from_new_format(epoch_dir: Path, config: dict) -> tf.keras.Mod
     if not weights_h5.exists():
         weights_h5 = epoch_dir / "model.weights.h5"
 
-    relevant_keys = ['units', 'filter_size', 'kernel_size',
-                'numb_conv', 'numb_lstm', 'dropout_rate',
-                'pool_size', 'lstm_mask', 'clamsa',
-                'output_size', 'residual_conv',
-                'clamsa_kernel', 'lru_layer']
-
-    relevant_args = {key: config[key] for key in relevant_keys if key in config}
-
     if "inp_size" in config:
         softmask = config["inp_size"]==6
     elif "softmasking" in config:
         softmask = config["softmasking"]
-    backbone = lstm_model(**relevant_args, softmasking=softmask)
+    backbone = build_backbone_from_config(config, softmasking=softmask)
     backbone.load_weights(weights_h5)
     return backbone
 
@@ -400,30 +392,14 @@ def build_backbone(config: dict[str, Any], head: HeadType) -> tf.keras.Model:
     if head == "clamsa":
         # Keep same branching you had in train_clamsa
         if config.get("clamsa_with_lstm", True):
-            relevant_keys = [
-                "units", "filter_size", "kernel_size",
-                "numb_conv", "numb_lstm", "dropout_rate",
-                "pool_size", "lstm_mask", "clamsa",
-                "output_size", "residual_conv", "softmasking",
-                "clamsa_kernel", "lru_layer",
-            ]
-            relevant_args = {k: config[k] for k in relevant_keys if k in config}
-            return models.lstm_model(**relevant_args)
+            return build_backbone_from_config(config)
 
         relevant_keys = ["output_size", "clamsa_kernel_size", "clamsa_emb_size"]
         relevant_args = {k: config[k] for k in relevant_keys if k in config}
         return models.clamsa_only_model(**relevant_args)
 
-    # Default: LSTM backbone
-    relevant_keys = [
-        "units", "filter_size", "kernel_size",
-        "numb_conv", "numb_lstm", "dropout_rate",
-        "pool_size", "lstm_mask", "clamsa",
-        "output_size", "residual_conv", "softmasking",
-        "clamsa_kernel", "lru_layer",
-    ]
-    relevant_args = {k: config[k] for k in relevant_keys if k in config}
-    return lstm_model(**relevant_args)
+    # Default: backbone selected by config['arch'] ('lstm' or 'residual_stream').
+    return build_backbone_from_config(config)
 
 
 def attach_head(
@@ -569,6 +545,7 @@ def main():
             config = json.load(f)
     else:
         config = {
+            "arch": "lstm",  # or "residual_stream" for lstm_residual_stream_model
             "num_epochs": 2000,
             "steps_per_epoch": 5000,
             "threads": 96,

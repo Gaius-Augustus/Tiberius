@@ -9,7 +9,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.keras as keras
 from tensorflow.keras.models import Model
-from tiberius.models import (custom_cce_f1_loss, lstm_model, Cast)
+from tiberius.models import (custom_cce_f1_loss, build_backbone_from_config, Cast)
 from hidten import HMMMode
 from tiberius.hmm import HMMBlock
 import bricks2marble as b2m
@@ -130,19 +130,12 @@ class PredictionGTF:
             except Exception as e:
                 print(f"Error could not find config of the model. It should be located at {self.model_path}/model_config.json: {e}", file=sys.stderr)
                 sys.exit(1)
-            relevant_keys = ['units', 'filter_size', 'kernel_size',
-                'numb_conv', 'numb_lstm', 'dropout_rate',
-                'pool_size', 'lstm_mask', 'clamsa',
-                'output_size', 'residual_conv',
-                'clamsa_kernel', 'lru_layer']
-            relevant_args = {key: config[key] for key in relevant_keys if key in config}
-
             if "inp_size" in config:
                 self.softmask = config["inp_size"]==6
             elif "softmasking" in config:
                 self.softmask = config["softmasking"]
 
-            self.lstm_model = lstm_model(**relevant_args, softmasking=self.softmask)
+            self.lstm_model = build_backbone_from_config(config, softmasking=self.softmask)
 
             weights_h5  = f"{self.model_path}/weights.h5"
             if not os.path.exists(weights_h5):

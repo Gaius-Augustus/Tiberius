@@ -8,6 +8,7 @@ from tensorflow.keras.layers import (Conv1D, LSTM,
 from tensorflow import keras
 from tensorflow.keras import backend as K
 from tiberius.hmm import HMMBlock
+from tiberius.mixers import DiagonalSSMBlock, SlidingWindowAttentionBlock
 from hidten import HMMMode
 
 class Cast(tf.keras.layers.Layer):
@@ -263,6 +264,532 @@ def lstm_model(units=372, filter_size=128,
     outputs.append(y_end)
 
     return Model(inputs=inp, outputs=outputs)
+
+def lstm_residual_stream_model(units=372, d_model=None, filter_size=128,
+                                kernel_size=9, numb_conv=3,
+                                numb_lstm=2, dropout_rate=0.0,
+                                pool_size=9, output_size=15,
+                                multi_loss=False, clamsa=False,
+                                softmasking=True, lru_layer=False,
+                                zero_init_residual=True):
+    """
+    Residual-stream variant of `lstm_model`.
+
+    A single tensor of fixed width `d_model` flows from the input embedding
+    to the output head. Every block (conv, LSTM/LRU) is pre-norm and adds
+    its update back to the stream:
+
+        x = x + Block(LayerNorm(x))
+
+    The stream is pooled once (by `pool_size`) between the conv stack and
+    the recurrent stack: conv blocks operate at nucleotide resolution,
+    recurrent blocks at pooled resolution.
+
+    With `zero_init_residual=True`, the last projection of each block is
+    zero-initialized, so at step 0 every block outputs 0 and the stream
+    carries the input embedding unchanged. This makes depth non-destructive
+    at init and matches the "identity is the default" property of ResNets,
+    Transformers, and modern SSMs.
+
+    Parameters:
+        units (int): LSTM units. Bidirectional LSTM output width is 2*units.
+        d_model (int|None): Residual stream width. Defaults to 2*units so
+            the biLSTM output can flow into the stream with a light 1:1 proj.
+        filter_size (int): Hidden width inside each conv block (before the
+            projection back to d_model).
+        kernel_size (int): Conv kernel size (the first block uses 3).
+        numb_conv (int): Number of residual conv blocks.
+        numb_lstm (int): Number of residual LSTM/LRU blocks.
+        dropout_rate (float): Dropout inside each recurrent block, applied
+            to the block output before the residual add.
+        pool_size (int): Factor by which the stream is compressed along the
+            sequence axis before the recurrent stack. `pool_size=1` disables
+            pooling. Final head unpools back to nucleotide resolution.
+        output_size (int): Number of output classes.
+        multi_loss (bool): If True, attach intermediate softmax heads after
+            the conv stack and after every non-final recurrent block.
+        clamsa (bool): If True, add the clamsa input track.
+        softmasking (bool): If True, input width is 6 instead of 5.
+        lru_layer (bool): If True, replace biLSTM blocks with LRU blocks.
+        zero_init_residual (bool): If True, zero-init the last projection
+            in each residual block (recommended).
+
+    Returns:
+        tf.keras.Model: Model with softmax output(s) at nucleotide resolution.
+    """
+    if lru_layer:
+        import LRU_tf as lru
+
+    if d_model is None:
+        d_model = 2 * units
+
+    outputs = []
+    inp_size = 6 if softmasking else 5
+
+    main_input = Input(shape=(None, inp_size))
+    if clamsa:
+        inp_clamsa = Input(shape=(None, 4), name='clamsa_input')
+        inp = [main_input, inp_clamsa]
+        x_in = keras.layers.Concatenate(axis=-1)([main_input, inp_clamsa])
+    else:
+        inp = main_input
+        x_in = main_input
+
+    zero_init = 'zeros' if zero_init_residual else 'glorot_uniform'
+
+    # Lift the input to the residual stream width.
+    x = Dense(d_model, name='input_embed')(x_in)
+
+    # Residual conv blocks at nucleotide resolution.
+    # Each block: x = x + Conv1x1(Conv_k(LN(x))).
+    for i in range(numb_conv):
+        k = 3 if i == 0 else kernel_size
+        h = LayerNormalization(name=f'ln_conv_{i+1}')(x)
+        h = Conv1D(filter_size, k, padding='same',
+                   activation='relu', name=f'conv_{i+1}')(h)
+        h = Conv1D(d_model, 1, padding='same',
+                   kernel_initializer=zero_init,
+                   name=f'conv_proj_{i+1}')(h)
+        x = keras.layers.Add(name=f'add_conv_{i+1}')([x, h])
+
+    # Intermediate head at nucleotide resolution.
+    if multi_loss:
+        h_cnn = LayerNormalization(name='ln_cnn_head')(x)
+        y_cnn = Dense(output_size, name='cnn_head')(h_cnn)
+        outputs.append(Activation('softmax', name='out_cnn')(y_cnn))
+
+    # Pool: [B, L, d] -> [B, L/pool, pool*d] -> [B, L/pool, d].
+    if pool_size > 1:
+        x = Reshape((-1, pool_size * d_model), name='pool_reshape')(x)
+        x = Dense(d_model, name='post_pool_proj')(x)
+
+    # Residual recurrent blocks at pooled resolution.
+    # Each block: x = x + Proj(Dropout(Rec(LN(x)))).
+    pi = 3.141
+    for i in range(numb_lstm):
+        h = LayerNormalization(name=f'ln_rec_{i+1}')(x)
+        if lru_layer:
+            mp = 2*pi/2 if i < 1 else 2*pi/50
+            rmin = 0 if i < 1 else 0.9
+            h = lru.LRU_Block(N=d_model, H=d_model,
+                              bidirectional=True,
+                              max_tree_depth=17,
+                              r_min=rmin,
+                              max_phase=mp)(h)
+        else:
+            h = Bidirectional(LSTM(units, return_sequences=True),
+                              name=f'biLSTM_{i+1}')(h)
+        h = Dense(d_model, kernel_initializer=zero_init,
+                  name=f'rec_proj_{i+1}')(h)
+        if dropout_rate:
+            h = Dropout(dropout_rate, name=f'dropout_{i+1}')(h)
+        x = keras.layers.Add(name=f'add_rec_{i+1}')([x, h])
+
+        # Intermediate head at nucleotide resolution (unpool).
+        if multi_loss and i < numb_lstm - 1:
+            h_head = LayerNormalization(name=f'ln_rec_head_{i+1}')(x)
+            y_head = Dense(pool_size * output_size,
+                           name=f'rec_head_{i+1}')(h_head)
+            if pool_size > 1:
+                y_head = Reshape((-1, output_size),
+                                 name=f'rec_head_reshape_{i+1}')(y_head)
+            outputs.append(Activation('softmax',
+                                       name=f'out_lstm_{i+1}')(y_head))
+
+    # Final head: pre-norm on the stream, linear, unpool, softmax.
+    x = LayerNormalization(name='ln_final')(x)
+    x = Dense(pool_size * output_size, name='out_dense')(x)
+    if pool_size > 1:
+        x = Reshape((-1, output_size), name='out_reshape')(x)
+    y_end = Activation('softmax', name='out')(x)
+    outputs.append(y_end)
+
+    return Model(inputs=inp, outputs=outputs)
+
+
+def multires_lstm_residual_stream_model(units=160, d_model=None,
+                                         pool_schedule=None,
+                                         numb_blocks_per_level=2,
+                                         filter_size=128, kernel_size=9,
+                                         numb_conv=3, dropout_rate=0.0,
+                                         output_size=15, clamsa=False,
+                                         softmasking=True,
+                                         zero_init_residual=True):
+    """
+    Multi-resolution U-Net-style residual-stream backbone with biLSTM mixers.
+
+    The stream is progressively pooled through `pool_schedule` in the encoder;
+    at each level, `numb_blocks_per_level` biLSTM residual blocks run and
+    their output is saved as a skip. The bottleneck is the deepest level.
+    The decoder mirrors the schedule in reverse: unpool -> additive skip ->
+    `numb_blocks_per_level` biLSTM blocks per level. The final head unpools
+    once more by `pool_schedule[0]` to reach nucleotide resolution, so the
+    output length matches the input length just like the other
+    residual-stream variants.
+
+    Reduces exactly to `lstm_residual_stream_model` with numb_lstm equal to
+    `numb_blocks_per_level` when `pool_schedule=[9]` (single level, no
+    skips, no decoder).
+
+    Parameter budget:
+      units=160, d_model=320, pool_schedule=[3, 3], numb_blocks_per_level=2
+      -> ~6.2M params.  Bumping units to 192 (d_model=384) -> ~8.7M.
+
+      The dominant costs are:
+        - biLSTM blocks:    ~(4*(2*d+u+1)*u + d*d) per block, 2*len(schedule) blocks total
+        - pool projections: ~pool*d*d per pool op (schedule ops down + schedule[1:] ops up)
+
+      Using `pool_schedule=[3, 3]` instead of `[9]` shrinks each pool proj
+      by a factor of 3 (3*d^2 vs 9*d^2), which is the main reason the
+      multi-res variant can afford several extra blocks and still stay
+      well under the 10M budget.
+
+    Notes:
+      - Input length must be divisible by prod(pool_schedule) at training
+        AND inference (same divisibility rule the single-level variant
+        already enforces via seq_len % 9 == 0).
+      - Encoder / decoder are symmetric only in structure; weights are
+        independent.
+      - biLSTM blocks are only placed at pooled resolutions (level >= 1);
+        the nucleotide-level features are shaped by the conv stem alone,
+        as in the other residual-stream variants.
+
+    Parameters:
+        units:                 biLSTM units. Default 160 for the ~6M budget.
+        d_model:               residual stream width. Defaults to 2*units.
+        pool_schedule:         list of int pool factors per encoder level.
+                               Default [3, 3] (total pool 9, matches the
+                               single-level variant's downsampling).
+        numb_blocks_per_level: biLSTM residual blocks at each level, both
+                               encoder and decoder.
+        filter_size, kernel_size, numb_conv:  conv stem, unchanged.
+        dropout_rate:          dropout inside each biLSTM block.
+        output_size:           number of output classes.
+        clamsa:                add clamsa input track.
+        softmasking:           input width is 6 instead of 5.
+        zero_init_residual:    zero-init the last projection in each block
+                               so at step 0 each block is identity.
+    """
+    if pool_schedule is None:
+        pool_schedule = [3, 3]
+    if d_model is None:
+        d_model = 2 * units
+
+    outputs = []
+    inp_size = 6 if softmasking else 5
+    main_input = Input(shape=(None, inp_size))
+    if clamsa:
+        inp_clamsa = Input(shape=(None, 4), name='clamsa_input')
+        inp = [main_input, inp_clamsa]
+        x_in = keras.layers.Concatenate(axis=-1)([main_input, inp_clamsa])
+    else:
+        inp = main_input
+        x_in = main_input
+
+    zero_init = 'zeros' if zero_init_residual else 'glorot_uniform'
+    x = Dense(d_model, name='input_embed')(x_in)
+
+    # Residual conv stem at nucleotide resolution.
+    for i in range(numb_conv):
+        k = 3 if i == 0 else kernel_size
+        h = LayerNormalization(name=f'ln_conv_{i+1}')(x)
+        h = Conv1D(filter_size, k, padding='same', activation='relu',
+                   name=f'conv_{i+1}')(h)
+        h = Conv1D(d_model, 1, padding='same', kernel_initializer=zero_init,
+                   name=f'conv_proj_{i+1}')(h)
+        x = keras.layers.Add(name=f'add_conv_{i+1}')([x, h])
+
+    def _bilstm_residual_block(x_in, name_prefix):
+        h = LayerNormalization(name=f'{name_prefix}_ln')(x_in)
+        h = Bidirectional(LSTM(units, return_sequences=True),
+                          name=f'{name_prefix}_biLSTM')(h)
+        h = Dense(d_model, kernel_initializer=zero_init,
+                  name=f'{name_prefix}_proj')(h)
+        if dropout_rate:
+            h = Dropout(dropout_rate, name=f'{name_prefix}_drop')(h)
+        return keras.layers.Add(name=f'{name_prefix}_add')([x_in, h])
+
+    # Encoder: pool, then blocks, then save skip (except at the bottleneck).
+    skips = []
+    for lvl, pool in enumerate(pool_schedule, start=1):
+        x = Reshape((-1, pool * d_model), name=f'enc_pool_{lvl}')(x)
+        x = Dense(d_model, name=f'enc_pool_proj_{lvl}')(x)
+        for i in range(numb_blocks_per_level):
+            x = _bilstm_residual_block(x, f'enc_lvl{lvl}_blk{i+1}')
+        if lvl < len(pool_schedule):
+            skips.append(x)
+
+    # Decoder: unpool, add skip, then blocks. Iterate schedule in reverse,
+    # skipping the last (bottleneck) pool. The decoder ends at level 1.
+    for lvl_from_bottom, pool in enumerate(reversed(pool_schedule[1:]),
+                                            start=1):
+        lvl_to = len(pool_schedule) - lvl_from_bottom
+        # Unpool: (B, L, d) -> (B, L*pool, d) via channel expansion + reshape.
+        x = Dense(pool * d_model, name=f'dec_unpool_proj_{lvl_to}')(x)
+        x = Reshape((-1, d_model), name=f'dec_unpool_{lvl_to}')(x)
+        skip = skips[lvl_to - 1]
+        x = keras.layers.Add(name=f'dec_skip_add_{lvl_to}')([x, skip])
+        for i in range(numb_blocks_per_level):
+            x = _bilstm_residual_block(x, f'dec_lvl{lvl_to}_blk{i+1}')
+
+    # Final head: unpool once more by pool_schedule[0] to reach nucleotide.
+    x = LayerNormalization(name='ln_final')(x)
+    x = Dense(pool_schedule[0] * output_size, name='out_dense')(x)
+    x = Reshape((-1, output_size), name='out_reshape')(x)
+    y_end = Activation('softmax', name='out')(x)
+    outputs.append(y_end)
+
+    return Model(inputs=inp, outputs=outputs)
+
+
+def swa_residual_stream_model(units=372, d_model=None,
+                               num_heads=8, block_size=64, halo_blocks=1,
+                               ffn_mult=4, use_alibi=True,
+                               filter_size=128, kernel_size=9, numb_conv=3,
+                               numb_lstm=2, dropout_rate=0.0,
+                               pool_size=9, output_size=15,
+                               multi_loss=False, clamsa=False,
+                               softmasking=True, zero_init_residual=True):
+    """
+    Residual-stream backbone using SlidingWindowAttentionBlock as the mixer.
+
+    Identical structure to `lstm_residual_stream_model` -- conv stem, pool,
+    stacked mixer, final head -- with the biLSTM/LRU stack replaced by
+    stacked bidirectional block-local attention with ALiBi. `numb_lstm` is
+    reused as "number of mixer blocks" so switching `arch` between the
+    residual-stream variants needs no other config changes.
+
+    See `SlidingWindowAttentionBlock` for mixer-specific parameters.
+    """
+    if d_model is None:
+        d_model = 2 * units
+
+    outputs = []
+    inp_size = 6 if softmasking else 5
+    main_input = Input(shape=(None, inp_size))
+    if clamsa:
+        inp_clamsa = Input(shape=(None, 4), name='clamsa_input')
+        inp = [main_input, inp_clamsa]
+        x_in = keras.layers.Concatenate(axis=-1)([main_input, inp_clamsa])
+    else:
+        inp = main_input
+        x_in = main_input
+
+    zero_init = 'zeros' if zero_init_residual else 'glorot_uniform'
+    x = Dense(d_model, name='input_embed')(x_in)
+
+    # Residual conv stem at nucleotide resolution.
+    for i in range(numb_conv):
+        k = 3 if i == 0 else kernel_size
+        h = LayerNormalization(name=f'ln_conv_{i+1}')(x)
+        h = Conv1D(filter_size, k, padding='same', activation='relu',
+                   name=f'conv_{i+1}')(h)
+        h = Conv1D(d_model, 1, padding='same', kernel_initializer=zero_init,
+                   name=f'conv_proj_{i+1}')(h)
+        x = keras.layers.Add(name=f'add_conv_{i+1}')([x, h])
+
+    if multi_loss:
+        h_cnn = LayerNormalization(name='ln_cnn_head')(x)
+        y_cnn = Dense(output_size, name='cnn_head')(h_cnn)
+        outputs.append(Activation('softmax', name='out_cnn')(y_cnn))
+
+    if pool_size > 1:
+        x = Reshape((-1, pool_size * d_model), name='pool_reshape')(x)
+        x = Dense(d_model, name='post_pool_proj')(x)
+
+    # Stacked sliding-window attention blocks.
+    for i in range(numb_lstm):
+        x = SlidingWindowAttentionBlock(
+            d_model=d_model, num_heads=num_heads, block_size=block_size,
+            halo_blocks=halo_blocks, ffn_mult=ffn_mult, dropout=dropout_rate,
+            use_alibi=use_alibi, zero_init_residual=zero_init_residual,
+            name=f'swa_block_{i+1}')(x)
+
+        if multi_loss and i < numb_lstm - 1:
+            h_head = LayerNormalization(name=f'ln_head_{i+1}')(x)
+            y_head = Dense(pool_size * output_size,
+                           name=f'head_{i+1}')(h_head)
+            if pool_size > 1:
+                y_head = Reshape((-1, output_size),
+                                 name=f'head_reshape_{i+1}')(y_head)
+            outputs.append(Activation('softmax',
+                                       name=f'out_swa_{i+1}')(y_head))
+
+    x = LayerNormalization(name='ln_final')(x)
+    x = Dense(pool_size * output_size, name='out_dense')(x)
+    if pool_size > 1:
+        x = Reshape((-1, output_size), name='out_reshape')(x)
+    y_end = Activation('softmax', name='out')(x)
+    outputs.append(y_end)
+
+    return Model(inputs=inp, outputs=outputs)
+
+
+def ssm_residual_stream_model(units=372, d_model=None,
+                               state_size=32, ssm_bidirectional=True,
+                               dt_min=0.001, dt_max=0.1, ssm_mode='conv',
+                               ffn_mult=4,
+                               filter_size=128, kernel_size=9, numb_conv=3,
+                               numb_lstm=2, dropout_rate=0.0,
+                               pool_size=9, output_size=15,
+                               multi_loss=False, clamsa=False,
+                               softmasking=True, zero_init_residual=True):
+    """
+    Residual-stream backbone using DiagonalSSMBlock (S4D-style) as the mixer.
+
+    Set `ssm_mode='recurrent'` for constant-memory inference on very long
+    sequences; conv mode's kernel materialization needs O(D * N * L) complex
+    and does not fit for full-chromosome L. `numb_lstm` counts SSM blocks.
+
+    See `DiagonalSSMBlock` for mixer-specific parameters.
+    """
+    if d_model is None:
+        d_model = 2 * units
+
+    outputs = []
+    inp_size = 6 if softmasking else 5
+    main_input = Input(shape=(None, inp_size))
+    if clamsa:
+        inp_clamsa = Input(shape=(None, 4), name='clamsa_input')
+        inp = [main_input, inp_clamsa]
+        x_in = keras.layers.Concatenate(axis=-1)([main_input, inp_clamsa])
+    else:
+        inp = main_input
+        x_in = main_input
+
+    zero_init = 'zeros' if zero_init_residual else 'glorot_uniform'
+    x = Dense(d_model, name='input_embed')(x_in)
+
+    for i in range(numb_conv):
+        k = 3 if i == 0 else kernel_size
+        h = LayerNormalization(name=f'ln_conv_{i+1}')(x)
+        h = Conv1D(filter_size, k, padding='same', activation='relu',
+                   name=f'conv_{i+1}')(h)
+        h = Conv1D(d_model, 1, padding='same', kernel_initializer=zero_init,
+                   name=f'conv_proj_{i+1}')(h)
+        x = keras.layers.Add(name=f'add_conv_{i+1}')([x, h])
+
+    if multi_loss:
+        h_cnn = LayerNormalization(name='ln_cnn_head')(x)
+        y_cnn = Dense(output_size, name='cnn_head')(h_cnn)
+        outputs.append(Activation('softmax', name='out_cnn')(y_cnn))
+
+    if pool_size > 1:
+        x = Reshape((-1, pool_size * d_model), name='pool_reshape')(x)
+        x = Dense(d_model, name='post_pool_proj')(x)
+
+    for i in range(numb_lstm):
+        x = DiagonalSSMBlock(
+            d_model=d_model, state_size=state_size,
+            bidirectional=ssm_bidirectional, dt_min=dt_min, dt_max=dt_max,
+            mode=ssm_mode, ffn_mult=ffn_mult, dropout=dropout_rate,
+            zero_init_residual=zero_init_residual,
+            name=f'ssm_block_{i+1}')(x)
+
+        if multi_loss and i < numb_lstm - 1:
+            h_head = LayerNormalization(name=f'ln_head_{i+1}')(x)
+            y_head = Dense(pool_size * output_size,
+                           name=f'head_{i+1}')(h_head)
+            if pool_size > 1:
+                y_head = Reshape((-1, output_size),
+                                 name=f'head_reshape_{i+1}')(y_head)
+            outputs.append(Activation('softmax',
+                                       name=f'out_ssm_{i+1}')(y_head))
+
+    x = LayerNormalization(name='ln_final')(x)
+    x = Dense(pool_size * output_size, name='out_dense')(x)
+    if pool_size > 1:
+        x = Reshape((-1, output_size), name='out_reshape')(x)
+    y_end = Activation('softmax', name='out')(x)
+    outputs.append(y_end)
+
+    return Model(inputs=inp, outputs=outputs)
+
+
+# ------------------------------------------------------------------
+# Backbone registry & factory
+# ------------------------------------------------------------------
+# Central switch used by train.py and eval_model_class.py so that a new
+# architecture only has to be registered here (plus a config key `arch`).
+# `keys` lists the config entries that should be forwarded as kwargs to
+# the builder; anything else in the config is ignored.
+BACKBONE_REGISTRY = {
+    "lstm": {
+        "builder": lstm_model,
+        "keys": [
+            "units", "filter_size", "kernel_size",
+            "numb_conv", "numb_lstm", "dropout_rate",
+            "pool_size", "lstm_mask", "clamsa",
+            "output_size", "residual_conv", "softmasking",
+            "clamsa_kernel", "lru_layer",
+        ],
+    },
+    "residual_stream": {
+        "builder": lstm_residual_stream_model,
+        "keys": [
+            "units", "d_model", "filter_size", "kernel_size",
+            "numb_conv", "numb_lstm", "dropout_rate",
+            "pool_size", "output_size", "multi_loss",
+            "clamsa", "softmasking", "lru_layer",
+            "zero_init_residual",
+        ],
+    },
+    "swa_residual_stream": {
+        "builder": swa_residual_stream_model,
+        "keys": [
+            "units", "d_model",
+            "num_heads", "block_size", "halo_blocks", "ffn_mult",
+            "use_alibi",
+            "filter_size", "kernel_size", "numb_conv", "numb_lstm",
+            "dropout_rate", "pool_size", "output_size", "multi_loss",
+            "clamsa", "softmasking", "zero_init_residual",
+        ],
+    },
+    "ssm_residual_stream": {
+        "builder": ssm_residual_stream_model,
+        "keys": [
+            "units", "d_model",
+            "state_size", "ssm_bidirectional", "dt_min", "dt_max",
+            "ssm_mode", "ffn_mult",
+            "filter_size", "kernel_size", "numb_conv", "numb_lstm",
+            "dropout_rate", "pool_size", "output_size", "multi_loss",
+            "clamsa", "softmasking", "zero_init_residual",
+        ],
+    },
+    "multires_residual_stream": {
+        "builder": multires_lstm_residual_stream_model,
+        "keys": [
+            "units", "d_model",
+            "pool_schedule", "numb_blocks_per_level",
+            "filter_size", "kernel_size", "numb_conv",
+            "dropout_rate", "output_size",
+            "clamsa", "softmasking", "zero_init_residual",
+        ],
+    },
+}
+
+
+def build_backbone_from_config(config, softmasking=None):
+    """
+    Build a backbone whose architecture is chosen by `config['arch']`.
+
+    Defaults to `'lstm'` when the key is absent, so existing configs
+    continue to work unchanged. Pass `softmasking` to override whatever
+    the config says (used by inference, which derives softmask from
+    `inp_size`).
+    """
+    arch = config.get("arch", "lstm")
+    if arch not in BACKBONE_REGISTRY:
+        raise ValueError(
+            f"Unknown backbone arch {arch!r}. "
+            f"Choose from: {sorted(BACKBONE_REGISTRY)}."
+        )
+    spec = BACKBONE_REGISTRY[arch]
+    kwargs = {k: config[k] for k in spec["keys"] if k in config}
+    if softmasking is not None:
+        kwargs["softmasking"] = softmasking
+    return spec["builder"](**kwargs)
+
 
 def reduce_lstm_output_7(x, new_size=5):
     """Reduces the output a legacy LSTM that was trained with 7 output classes."""

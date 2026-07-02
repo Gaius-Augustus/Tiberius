@@ -541,6 +541,11 @@ def hmm_middle_residual_stream_model(units=160, d_model=None,
         initial_exon_len=hmm_initial_exon_len,
         initial_intron_len=hmm_initial_intron_len,
         initial_ir_len=hmm_initial_ir_len,
+        train_emitter=True,
+        transitioner_share_frames=True,
+        transitioner_share_noncoding=True,
+        train_transitions=True,
+        train_start_dist=True
     )
     hmm_out = hmm_layer(class_probs, nuc, training=True)
     hmm_out = Reshape((-1, output_size), name='hmm_out_reshape')(hmm_out)

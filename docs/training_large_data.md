@@ -60,7 +60,8 @@ python3 tiberius/validation_from_tfrecords \
 Create a config file that contains the parameters for training, a config file with default parameter is located at `docs/config.json`. You can find descriptions of key parametes in `tiberius/train.py`. Start training:
 
 ```shell
-python tiberius/train.py --data $tfrecords/  --cfg config.json --train_species_file species.txt --val_data val.npz
+python tiberius/train.py --data $tfrecords/  --cfg config.json \
+       --train_species_file species.txt --val_data val.npz --out train/
 ```
 
 If you want to train with the HMM layer, you can use the '--hmm' argument. This will however require more memory and slow training down.
@@ -72,7 +73,9 @@ You can also start a training from an existing model by providing the path to th
 You can start a training with the HMM layer by using the `--hmm` argument. This will require more memory and will slow down training. You will need to reduce batch size compared to the training without the HMM layer. Usually, the training with HMM layer is done after first training without the HMM layer and the HMM layer is added to the model afterwards for fine-tuning.
 You can start a fine-tuning with the HMM layer by providing the path to the model without the HMM layer with the `--load` argument and using the `--hmm` argument:
 ```shell
-python tiberius/train.py --data $tfrecords/ --cfg config.json --train_species_file species.txt --val_data val.npz --load path/to/model_without_hmm --hmm
+python tiberius/train.py --data $tfrecords/ --cfg config.json \
+        --train_species_file species.txt --val_data val.npz \
+        --load path/to/model_without_hmm --hmm  --out train_hmm/
 ```
 
 #### 5.3 Masking out transcript regions

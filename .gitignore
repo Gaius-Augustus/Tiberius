@@ -1,6 +1,11 @@
 slurm/
 train.sh
-
+.claude/
+CLAUDE.md
+CLAUDE.md.bak.20260419-090442
+CLAUDE.md.bak.20260419-092425
+logs/
+results/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

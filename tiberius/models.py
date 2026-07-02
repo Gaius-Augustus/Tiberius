@@ -407,6 +407,170 @@ def lstm_residual_stream_model(units=372, d_model=None, filter_size=128,
     return Model(inputs=inp, outputs=outputs)
 
 
+def hmm_middle_residual_stream_model(units=160, d_model=None,
+                                      pool_size=9,
+                                      numb_pre_hmm_lstm=2,
+                                      numb_post_hmm_lstm=2,
+                                      numb_conv=3, filter_size=128,
+                                      kernel_size=9, dropout_rate=0.0,
+                                      output_size=15,
+                                      hmm_parallel=9,
+                                      hmm_emitter_epsilon=0.0,
+                                      hmm_initial_exon_len=200,
+                                      hmm_initial_intron_len=4500,
+                                      hmm_initial_ir_len=10000,
+                                      aux_hmm_loss=False,
+                                      clamsa=False, softmasking=True,
+                                      zero_init_residual=True):
+    """
+    Residual-stream backbone with the new HMMBlock inserted between two
+    biLSTM stacks. Shape:
+
+        Input
+          -> conv stem (nt, d_model)
+          -> pool -> [numb_pre_hmm_lstm biLSTM residual blocks at pooled res]
+          -> unpool -> LN -> Dense(output_size) -> softmax  (HMM input)
+          -> HMMBlock(softmax, nuc) at nt -> posteriors
+          -> Dense(d_model, zero-init) -> additive residual with pre-HMM stream
+          -> pool -> [numb_post_hmm_lstm biLSTM residual blocks]
+          -> unpool -> final softmax at nt
+
+    The HMM operates at nucleotide resolution on class posteriors from the
+    first LSTM stack; its output is projected back to d_model and fused
+    with the pre-HMM residual stream via an additive skip. With
+    `zero_init_residual=True`, the HMM contributes exactly 0 at step 0,
+    so training starts from a plain residual-stream biLSTM and the HMM's
+    influence grows as the projection is learned.
+
+    Only supports the NEW HMMBlock. Do NOT wrap this model with
+    `add_hmm_layer(..., head='hmm')` -- set `head='none'` in training,
+    since the HMM is already inside the backbone.
+
+    Default parameter budget (units=160, d_model=320, pool_size=9,
+    2+2 biLSTM blocks) is ~7-8M params. The HMMBlock itself contributes
+    a few thousand parameters at most.
+
+    Notes:
+      - Requires `L % pool_size == 0` at both training and inference (same
+        rule as the other residual-stream variants).
+      - `hmm_parallel` controls the HMMBlock's parallel_factor. Users
+        running long inference sequences may need to override this to
+        stay within GPU memory (typically ~sqrt(L) is a good default).
+
+    Args:
+        units, d_model:               biLSTM hidden and stream width.
+        pool_size:                    pool factor used before and after HMM.
+        numb_pre_hmm_lstm:            biLSTM residual blocks before the HMM.
+        numb_post_hmm_lstm:           biLSTM residual blocks after the HMM.
+        numb_conv, filter_size,
+        kernel_size:                  conv stem.
+        dropout_rate:                 dropout inside each biLSTM block.
+        output_size:                  number of output classes (also HMM
+                                      class count -- must match HMMBlock's
+                                      internal state count, currently 15).
+        hmm_parallel, hmm_emitter_epsilon,
+        hmm_initial_exon_len,
+        hmm_initial_intron_len,
+        hmm_initial_ir_len:           HMMBlock parameters.
+        aux_hmm_loss:                 if True, expose the HMM's
+                                      safe-clipped-log posteriors as an
+                                      additional output for a mid-model
+                                      loss.
+        clamsa, softmasking,
+        zero_init_residual:           see other builders.
+    """
+    if d_model is None:
+        d_model = 2 * units
+
+    outputs = []
+    inp_size = 6 if softmasking else 5
+    main_input = Input(shape=(None, inp_size))
+    if clamsa:
+        inp_clamsa = Input(shape=(None, 4), name='clamsa_input')
+        inp = [main_input, inp_clamsa]
+        x_in = keras.layers.Concatenate(axis=-1)([main_input, inp_clamsa])
+    else:
+        inp = main_input
+        x_in = main_input
+
+    zero_init = 'zeros' if zero_init_residual else 'glorot_uniform'
+    x = Dense(d_model, name='input_embed')(x_in)
+
+    # Residual conv stem at nucleotide resolution.
+    for i in range(numb_conv):
+        k = 3 if i == 0 else kernel_size
+        h = LayerNormalization(name=f'ln_conv_{i+1}')(x)
+        h = Conv1D(filter_size, k, padding='same', activation='relu',
+                   name=f'conv_{i+1}')(h)
+        h = Conv1D(d_model, 1, padding='same', kernel_initializer=zero_init,
+                   name=f'conv_proj_{i+1}')(h)
+        x = keras.layers.Add(name=f'add_conv_{i+1}')([x, h])
+
+    def _bilstm_residual_block(x_in, name_prefix):
+        h = LayerNormalization(name=f'{name_prefix}_ln')(x_in)
+        h = Bidirectional(LSTM(units, return_sequences=True),
+                          name=f'{name_prefix}_biLSTM')(h)
+        h = Dense(d_model, kernel_initializer=zero_init,
+                  name=f'{name_prefix}_proj')(h)
+        if dropout_rate:
+            h = Dropout(dropout_rate, name=f'{name_prefix}_drop')(h)
+        return keras.layers.Add(name=f'{name_prefix}_add')([x_in, h])
+
+    # Pre-HMM: pool -> biLSTM stack.
+    x_pooled = Reshape((-1, pool_size * d_model), name='pre_hmm_pool')(x)
+    x_pooled = Dense(d_model, name='pre_hmm_pool_proj')(x_pooled)
+    for i in range(numb_pre_hmm_lstm):
+        x_pooled = _bilstm_residual_block(x_pooled, f'pre_hmm_blk{i+1}')
+
+    # Unpool back to nucleotide resolution for the HMM.
+    x_nt = Dense(pool_size * d_model, name='pre_hmm_unpool_proj')(x_pooled)
+    x_nt = Reshape((-1, d_model), name='pre_hmm_unpool')(x_nt)
+
+    # Softmax head that produces class probabilities for the HMM.
+    h_hmm_in = LayerNormalization(name='ln_hmm_in')(x_nt)
+    class_probs = Dense(output_size, name='hmm_in_dense')(h_hmm_in)
+    class_probs = Activation('softmax', name='hmm_in_softmax')(class_probs)
+
+    # HMM at nucleotide resolution.
+    nuc = Cast()(inp)
+    hmm_layer = HMMBlock(
+        parallel=hmm_parallel,
+        mode=HMMMode.POSTERIOR,
+        training=True,
+        emitter_epsilon=hmm_emitter_epsilon,
+        initial_exon_len=hmm_initial_exon_len,
+        initial_intron_len=hmm_initial_intron_len,
+        initial_ir_len=hmm_initial_ir_len,
+    )
+    hmm_out = hmm_layer(class_probs, nuc, training=True)
+    hmm_out = Reshape((-1, output_size), name='hmm_out_reshape')(hmm_out)
+
+    if aux_hmm_loss:
+        y_hmm = Activation(safe_clipped_log,
+                           name='hmm_out_safe_clipped_log')(hmm_out)
+        outputs.append(y_hmm)
+
+    # Project HMM output to d_model and additively fuse with the pre-HMM stream.
+    hmm_proj = Dense(d_model, kernel_initializer=zero_init,
+                     name='hmm_out_proj')(hmm_out)
+    x_fused = keras.layers.Add(name='hmm_residual_add')([x_nt, hmm_proj])
+
+    # Post-HMM: pool -> biLSTM stack.
+    x_post = Reshape((-1, pool_size * d_model), name='post_hmm_pool')(x_fused)
+    x_post = Dense(d_model, name='post_hmm_pool_proj')(x_post)
+    for i in range(numb_post_hmm_lstm):
+        x_post = _bilstm_residual_block(x_post, f'post_hmm_blk{i+1}')
+
+    # Final head: unpool and softmax at nucleotide resolution.
+    x_final = LayerNormalization(name='ln_final')(x_post)
+    x_final = Dense(pool_size * output_size, name='out_dense')(x_final)
+    x_final = Reshape((-1, output_size), name='out_reshape')(x_final)
+    y_end = Activation('softmax', name='out')(x_final)
+    outputs.append(y_end)
+
+    return Model(inputs=inp, outputs=outputs)
+
+
 def multires_lstm_residual_stream_model(units=160, d_model=None,
                                          pool_schedule=None,
                                          numb_blocks_per_level=2,
@@ -763,6 +927,20 @@ BACKBONE_REGISTRY = {
             "pool_schedule", "numb_blocks_per_level",
             "filter_size", "kernel_size", "numb_conv",
             "dropout_rate", "output_size",
+            "clamsa", "softmasking", "zero_init_residual",
+        ],
+    },
+    "hmm_middle_residual_stream": {
+        "builder": hmm_middle_residual_stream_model,
+        "keys": [
+            "units", "d_model", "pool_size",
+            "numb_pre_hmm_lstm", "numb_post_hmm_lstm",
+            "numb_conv", "filter_size", "kernel_size",
+            "dropout_rate", "output_size",
+            "hmm_parallel", "hmm_emitter_epsilon",
+            "hmm_initial_exon_len", "hmm_initial_intron_len",
+            "hmm_initial_ir_len",
+            "aux_hmm_loss",
             "clamsa", "softmasking", "zero_init_residual",
         ],
     },

@@ -10,7 +10,6 @@ from tensorflow.keras import backend as K
 from tiberius.hmm import HMMBlock
 from hidten import HMMMode
 
-
 class Cast(tf.keras.layers.Layer):
     def call(self, x):
         return tf.cast(x[0][..., :5] if isinstance(x, list) else x[..., :5], tf.float32)
@@ -314,6 +313,7 @@ def add_hmm_layer(model,
                 initial_exon_len: int = 200,
                 initial_intron_len: int = 4500,
                 initial_ir_len: int = 10000,
+                old_hmm=True
                 ):
     """Add trainable HMM layer to existing hel_model.
 
@@ -343,19 +343,38 @@ def add_hmm_layer(model,
         else:
             #if this happens, implement more reduction functions
             raise ValueError(f"Invalid combination of loaded output size ({x.shape[-1]}) and requested output size ({output_size}).")
-    x = Identity(name='lstm_out')(x)
+    # x = Identity(name='lstm_out')(x)
     nuc = Cast()(inputs)
 
-    gene_pred_layer = HMMBlock(
-        parallel=hmm_factor,
-        mode=HMMMode.POSTERIOR,
-        training=True,
-        emitter_epsilon=emitter_epsilon,
-        initial_exon_len=initial_exon_len,
-        initial_intron_len=initial_intron_len,
-        initial_ir_len=initial_ir_len,
-    )
-    y_hmm = gene_pred_layer(x, nuc, training=True)
+    if old_hmm:
+        from tiberius.old_hmm.gene_pred_hmm import (GenePredHMMLayer, make_15_class_emission_kernel)
+        from learnMSA.msa_hmm.Initializers import ConstantInitializer
+        emitter_init = make_15_class_emission_kernel(smoothing=1e-2, num_copies=1,
+                                                     noise_strength=0.001)
+        emitter_init = np.repeat(emitter_init, num_hmm, axis=0)
+        gene_pred_layer = GenePredHMMLayer(
+            num_models=num_hmm,
+            num_copies=1,
+            emitter_init=ConstantInitializer(emitter_init),
+            share_intron_parameters=False,
+            trainable_emissions=False,
+            trainable_transitions=False,
+            trainable_starting_distribution=False,
+            trainable_nucleotides_at_exons=False,
+            parallel_factor=hmm_factor
+        )
+        y_hmm = gene_pred_layer(x, nuc)
+    else:
+        gene_pred_layer = HMMBlock(
+            parallel=hmm_factor,
+            mode=HMMMode.POSTERIOR,
+            training=True,
+            emitter_epsilon=emitter_epsilon,
+            initial_exon_len=initial_exon_len,
+            initial_intron_len=initial_intron_len,
+            initial_ir_len=initial_ir_len,
+        )
+        y_hmm = gene_pred_layer(x, nuc, training=True)
 
     y = Reshape((-1, output_size) if num_hmm == 1 else (-1, num_hmm, output_size),
                 name='hmm_out')(y_hmm) #make sure the last dimension is not None

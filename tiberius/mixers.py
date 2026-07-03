@@ -250,20 +250,20 @@ class DiagonalSSMBlock(tf.keras.layers.Layer):
         A_im_init = np.tile(np.pi * np.arange(1, N + 1, dtype='float32'), (D, 1))
         w = {}
         w['A_re_raw'] = self.add_weight(
-            f'A_re_raw{suffix}', shape=(D, N),
+            name=f'A_re_raw{suffix}', shape=(D, N),
             initializer=tf.keras.initializers.Constant(A_re_init))
         w['A_im'] = self.add_weight(
-            f'A_im{suffix}', shape=(D, N),
+            name=f'A_im{suffix}', shape=(D, N),
             initializer=tf.keras.initializers.Constant(A_im_init))
         w['log_dt'] = self.add_weight(
-            f'log_dt{suffix}', shape=(D,),
-            initializer=tf.random_uniform_initializer(
+            name=f'log_dt{suffix}', shape=(D,),
+            initializer=tf.keras.initializers.RandomUniform(
                 minval=float(np.log(self.dt_min)),
                 maxval=float(np.log(self.dt_max))))
         std = 0.5 ** 0.5
-        for name in ('B_re', 'B_im', 'C_re', 'C_im'):
-            w[name] = self.add_weight(
-                f'{name}{suffix}', shape=(D, N),
+        for wname in ('B_re', 'B_im', 'C_re', 'C_im'):
+            w[wname] = self.add_weight(
+                name=f'{wname}{suffix}', shape=(D, N),
                 initializer=tf.keras.initializers.RandomNormal(stddev=std))
         return w
 
@@ -272,7 +272,7 @@ class DiagonalSSMBlock(tf.keras.layers.Layer):
         if self.bidirectional:
             self.bwd = self._init_direction(suffix='_b')
         self.D_skip = self.add_weight(
-            'D_skip', shape=(self.d_model,), initializer='ones')
+            name='D_skip', shape=(self.d_model,), initializer='ones')
         super().build(input_shape)
 
     def _params(self, direction):

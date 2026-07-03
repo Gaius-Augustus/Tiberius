@@ -188,20 +188,16 @@ class EpochFolderSaver(tf.keras.callbacks.Callback):
         model_save_dir: Path,
         backbone_model: tf.keras.Model,
         config: dict[str, Any],
-        start_epoch_index: int,
     ):
         super().__init__()
         self.model_save_dir = model_save_dir
         self.backbone_model = backbone_model
         self.config = config
-        self.start_epoch_index = start_epoch_index
 
     def on_epoch_end(self, epoch, logs=None):
-        # Keras passes `epoch` starting at `initial_epoch`, but it is still 0-based
-        # relative to `initial_epoch`. We want absolute epoch index = initial_epoch + epoch
-        abs_epoch = self.start_epoch_index + epoch
-
-        epoch_dir = self.model_save_dir / f"epoch_{abs_epoch:02d}"
+        # Keras passes the absolute epoch index (equal to `initial_epoch` on the
+        # first resumed call), so use it directly.
+        epoch_dir = self.model_save_dir / f"epoch_{epoch:02d}"
         ensure_dir(epoch_dir)
 
         # 1) backbone weights only
@@ -501,7 +497,6 @@ def train_model(
             model_save_dir=model_save_dir,
             backbone_model=backbone,            # <- never includes HMM
             config=config,
-            start_epoch_index=next_epoch_idx,
         )
 
         callbacks = [epoch_saver, csv_logger]

@@ -7,7 +7,7 @@ from tensorflow.keras.layers import (Conv1D, LSTM,
                                 Reshape, LayerNormalization)
 from tensorflow import keras
 from tensorflow.keras import backend as K
-from tiberius.hmm import HMMBlock
+from tiberius.hmm import HMMBlock, TrainableHMMHead, default_trainable_hmm_config
 from tiberius.mixers import DiagonalSSMBlock, SlidingWindowAttentionBlock
 from hidten import HMMMode
 
@@ -415,47 +415,54 @@ def hmm_middle_residual_stream_model(units=160, d_model=None,
                                       kernel_size=9, dropout_rate=0.0,
                                       output_size=15,
                                       hmm_parallel=9,
-                                      hmm_emitter_epsilon=0.0,
-                                      hmm_initial_exon_len=200,
-                                      hmm_initial_intron_len=4500,
-                                      hmm_initial_ir_len=10000,
+                                      hmm_config=None,
+                                      hmm_embed=160,
+                                      hmm_embed_norm='layer',
+                                      hmm_embed_activation='softmax',
+                                      hmm_readout_type='conv',
+                                      hmm_readout_conv_kernel=9,
                                       aux_hmm_loss=False,
                                       clamsa=False, softmasking=True,
                                       zero_init_residual=True):
     """
-    Residual-stream backbone with the new HMMBlock inserted between two
-    biLSTM stacks. Shape:
+    Residual-stream backbone with the new trainable HMM head
+    (`TrainableHMMHead`) inserted between two biLSTM stacks. Shape:
 
         Input
           -> conv stem (nt, d_model)
           -> pool -> [numb_pre_hmm_lstm biLSTM residual blocks at pooled res]
-          -> unpool -> LN -> Dense(output_size) -> softmax  (HMM input)
-          -> HMMBlock(softmax, nuc) at nt -> posteriors
+          -> unpool -> LN -> Dense(output_size) -> softmax  (HMM input stream)
+          -> TrainableHMMHead(x, nuc) at nt
+             (LayerNorm + Dense(embed, softmax) -> AnnotationHMM
+              -> reshape posterior -> Conv1D readout(-> output_size))
           -> Dense(d_model, zero-init) -> additive residual with pre-HMM stream
           -> pool -> [numb_post_hmm_lstm biLSTM residual blocks]
           -> unpool -> final softmax at nt
 
-    The HMM operates at nucleotide resolution on class posteriors from the
-    first LSTM stack; its output is projected back to d_model and fused
-    with the pre-HMM residual stream via an additive skip. With
-    `zero_init_residual=True`, the HMM contributes exactly 0 at step 0,
-    so training starts from a plain residual-stream biLSTM and the HMM's
-    influence grows as the projection is learned.
+    Uses `TrainableHMMHead` (bricks2marble AnnotationHMM with a chained
+    intron topology, default `intron_state_chain=2` -> 18 states,
+    trainable emitter/transitions/start distribution). The head's readout
+    projects the 18-state posterior back to `output_size`, so
+    `output_size` no longer needs to match the HMM's state count.
 
-    Only supports the NEW HMMBlock. Do NOT wrap this model with
-    `add_hmm_layer(..., head='hmm')` -- set `head='none'` in training,
-    since the HMM is already inside the backbone.
+    The HMM operates at nucleotide resolution on the pre-HMM class
+    probabilities; its readout output is projected to `d_model` and
+    additively fused with the pre-HMM residual stream. With
+    `zero_init_residual=True`, the fused HMM contribution is 0 at step 0
+    and grows as the projection is learned.
 
-    Default parameter budget (units=160, d_model=320, pool_size=9,
-    2+2 biLSTM blocks) is ~7-8M params. The HMMBlock itself contributes
-    a few thousand parameters at most.
+    Do NOT wrap this model with `add_hmm_layer(..., head='hmm')` or
+    `--hmm_new` -- the HMM is baked into the backbone, so use `head='none'`
+    (or `--` no head flag) when training.
 
     Notes:
       - Requires `L % pool_size == 0` at both training and inference (same
         rule as the other residual-stream variants).
-      - `hmm_parallel` controls the HMMBlock's parallel_factor. Users
+      - `hmm_parallel` controls the AnnotationHMM parallel_factor. Users
         running long inference sequences may need to override this to
         stay within GPU memory (typically ~sqrt(L) is a good default).
+      - The full trainable model (backbone + inline HMM) is saved and
+        reloaded together because the HMM parameters are trainable.
 
     Args:
         units, d_model:               biLSTM hidden and stream width.
@@ -465,13 +472,18 @@ def hmm_middle_residual_stream_model(units=160, d_model=None,
         numb_conv, filter_size,
         kernel_size:                  conv stem.
         dropout_rate:                 dropout inside each biLSTM block.
-        output_size:                  number of output classes (also HMM
-                                      class count -- must match HMMBlock's
-                                      internal state count, currently 15).
-        hmm_parallel, hmm_emitter_epsilon,
-        hmm_initial_exon_len,
-        hmm_initial_intron_len,
-        hmm_initial_ir_len:           HMMBlock parameters.
+        output_size:                  number of output classes.
+        hmm_parallel:                 HMM parallel_factor.
+        hmm_config:                   dict merged into
+                                      `default_trainable_hmm_config()` to
+                                      override AnnotationHMM options
+                                      (e.g. `intron_state_chain`,
+                                      start/stop codon distributions,
+                                      train_emitter, etc.).
+        hmm_embed, hmm_embed_norm,
+        hmm_embed_activation:         embedding config for the HMM head.
+        hmm_readout_type,
+        hmm_readout_conv_kernel:      readout config for the HMM head.
         aux_hmm_loss:                 if True, expose the HMM's
                                       safe-clipped-log posteriors as an
                                       additional output for a mid-model
@@ -526,33 +538,33 @@ def hmm_middle_residual_stream_model(units=160, d_model=None,
     x_nt = Dense(pool_size * d_model, name='pre_hmm_unpool_proj')(x_pooled)
     x_nt = Reshape((-1, d_model), name='pre_hmm_unpool')(x_nt)
 
-    # Softmax head that produces class probabilities for the HMM.
+    # Softmax head that produces class probabilities as the HMM input stream.
     h_hmm_in = LayerNormalization(name='ln_hmm_in')(x_nt)
     class_probs = Dense(output_size, name='hmm_in_dense')(h_hmm_in)
     class_probs = Activation('softmax', name='hmm_in_softmax')(class_probs)
 
-    # HMM at nucleotide resolution.
+    # Trainable HMM head at nucleotide resolution.
     nuc = Cast()(inp)
-    hmm_layer = HMMBlock(
-        parallel=hmm_parallel,
-        mode=HMMMode.POSTERIOR,
-        training=True,
-        emitter_epsilon=hmm_emitter_epsilon,
-        initial_exon_len=hmm_initial_exon_len,
-        initial_intron_len=hmm_initial_intron_len,
-        initial_ir_len=hmm_initial_ir_len,
-        train_emitter=True,
-        transitioner_share_frames=True,
-        transitioner_share_noncoding=True,
-        train_transitions=True,
-        train_start_dist=True
+    hmm_layer = TrainableHMMHead(
+        hmm_config=hmm_config,
+        embed=hmm_embed,
+        embed_norm=hmm_embed_norm,
+        embed_activation=hmm_embed_activation,
+        readout_units=output_size,
+        readout_type=hmm_readout_type,
+        readout_conv_kernel=hmm_readout_conv_kernel,
+        parallel_factor=hmm_parallel,
+        name='hmm_middle_head',
     )
     hmm_out = hmm_layer(class_probs, nuc, training=True)
     hmm_out = Reshape((-1, output_size), name='hmm_out_reshape')(hmm_out)
 
     if aux_hmm_loss:
+        # Readout is unactivated (logit-like) -- softmax first for a
+        # log-probability auxiliary target, matching add_hmm_layer's format.
+        y_hmm = Activation('softmax', name='hmm_out_softmax')(hmm_out)
         y_hmm = Activation(safe_clipped_log,
-                           name='hmm_out_safe_clipped_log')(hmm_out)
+                           name='hmm_out_safe_clipped_log')(y_hmm)
         outputs.append(y_hmm)
 
     # Project HMM output to d_model and additively fuse with the pre-HMM stream.
@@ -942,9 +954,9 @@ BACKBONE_REGISTRY = {
             "numb_pre_hmm_lstm", "numb_post_hmm_lstm",
             "numb_conv", "filter_size", "kernel_size",
             "dropout_rate", "output_size",
-            "hmm_parallel", "hmm_emitter_epsilon",
-            "hmm_initial_exon_len", "hmm_initial_intron_len",
-            "hmm_initial_ir_len",
+            "hmm_parallel", "hmm_config",
+            "hmm_embed", "hmm_embed_norm", "hmm_embed_activation",
+            "hmm_readout_type", "hmm_readout_conv_kernel",
             "aux_hmm_loss",
             "clamsa", "softmasking", "zero_init_residual",
         ],
@@ -1104,3 +1116,59 @@ def safe_clipped_log(x):
     y = safe_log(x)
     y = tf.clip_by_value(y, -30, 0)
     return y
+
+
+def add_hmm_new_layer(model,
+                      output_size: int = 15,
+                      hmm_config: dict | None = None,
+                      embed: int = 160,
+                      embed_norm: str | None = "layer",
+                      embed_activation: str | None = "softmax",
+                      readout_type: str = "conv",
+                      readout_conv_kernel: int = 9,
+                      parallel_factor: int = 125,
+                      include_lstm_in_output: bool = False):
+    """Attach the trainable HMM head (vipsania-style) to a backbone.
+
+    Unlike `add_hmm_layer`, all HMM parameters here are trainable and
+    the state topology uses an intron chain (default `intron_state_chain=2`,
+    giving 18 states), which is projected back to `output_size` classes by
+    the head's readout so the loss can stay the standard categorical CE
+    with `from_logits=True`.
+    """
+    inputs = model.input
+    x = model.output
+    x = x[0] if isinstance(x, list) else x
+
+    if x.shape[-1] > output_size:
+        if x.shape[-1] == 7:
+            x = reduce_lstm_output_7(x, new_size=output_size)
+        elif x.shape[-1] == 5:
+            x = reduce_lstm_output_5(x, new_size=output_size)
+        else:
+            raise ValueError(
+                f"Invalid combination of backbone output size ({x.shape[-1]})"
+                f" and requested output_size ({output_size})."
+            )
+
+    nuc = Cast()(inputs)  # (B, T, 5) A,C,G,T,N -- Cast already slices to [:5]
+
+    head = TrainableHMMHead(
+        hmm_config=hmm_config,
+        embed=embed,
+        embed_norm=embed_norm,
+        embed_activation=embed_activation,
+        readout_units=output_size,
+        readout_type=readout_type,
+        readout_conv_kernel=readout_conv_kernel,
+        parallel_factor=parallel_factor,
+        name="trainable_hmm_head",
+    )
+    y_hmm = head(x, nuc, training=True)
+
+    y = Reshape((-1, output_size), name="hmm_out")(y_hmm)
+
+    return Model(
+        inputs=inputs,
+        outputs=[x, y] if include_lstm_in_output else y,
+    )

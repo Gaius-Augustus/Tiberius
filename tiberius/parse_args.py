@@ -17,6 +17,9 @@ def parseCmd():
         help='')
     parser.add_argument('--hmm', action='store_true',
         help='')
+    parser.add_argument('--hmm_new', action='store_true',
+        help='Use the trainable HMM head (bricks2marble AnnotationHMM with '
+             'intron state chain, trainable emitter/transitions/start dist).')
     parser.add_argument('--clamsa', action='store_true',
         help='')
     # parser.add_argument('--nuc_trans', action='store_true',

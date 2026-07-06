@@ -30,9 +30,11 @@ from tiberius import DataGenerator
 from tiberius.models import (
     Cast,
     add_hmm_layer,
+    add_hmm_new_layer,
     build_backbone_from_config,
     custom_cce_f1_loss,
 )
+from tiberius.hmm import TrainableHMMHead
 
 # ----------------------------
 # Strategy / hardware
@@ -176,22 +178,40 @@ def ensure_dir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
 
 
+def _pick_weights_file(epoch_dir: Path) -> Path | None:
+    """Return the weights file inside an epoch directory, or None."""
+    for name in ("weights.h5", "model.weights.h5"):
+        candidate = epoch_dir / name
+        if candidate.exists():
+            return candidate
+    return None
+
+
 class EpochFolderSaver(tf.keras.callbacks.Callback):
     """
     Saves per-epoch artifacts into:
       {model_save_dir}/epoch_XX/model.weights.h5
       {model_save_dir}/epoch_XX/model_config.json
       {model_save_dir}/epoch_XX/model_layers.json
+
+    When `save_full_model=True` (used by the `hmm_new` head) the full
+    trainable model — backbone + HMM head — is saved, so training can
+    resume with the HMM parameters intact. Otherwise only the backbone
+    weights are saved (matches the frozen-HMM behaviour).
     """
     def __init__(
         self,
         model_save_dir: Path,
         backbone_model: tf.keras.Model,
         config: dict[str, Any],
+        full_model: tf.keras.Model | None = None,
+        save_full_model: bool = False,
     ):
         super().__init__()
         self.model_save_dir = model_save_dir
         self.backbone_model = backbone_model
+        self.full_model = full_model
+        self.save_full_model = save_full_model
         self.config = config
 
     def on_epoch_end(self, epoch, logs=None):
@@ -200,17 +220,21 @@ class EpochFolderSaver(tf.keras.callbacks.Callback):
         epoch_dir = self.model_save_dir / f"epoch_{epoch:02d}"
         ensure_dir(epoch_dir)
 
-        # 1) backbone weights only
+        model_to_save = (
+            self.full_model if self.save_full_model else self.backbone_model
+        )
+
+        # 1) weights (full model for trainable-HMM head, backbone otherwise)
         weights_path = epoch_dir / "model.weights.h5"
-        self.backbone_model.save_weights(str(weights_path))
+        model_to_save.save_weights(str(weights_path))
 
         # 2) config as model_config.json
         with (epoch_dir / "model_config.json").open("w", encoding="utf-8") as f:
             json.dump(self.config, f, indent=2, sort_keys=True)
 
-        # 3) backbone architecture JSON
+        # 3) architecture JSON
         with (epoch_dir / "model_layers.json").open("w", encoding="utf-8") as f:
-            f.write(self.backbone_model.to_json())
+            f.write(model_to_save.to_json())
 
 
 # ----------------------------
@@ -279,7 +303,13 @@ def load_val_data(file, hmm_factor=1, output_size=7, clamsa=False, softmasking=T
 # Model build / compile
 # ----------------------------
 
-HeadType = Literal["none", "hmm", "clamsa"]
+HeadType = Literal["none", "hmm", "hmm_new", "clamsa"]
+
+
+def _is_trainable_hmm_head(head: HeadType) -> bool:
+    """Only `hmm_new` has trainable HMM parameters that need to be
+    saved together with the backbone."""
+    return head == "hmm_new"
 
 
 def build_optimizer(config: dict[str, Any]) -> tf.keras.optimizers.Optimizer:
@@ -316,10 +346,10 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
     if config.get("output_size") == 1:
         base_loss = tf.keras.losses.BinaryCrossentropy()
 
-    if head != "hmm":
+    if head not in ("hmm", "hmm_new"):
         return base_loss, config.get("loss_weights") if config.get("loss_weights") else None
 
-    # HMM head case:
+    # HMM head case (old fixed-param HMM or new trainable HMM):
     if config.get("multi_loss", False):
         hmm_loss = custom_cce_f1_loss(
             config.get("loss_f1_factor", 0.0),
@@ -415,6 +445,23 @@ def attach_head(
         # For clamsa+hmm you previously used models.clamsa_hmm_model; here we keep head='hmm' for HMM case.
         return backbone
 
+    if head == "hmm_new":
+        for layer in backbone.layers:
+            layer.trainable = bool(config.get("trainable_lstm", True))
+        hmm_new_cfg = config.get("hmm_new_config") or {}
+        return add_hmm_new_layer(
+            backbone,
+            output_size=config["output_size"],
+            hmm_config=hmm_new_cfg,
+            embed=config.get("hmm_new_embed", 160),
+            embed_norm=config.get("hmm_new_embed_norm", "layer"),
+            embed_activation=config.get("hmm_new_embed_activation", "softmax"),
+            readout_type=config.get("hmm_new_readout_type", "conv"),
+            readout_conv_kernel=config.get("hmm_new_readout_conv_kernel", 9),
+            parallel_factor=config.get("hmm_new_parallel_factor", 125),
+            include_lstm_in_output=config.get("multi_loss", False),
+        )
+
     if head != "hmm":
         raise ValueError(f"Unknown head: {head}")
 
@@ -468,21 +515,34 @@ def train_model(
     # Detect existing epochs and pick next index; load last backbone weights if available
     next_epoch_idx, last_epoch_dir = find_resume_state(model_save_dir)
 
+    trainable_hmm = _is_trainable_hmm_head(head)
+
     with strategy.scope():
         optimizer = build_optimizer(config)
         backbone = build_backbone(config, head=head)
 
-        # Resume backbone weights if possible
-        if last_epoch_dir is not None:
-            last_weights = last_epoch_dir / "weights.h5"
-            if last_weights.exists():
-                print(f"[resume] Loading backbone weights from: {last_weights}")
-                backbone.load_weights(str(last_weights))
-            else:
-                print(f"[resume] Found last epoch dir {last_epoch_dir} but no weights.h5; starting fresh backbone.")
-
-        # Attach head (may create new model object)
-        model = attach_head(backbone, config, head=head)
+        # For the trainable-HMM head, the HMM weights are part of the saved
+        # checkpoint, so build the head first and load the full model weights
+        # on resume. For other heads keep the original behaviour: load backbone
+        # weights first, then attach the (frozen or absent) head.
+        if trainable_hmm:
+            model = attach_head(backbone, config, head=head)
+            if last_epoch_dir is not None:
+                last_weights = _pick_weights_file(last_epoch_dir)
+                if last_weights is not None:
+                    print(f"[resume] Loading full-model weights from: {last_weights}")
+                    model.load_weights(str(last_weights))
+                else:
+                    print(f"[resume] Found last epoch dir {last_epoch_dir} but no weights file; starting fresh.")
+        else:
+            if last_epoch_dir is not None:
+                last_weights = _pick_weights_file(last_epoch_dir)
+                if last_weights is not None:
+                    print(f"[resume] Loading backbone weights from: {last_weights}")
+                    backbone.load_weights(str(last_weights))
+                else:
+                    print(f"[resume] Found last epoch dir {last_epoch_dir} but no weights file; starting fresh backbone.")
+            model = attach_head(backbone, config, head=head)
 
         loss, loss_weights = build_loss_and_weights(config, head=head)
         model.compile(loss=loss, optimizer=optimizer, metrics=["accuracy"], loss_weights=loss_weights)
@@ -492,11 +552,13 @@ def train_model(
         # Logging
         csv_logger = CSVLogger(str(model_save_dir / "training.log"), append=True, separator=";")
 
-        # Save callback
+        # Save callback: full model for trainable HMM, backbone otherwise
         epoch_saver = EpochFolderSaver(
             model_save_dir=model_save_dir,
-            backbone_model=backbone,            # <- never includes HMM
+            backbone_model=backbone,
             config=config,
+            full_model=model,
+            save_full_model=trainable_hmm,
         )
 
         callbacks = [epoch_saver, csv_logger]
@@ -582,6 +644,16 @@ def main():
             "hmm_initial_exon_len": 200,
             "hmm_initial_intron_len": 4500,
             "hmm_initial_ir_len": 10000,
+            # Trainable-HMM head (activated by --hmm_new or config['head']='hmm_new').
+            # `hmm_new_config` overrides the vipsania-style default (see
+            # tiberius.hmm.default_trainable_hmm_config); leave as {} to use it.
+            "hmm_new_config": {},
+            "hmm_new_embed": 160,
+            "hmm_new_embed_norm": "layer",
+            "hmm_new_embed_activation": "softmax",
+            "hmm_new_readout_type": "conv",
+            "hmm_new_readout_conv_kernel": 9,
+            "hmm_new_parallel_factor": 125,
         }
 
     # Normalize paths / args
@@ -638,13 +710,22 @@ def main():
             oracle=config.get("oracle", False),
         )
 
-    # Decide head
+    # Decide head. CLI overrides config; config['head'] otherwise wins.
     if args.hmm:
         head: HeadType = "hmm"
+    elif getattr(args, "hmm_new", False):
+        head = "hmm_new"
     elif args.clamsa:
         head = "clamsa"
+    elif config.get("head") in ("none", "hmm", "hmm_new", "clamsa"):
+        head = config["head"]
     else:
         head = "none"
+
+    # Persist the selected head so per-epoch model_config.json records
+    # which head was trained -- required by inference to reconstruct
+    # the trainable HMM.
+    config["head"] = head
 
     train_model(
         dataset=dataset,

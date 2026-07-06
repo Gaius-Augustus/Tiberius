@@ -9,9 +9,10 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.keras as keras
 from tensorflow.keras.models import Model
-from tiberius.models import (custom_cce_f1_loss, build_backbone_from_config, Cast)
+from tiberius.models import (custom_cce_f1_loss, build_backbone_from_config, Cast,
+                             add_hmm_new_layer)
 from hidten import HMMMode
-from tiberius.hmm import HMMBlock
+from tiberius.hmm import HMMBlock, TrainableHMMHead
 import bricks2marble as b2m
 import math
 
@@ -117,7 +118,8 @@ class PredictionGTF:
                 initial_exon_len=self.hmm_initial_exon_len,
                 initial_intron_len=self.hmm_initial_intron_len,
                 initial_ir_len=self.hmm_initial_ir_len,
-            )
+            ),
+            "TrainableHMMHead": TrainableHMMHead,
             }
         if self.model_path:
             try:
@@ -140,6 +142,33 @@ class PredictionGTF:
             weights_h5  = f"{self.model_path}/weights.h5"
             if not os.path.exists(weights_h5):
                 weights_h5 = f"{self.model_path}/model.weights.h5"
+
+            # Trainable-HMM head: weights.h5 stores backbone + HMM head,
+            # so attach the head *before* loading weights, and expose the
+            # HMM layer for downstream inference.
+            if config.get("head") == "hmm_new":
+                hmm_new_cfg = config.get("hmm_new_config") or {}
+                full_model = add_hmm_new_layer(
+                    self.lstm_model,
+                    output_size=config["output_size"],
+                    hmm_config=hmm_new_cfg,
+                    embed=config.get("hmm_new_embed", 160),
+                    embed_norm=config.get("hmm_new_embed_norm", "layer"),
+                    embed_activation=config.get("hmm_new_embed_activation", "softmax"),
+                    readout_type=config.get("hmm_new_readout_type", "conv"),
+                    readout_conv_kernel=config.get("hmm_new_readout_conv_kernel", 9),
+                    parallel_factor=self.parallel_factor
+                        if self.parallel_factor
+                        else config.get("hmm_new_parallel_factor", 125),
+                )
+                full_model.load_weights(weights_h5)
+                self.trainable_hmm_head = full_model.get_layer("trainable_hmm_head")
+                self.inp_size = self.lstm_model.output_shape[-1]
+                if summary:
+                    self.lstm_model.summary()
+                    full_model.summary()
+                return
+
             self.lstm_model.load_weights(weights_h5)
 
             if self.model_path_hmm:

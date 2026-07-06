@@ -216,6 +216,8 @@ class TrainableHMMHead(tf.keras.layers.Layer):
         d_in = int(x_shape[-1])
 
         self.embed_norm_layer = self._make_norm("embed_norm", self.embed_norm)
+        if self.embed_norm_layer is not None:
+            self.embed_norm_layer.build(tuple(x_shape))
 
         if self.embed is not None:
             self.embedding_layer = tf.keras.layers.Dense(
@@ -224,10 +226,19 @@ class TrainableHMMHead(tf.keras.layers.Layer):
                 activation=self.embed_activation,
                 name="embed",
             )
+            self.embedding_layer.build(tuple(x_shape))
+            emb_dim = self.embed
         else:
             self.embedding_layer = None
+            emb_dim = d_in
 
+        # AnnotationHMM: create then explicitly build with the shape
+        # AFTER embedding, otherwise its emitter/transitioner variables
+        # (and the nested TFHMM's parameters) are never materialised when
+        # the layer is used with symbolic tensors in the functional API.
         self.hmmlayer = AnnotationHMM(**self.hmm_config)
+        hmm_input_shape = tuple(x_shape[:-1]) + (emb_dim,)
+        self.hmmlayer.build(hmm_input_shape)
 
         self.dropout_layer = (
             tf.keras.layers.Dropout(self.dropout_rate)
@@ -240,9 +251,15 @@ class TrainableHMMHead(tf.keras.layers.Layer):
         )
         self._readout_units = readout_units
 
+        # Reshaped posterior shape: (B, T, H * n_states)
+        posterior_shape = tuple(x_shape[:-1]) + (self._heads * self._n_states,)
+
         self.readout_norm_layer = self._make_norm(
             "readout_norm", self.readout_norm_name,
         )
+        if self.readout_norm_layer is not None:
+            self.readout_norm_layer.build(posterior_shape)
+
         self.pre_readout_activation = (
             tf.keras.activations.get(self.pre_readout_activation_name)
             if self.pre_readout_activation_name is not None else None
@@ -265,10 +282,8 @@ class TrainableHMMHead(tf.keras.layers.Layer):
             )
         else:
             raise ValueError(f"Unknown readout_type: {self.readout_type}")
+        self.readout_layer.build(posterior_shape)
 
-        # We do not call the sub-layers' build() explicitly; Keras will
-        # build them lazily on the first forward pass. `super().build` at
-        # the end so that the base Layer marks this layer as built.
         super().build(input_shape)
 
     def call(self, x, nuc, training: bool = False):

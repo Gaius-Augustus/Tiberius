@@ -531,7 +531,20 @@ def train_model(
                 last_weights = _pick_weights_file(last_epoch_dir)
                 if last_weights is not None:
                     print(f"[resume] Loading full-model weights from: {last_weights}")
-                    model.load_weights(str(last_weights))
+                    try:
+                        model.load_weights(str(last_weights))
+                    except ValueError as e:
+                        # Checkpoint predates the HMM head (e.g. resuming
+                        # from an LSTM-only backbone). Retry non-strict so
+                        # the backbone loads and the HMM keeps its init.
+                        print(
+                            f"[resume] Strict load failed ({e.__class__.__name__});"
+                            " retrying with skip_mismatch=True."
+                            " HMM head will start from its fresh initialisation."
+                        )
+                        model.load_weights(
+                            str(last_weights), skip_mismatch=True,
+                        )
                 else:
                     print(f"[resume] Found last epoch dir {last_epoch_dir} but no weights file; starting fresh.")
         else:

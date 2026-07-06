@@ -34,7 +34,7 @@ from tiberius.models import (
     build_backbone_from_config,
     custom_cce_f1_loss,
 )
-from tiberius.hmm import TrainableHMMHead
+from tiberius.hmm import TrainableHMMHead, sanitize_parallel_factor
 
 # ----------------------------
 # Strategy / hardware
@@ -726,6 +726,23 @@ def main():
     # which head was trained -- required by inference to reconstruct
     # the trainable HMM.
     config["head"] = head
+
+    # HMM parallel_factor must divide the training sequence length,
+    # otherwise the internal parallel-scan reshape fails. Auto-correct
+    # to the closest divisor of w_size and print a warning if we do.
+    seq_len_for_hmm = config.get("w_size")
+    if head == "hmm_new":
+        config["hmm_new_parallel_factor"] = sanitize_parallel_factor(
+            config.get("hmm_new_parallel_factor", 125),
+            seq_len_for_hmm,
+            name="hmm_new_parallel_factor",
+        )
+    if config.get("arch") == "hmm_middle_residual_stream":
+        config["hmm_parallel"] = sanitize_parallel_factor(
+            config.get("hmm_parallel", 9),
+            seq_len_for_hmm,
+            name="hmm_parallel",
+        )
 
     train_model(
         dataset=dataset,

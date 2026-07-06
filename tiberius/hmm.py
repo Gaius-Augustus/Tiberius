@@ -1,8 +1,43 @@
 import copy
+import math
 
 import tensorflow as tf
 from bricks2marble.tf import AnnotationHMM
 from hidten import HMMMode
+
+
+def compute_parallel_factor(seq_len: int) -> int:
+    """Return a divisor of `seq_len` closest to sqrt(seq_len).
+
+    The HMM's parallel scan requires `seq_len % parallel_factor == 0`;
+    this picks a value that both satisfies the constraint and minimises
+    the size of the intermediate reshaped tensor
+    (seq_len // parallel_factor).
+    """
+    sqrt_n = int(math.sqrt(seq_len))
+    for i in range(0, seq_len - sqrt_n + 1):
+        if seq_len % (sqrt_n - i) == 0:
+            return sqrt_n - i
+        if seq_len % (sqrt_n + i) == 0:
+            return sqrt_n + i
+    return sqrt_n
+
+
+def sanitize_parallel_factor(
+    requested: int, seq_len: int, name: str = "parallel_factor",
+) -> int:
+    """If `requested` doesn't divide `seq_len`, return a nearby divisor
+    and print a warning. Otherwise return `requested` unchanged."""
+    if seq_len is None or seq_len <= 0 or requested <= 0:
+        return requested
+    if seq_len % requested == 0:
+        return requested
+    adjusted = compute_parallel_factor(seq_len)
+    print(
+        f"[hmm] {name}={requested} does not divide seq_len={seq_len}; "
+        f"using {adjusted} instead (closest divisor to sqrt(seq_len))."
+    )
+    return adjusted
 
 
 class HMMBlock(AnnotationHMM):

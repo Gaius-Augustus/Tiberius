@@ -74,7 +74,14 @@ class BatchSave(tf.keras.callbacks.Callback):
                 self.model.save(self.save_path.format(self.prev_batch_numb) +".keras")
 
 def custom_cce_f1_loss(f1_factor, batch_size,
-                    include_reading_frame=True, use_cce=True, from_logits=False):
+                    include_reading_frame=True, use_cce=True, from_logits=False,
+                    exon_count_factor=0.0):
+    # 15-class label layout (see gene_pred_hmm_emitter.py):
+    # (Ir, I0, I1, I2, E0, E1, E2, START, EI0, EI1, EI2, IE0, IE1, IE2, STOP)
+    # Exon starts = START (ch 7) for the first exon + IE0/IE1/IE2 (ch 11-13)
+    # for internal/terminal exons. Used by the soft exon-count penalty.
+    exon_start_channels = [7, 11, 12, 13]
+
     @tf.function
     def loss_(y_true, y_pred):
         y_true = tf.cast(y_true, y_pred.dtype)
@@ -120,8 +127,24 @@ def custom_cce_f1_loss(f1_factor, batch_size,
         L = tf.cast(tf.shape(cds_pred)[1], cds_pred.dtype)
         fpr = tf.reduce_sum(cds_pred * (1-any_positives)[:,tf.newaxis]) / (L * batch_size)
 
-        # Combine CCE loss and F1 score
-        combined_loss = cce_loss + f1_factor * (f1_loss + fpr)
+        # Soft exon-count penalty: L1 between the number of true exon-start
+        # positions in the window and the summed predicted probability mass on
+        # the exon-start channels. Only defined for the 15-class label space,
+        # where exon-start markers exist as separate channels.
+        n_classes = y_true.shape[-1]
+        if exon_count_factor > 0 and n_classes == 15:
+            starts_pred = tf.reduce_sum(
+                tf.gather(y_pred, exon_start_channels, axis=-1), axis=-1)
+            starts_true = tf.reduce_sum(
+                tf.gather(y_true, exon_start_channels, axis=-1), axis=-1)
+            count_pred = tf.reduce_sum(starts_pred, axis=1)
+            count_true = tf.reduce_sum(starts_true, axis=1)
+            exon_count_loss = tf.reduce_sum(tf.abs(count_pred - count_true)) / batch_size
+        else:
+            exon_count_loss = tf.cast(0.0, cce_loss.dtype if use_cce else f1_loss.dtype)
+
+        # Combine CCE loss, F1 score and soft exon-count penalty
+        combined_loss = cce_loss + f1_factor * (f1_loss + fpr) + exon_count_factor * exon_count_loss
         return combined_loss
     return loss_
 
@@ -1127,6 +1150,7 @@ def add_hmm_new_layer(model,
                       readout_type: str = "conv",
                       readout_conv_kernel: int = 9,
                       parallel_factor: int = 125,
+                      residual_from_input: bool = True,
                       include_lstm_in_output: bool = False):
     """Attach the trainable HMM head (vipsania-style) to a backbone.
 
@@ -1162,6 +1186,7 @@ def add_hmm_new_layer(model,
         readout_type=readout_type,
         readout_conv_kernel=readout_conv_kernel,
         parallel_factor=parallel_factor,
+        residual_from_input=residual_from_input,
         name="trainable_hmm_head",
     )
     y_hmm = head(x, nuc, training=True)

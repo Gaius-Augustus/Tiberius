@@ -167,6 +167,7 @@ class TrainableHMMHead(tf.keras.layers.Layer):
         pre_readout_activation: str | None = None,
         readout_activation: str | None = None,
         parallel_factor: int = 1,
+        residual_from_input: bool = True,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -189,6 +190,12 @@ class TrainableHMMHead(tf.keras.layers.Layer):
         self.pre_readout_activation_name = pre_readout_activation
         self.readout_activation_name = readout_activation
         self.parallel_factor = parallel_factor
+        # When True, the readout kernel is zero-init and the layer emits
+        #   y = readout(hmm_posterior) + safe_log(x)
+        # so at step 0 softmax(y) equals the input distribution x. This
+        # lets training from a pretrained backbone pick up right where
+        # the backbone left off. Requires x.shape[-1] == readout_units.
+        self.residual_from_input = residual_from_input
 
         self._n_states = (
             12 + 3 * self.hmm_config["intron_state_chain"]
@@ -264,11 +271,15 @@ class TrainableHMMHead(tf.keras.layers.Layer):
             tf.keras.activations.get(self.pre_readout_activation_name)
             if self.pre_readout_activation_name is not None else None
         )
+        readout_kernel_init = (
+            "zeros" if self.residual_from_input else "glorot_uniform"
+        )
         if self.readout_type == "dense":
             self.readout_layer = tf.keras.layers.Dense(
                 readout_units,
                 use_bias=self.readout_bias,
                 activation=self.readout_activation_name,
+                kernel_initializer=readout_kernel_init,
                 name="readout",
             )
         elif self.readout_type == "conv":
@@ -278,11 +289,20 @@ class TrainableHMMHead(tf.keras.layers.Layer):
                 padding="same",
                 use_bias=self.readout_bias,
                 activation=self.readout_activation_name,
+                kernel_initializer=readout_kernel_init,
                 name="readout",
             )
         else:
             raise ValueError(f"Unknown readout_type: {self.readout_type}")
         self.readout_layer.build(posterior_shape)
+
+        if self.residual_from_input:
+            if int(x_shape[-1]) != readout_units:
+                raise ValueError(
+                    f"residual_from_input=True requires input dim "
+                    f"({int(x_shape[-1])}) to match readout_units "
+                    f"({readout_units})."
+                )
 
         super().build(input_shape)
 
@@ -311,6 +331,11 @@ class TrainableHMMHead(tf.keras.layers.Layer):
         if self.pre_readout_activation is not None:
             y = self.pre_readout_activation(y)
         y = self.readout_layer(y)
+        if self.residual_from_input:
+            # Add safe_log(x) so softmax(y) = x at step 0 (zero-init readout).
+            log_x = tf.math.log(tf.maximum(x, 1e-13))
+            log_x = tf.clip_by_value(log_x, -30.0, 0.0)
+            y = y + log_x
         return y
 
     def compute_output_shape(self, input_shape):
@@ -342,5 +367,6 @@ class TrainableHMMHead(tf.keras.layers.Layer):
             "pre_readout_activation": self.pre_readout_activation_name,
             "readout_activation": self.readout_activation_name,
             "parallel_factor": self.parallel_factor,
+            "residual_from_input": self.residual_from_input,
         })
         return base

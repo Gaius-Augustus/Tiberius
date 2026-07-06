@@ -337,9 +337,15 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
       - for HMM with multi_loss: [lstm_loss, hmm_loss], weights=[1, hmm_mul]
       - otherwise: use from_logits=True loss for HMM output
     """
+    exon_count_factor = config.get("loss_exon_count_factor", 0.0)
+
     # Base loss (for non-HMM outputs or LSTM output in multi-loss)
     if config.get("loss_f1_factor"):
-        base_loss = custom_cce_f1_loss(config["loss_f1_factor"], batch_size=config["batch_size"])
+        base_loss = custom_cce_f1_loss(
+            config["loss_f1_factor"],
+            batch_size=config["batch_size"],
+            exon_count_factor=exon_count_factor,
+        )
     else:
         base_loss = tf.keras.losses.CategoricalCrossentropy()
 
@@ -355,6 +361,7 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
             config.get("loss_f1_factor", 0.0),
             batch_size=config["batch_size"],
             from_logits=True,
+            exon_count_factor=exon_count_factor,
         )
         return [base_loss, hmm_loss], [1, config.get("hmm_loss_weight_mul", 0.1)]
 
@@ -363,6 +370,7 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
         config.get("loss_f1_factor", 0.0),
         batch_size=config["batch_size"],
         from_logits=True,
+        exon_count_factor=exon_count_factor,
     )
     return hmm_only_loss, None
 
@@ -459,6 +467,7 @@ def attach_head(
             readout_type=config.get("hmm_new_readout_type", "conv"),
             readout_conv_kernel=config.get("hmm_new_readout_conv_kernel", 9),
             parallel_factor=config.get("hmm_new_parallel_factor", 125),
+            residual_from_input=config.get("hmm_new_residual", True),
             include_lstm_in_output=config.get("multi_loss", False),
         )
 
@@ -650,6 +659,7 @@ def main():
             "clamsa_emb_size": 32,
             "clamsa_with_lstm": True,
             "loss_f1_factor": 2.0,
+            "loss_exon_count_factor": 0.0,
             "sgd": False,
             "oracle": False,
             "lru_layer": False,
@@ -667,6 +677,10 @@ def main():
             "hmm_new_readout_type": "conv",
             "hmm_new_readout_conv_kernel": 9,
             "hmm_new_parallel_factor": 125,
+            # When True (default), the trainable HMM head starts as an
+            # identity residual on the backbone: y = readout(hmm) + log(x)
+            # with zero-init readout, so softmax(y)==x at step 0.
+            "hmm_new_residual": True,
         }
 
     # Normalize paths / args

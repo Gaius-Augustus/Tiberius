@@ -160,6 +160,7 @@ class PredictionGTF:
                     parallel_factor=self.parallel_factor
                         if self.parallel_factor
                         else config.get("hmm_new_parallel_factor", 125),
+                    residual_from_input=config.get("hmm_new_residual", True),
                 )
                 full_model.load_weights(weights_h5)
                 self.trainable_hmm_head = full_model.get_layer("trainable_hmm_head")
@@ -484,14 +485,28 @@ class PredictionGTF:
         Returns:
             tf.Tensor: The predicted state sequence tensor after applying Viterbi decoding.
         """
+        # Prefer the trainable HMM head when it exists (hmm_new checkpoint).
+        # It already produces final logits (with an optional log-input
+        # residual internally), so we softmax to return probabilities
+        # in the same shape as the old HMM's output.
+        use_trainable = getattr(self, "trainable_hmm_head", None) is not None
+
         if self.lstm_model and self.hmm:
             nuc = Cast()(x)
             if y_lstm.ndim == 2:
                 y_lstm = y_lstm[np.newaxis, :, :]
-            y_vit = self.gene_pred_hmm_layer(y_lstm, nuc)
+            if use_trainable:
+                y_vit = self.trainable_hmm_head(y_lstm, nuc, training=False)
+                y_vit = tf.nn.softmax(y_vit, axis=-1)
+            else:
+                y_vit = self.gene_pred_hmm_layer(y_lstm, nuc)
         else:
             nuc = tf.cast(x[:,:,:5], tf.float32)
-            y_vit = self.gene_pred_hmm_layer(y_lstm, nuc)
+            if use_trainable:
+                y_vit = self.trainable_hmm_head(y_lstm, nuc, training=False)
+                y_vit = tf.nn.softmax(y_vit, axis=-1)
+            else:
+                y_vit = self.gene_pred_hmm_layer(y_lstm, nuc)
         return y_vit
 
 

@@ -148,6 +148,16 @@ class PredictionGTF:
             # HMM layer for downstream inference.
             if config.get("head") == "hmm_new":
                 hmm_new_cfg = config.get("hmm_new_config") or {}
+                # Pick a parallel_factor tuned to the inference sequence
+                # length rather than reusing the training default: at T=500k
+                # a factor of 1 makes the scan tree ~19 levels deep and
+                # blows up memory. compute_parallel_factor gives the
+                # closest divisor to sqrt(seq_len).
+                if self.parallel_factor and self.parallel_factor > 1:
+                    inference_parallel = self.parallel_factor
+                else:
+                    inference_parallel = compute_parallel_factor(self.seq_len)
+                    self.parallel_factor = inference_parallel
                 full_model = add_hmm_new_layer(
                     self.lstm_model,
                     output_size=config["output_size"],
@@ -157,9 +167,7 @@ class PredictionGTF:
                     embed_activation=config.get("hmm_new_embed_activation", "softmax"),
                     readout_type=config.get("hmm_new_readout_type", "conv"),
                     readout_conv_kernel=config.get("hmm_new_readout_conv_kernel", 9),
-                    parallel_factor=self.parallel_factor
-                        if self.parallel_factor
-                        else config.get("hmm_new_parallel_factor", 125),
+                    parallel_factor=inference_parallel,
                     residual_from_input=config.get("hmm_new_residual", True),
                 )
                 full_model.load_weights(weights_h5)
@@ -236,7 +244,13 @@ class PredictionGTF:
         self.adapted_batch_size = 2**int(np.log2(self.adapted_batch_size))
         if self.adapted_batch_size != old_adapted_batch_size:
             self.parallel_factor = compute_parallel_factor(adapted_chunksize)
-            self.make_default_hmm(self.inp_size)
+            # Trainable HMM head (hmm_new): update in-place so its scan
+            # tree matches the current chunksize. For old checkpoints
+            # without this head, fall through to make_default_hmm.
+            if getattr(self, "trainable_hmm_head", None) is not None:
+                self.trainable_hmm_head.parallel_factor = self.parallel_factor
+            else:
+                self.make_default_hmm(self.inp_size)
 
 
     def load_clamsa_data(self, clamsa_prefix, seq_names, strand='', chunk_len=None, pad=False):

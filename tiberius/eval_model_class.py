@@ -98,6 +98,14 @@ class PredictionGTF:
         self.parallel_factor = parallel_factor
         self.lstm_model = None
         self.inp_size = 15
+        # Optional cache of the last preHMM (LSTM) softmax output, populated
+        # inside predict_function when cache_softmax=True. Holds one entry per
+        # group as processed by bricks2marble.tools.annotate.annotate_genome,
+        # so downstream postprocess sees exactly the softmax that produced the
+        # HMM labels for the group it is called on.
+        self.cache_softmax = False
+        self.last_softmax_fwd: np.ndarray | None = None
+        self.last_softmax_bwd: np.ndarray | None = None
 
 
     def load_model(self, summary=True):
@@ -307,6 +315,14 @@ class PredictionGTF:
         )
 
         hmm_out_bwd = hmm_out_bwd[:,::-1]
+
+        if self.cache_softmax:
+            # bwd lstm was computed on reverse-complemented chunks that were
+            # additionally flipped along the time axis; flip back so both
+            # arrays are indexed in forward-strand coordinates.
+            self.last_softmax_fwd = np.asarray(lstm_out_fwd)
+            self.last_softmax_bwd = np.asarray(lstm_out_bwd)[:, ::-1, :]
+
         return hmm_out_fwd, hmm_out_bwd
 
     def repredict_function(
@@ -476,10 +492,17 @@ class PredictionGTF:
         for i in range(num_batches):
             start_pos = i * batch_size
             end_pos = (i+1) * batch_size
-            y_hmm = self.predict_vit(nuc_seq[start_pos:end_pos],
-                lstm_predictions[start_pos:end_pos]).numpy().squeeze()
-            if len(y_hmm.shape) == 1:
-                y_hmm = np.expand_dims(y_hmm,0)
+            # The old HMM's Viterbi returns per-position labels (B, T);
+            # the trainable head returns per-position probabilities
+            # (B, T, C). `.squeeze()` on a batch-1 result drops the leading
+            # dim in both cases -- restore it so all chunks share the same
+            # ndim before concatenation.
+            raw = self.predict_vit(nuc_seq[start_pos:end_pos],
+                lstm_predictions[start_pos:end_pos]).numpy()
+            expected_ndim = raw.ndim
+            y_hmm = raw.squeeze()
+            while y_hmm.ndim < expected_ndim:
+                y_hmm = np.expand_dims(y_hmm, 0)
             hmm_predictions.append(y_hmm)
         hmm_predictions = np.concatenate(hmm_predictions, axis=0)
         return hmm_predictions

@@ -428,6 +428,25 @@ def run_tiberius(args):
     if args.protseq:
         open(args.protseq, "w").close()
 
+    from tiberius import prehmm_probs
+
+    want_cds_probs = bool(args.cds_probs)
+    want_bigwig = bool(args.bigwig_out)
+    pred_gtf.cache_softmax = want_cds_probs or want_bigwig
+
+    cds_probs_path = (
+        prehmm_probs.init_cds_probs_tsv(gtf_out) if want_cds_probs else None
+    )
+
+    bw_writers = None
+    bw_seq_filter = None
+    if want_bigwig:
+        bw_seq_filter = prehmm_probs.parse_seq_filter(args.bigwig_seqs)
+        seq_lengths = prehmm_probs.sequence_lengths_from_fasta(genome_path)
+        bw_writers = prehmm_probs.open_bigwig_writers(
+            args.bigwig_out, seq_lengths, bw_seq_filter,
+        )
+
     def postprocess(fasta: b2m.struct.Fasta, \
                 annot: b2m.struct.Annotation) -> b2m.struct.Annotation:
 
@@ -441,6 +460,41 @@ def run_tiberius(args):
             annot.sequence_to_file(target="coding", fasta=fasta, path=args.codingseq, mode="a")
         if args.protseq:
             annot.sequence_to_file(target="protein", fasta=fasta, path=args.protseq, mode="a")
+
+        if pred_gtf.cache_softmax and pred_gtf.last_softmax_fwd is not None:
+            sm_fwd_all = pred_gtf.last_softmax_fwd
+            sm_bwd_all = pred_gtf.last_softmax_bwd
+            softmax_by_seq: dict[str, tuple] = {}
+            shift = 0
+            for seq in fasta:
+                sm_fwd = prehmm_probs._softmax_for_sequence(
+                    sm_fwd_all, shift, seq.N, seq.size,
+                )
+                sm_bwd = None
+                if sm_bwd_all is not None:
+                    sm_bwd = prehmm_probs._softmax_for_sequence(
+                        sm_bwd_all, shift, seq.N, seq.size,
+                    )
+                softmax_by_seq[seq.name] = (sm_fwd, sm_bwd)
+
+                if want_bigwig and (
+                    bw_seq_filter is None or seq.name in bw_seq_filter
+                ):
+                    tracks = prehmm_probs.compute_class_group_tracks(
+                        sm_fwd, sm_bwd,
+                    )
+                    prehmm_probs.write_bigwig_sequence(
+                        bw_writers, seq.name, tracks,
+                    )
+                shift += seq.N
+
+            if want_cds_probs:
+                prehmm_probs.append_cds_probs_for_annotation(
+                    cds_probs_path, annot, softmax_by_seq,
+                )
+
+            pred_gtf.last_softmax_fwd = None
+            pred_gtf.last_softmax_bwd = None
         return annot
 
     clamsa=None
@@ -448,23 +502,27 @@ def run_tiberius(args):
         clamsa = pred_gtf.load_clamsa_data(clamsa_prefix=clamsa_prefix, seq_names=seq,
                             strand="+", chunk_len=seq_len, pad=True)
 
-    b2m.tools.annotate.annotate_genome(
-        fasta = Path(genome_path).expanduser(),
-        predict_func = predict_fun,
-        output = gtf_out,
-        allow_extract_gz = True,
-        T_max = seq_len,
-        T_delta = 0.1,
-        T_factors = [2, 9, parallel_factor],
-        model_name = "Tiberius",
-        min_sequence_size = min_seq_len,
-        reprediction_factor= 0.5,
-        postprocess = postprocess,
-        repredict_func = repred_fun,
-        concat_strand_to_reprediction=True,
-        log_config=log_config,
-        group_size_limit=args.group_size_limit
-    )
+    try:
+        b2m.tools.annotate.annotate_genome(
+            fasta = Path(genome_path).expanduser(),
+            predict_func = predict_fun,
+            output = gtf_out,
+            allow_extract_gz = True,
+            T_max = seq_len,
+            T_delta = 0.1,
+            T_factors = [2, 9, parallel_factor],
+            model_name = "Tiberius",
+            min_sequence_size = min_seq_len,
+            reprediction_factor= 0.5,
+            postprocess = postprocess,
+            repredict_func = repred_fun,
+            concat_strand_to_reprediction=True,
+            log_config=log_config,
+            group_size_limit=args.group_size_limit
+        )
+    finally:
+        if bw_writers is not None:
+            prehmm_probs.close_bigwig_writers(bw_writers)
 
     end_time = time.time()
     duration = end_time - start_time

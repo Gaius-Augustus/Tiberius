@@ -76,6 +76,16 @@ def parseCmd():
         help='Number of sub-sequences per batch.')
     tiberius_grp.add_argument('--id_prefix', type=str, default='',
         help='Prefix for gene and transcript IDs in output GTF file.')
+    tiberius_grp.add_argument('--cds_probs', action='store_true',
+        help='Write per-CDS min/max/mean of the summed preHMM CDS-class probability '
+             '(classes 4..14) to a sidecar TSV next to --out (<out>.cds_probs.tsv).')
+    tiberius_grp.add_argument('--bigwig_out', type=str, default='',
+        help='If set, write three BigWig files of preHMM class-group probabilities: '
+             '<prefix>.cds.bw (sum of classes 4..14), <prefix>.intron.bw (sum of 1..3) '
+             'and <prefix>.ir.bw (class 0). Requires pyBigWig.')
+    tiberius_grp.add_argument('--bigwig_seqs', type=str, default='',
+        help='Optional comma-separated list of sequence names to include in the BigWig '
+             'output. Default: all sequences.')
     tiberius_grp.add_argument('--min_genome_seqlen', type=int, default=1000,
         help='Minimum length of input sequences used for predictions.')
     tiberius_grp.add_argument('--singularity', action='store_true',

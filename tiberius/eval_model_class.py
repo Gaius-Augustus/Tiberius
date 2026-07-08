@@ -492,17 +492,20 @@ class PredictionGTF:
         for i in range(num_batches):
             start_pos = i * batch_size
             end_pos = (i+1) * batch_size
-            # The old HMM's Viterbi returns per-position labels (B, T);
-            # the trainable head returns per-position probabilities
-            # (B, T, C). `.squeeze()` on a batch-1 result drops the leading
-            # dim in both cases -- restore it so all chunks share the same
-            # ndim before concatenation.
             raw = self.predict_vit(nuc_seq[start_pos:end_pos],
                 lstm_predictions[start_pos:end_pos]).numpy()
-            expected_ndim = raw.ndim
-            y_hmm = raw.squeeze()
-            while y_hmm.ndim < expected_ndim:
-                y_hmm = np.expand_dims(y_hmm, 0)
+            if getattr(self, "trainable_hmm_head", None) is not None:
+                # Trainable head: (B, T, C) class probabilities. Preserve
+                # the leading batch dim (never squeeze) so batch-1 chunks
+                # concat cleanly with batch-N ones.
+                y_hmm = raw if raw.ndim == 3 else np.expand_dims(raw, 0)
+            else:
+                # Old HMM path: preserve original squeeze-then-1D-expand
+                # behaviour so any shape convention the old layer relied
+                # on stays intact.
+                y_hmm = raw.squeeze()
+                if len(y_hmm.shape) == 1:
+                    y_hmm = np.expand_dims(y_hmm, 0)
             hmm_predictions.append(y_hmm)
         hmm_predictions = np.concatenate(hmm_predictions, axis=0)
         return hmm_predictions

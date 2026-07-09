@@ -1,9 +1,33 @@
 import copy
 import math
 
+import numpy as np
 import tensorflow as tf
 from bricks2marble.tf import AnnotationHMM
 from hidten import HMMMode
+
+
+def fix_intron_state_chain_labels(a: np.ndarray, isc: int) -> np.ndarray:
+    """Fold an intron-chain Viterbi label sequence down to the base
+    Tiberius 15-class layout.
+
+    Copied verbatim from vipsania/annotate.py._fix_intron_state_chain_labels.
+    The AnnotationHMM state topology is:
+        0                : IR
+        1..3*isc         : intron chain (frames F0,F1,F2 * isc positions)
+        3*isc+1..3*isc+3 : exon E0,E1,E2
+        3*isc+4          : START
+        3*isc+5..3*isc+7 : exon-before-intron EI0,EI1,EI2
+        3*isc+8..3*isc+10: intron-before-exon IE0,IE1,IE2
+        3*isc+11         : STOP
+
+    After folding, the label space matches Tiberius's 15 classes:
+        (IR, I0, I1, I2, E0, E1, E2, START, EI0, EI1, EI2, IE0, IE1, IE2, STOP).
+    """
+    mask = np.logical_and(0 < a, a <= 3 * isc)
+    a[mask] = ((a[mask] - 1) // isc) + 1
+    a[a > 3 * isc] = a[a > 3 * isc] - 3 * (isc - 1)
+    return a
 
 
 def compute_parallel_factor(seq_len: int) -> int:
@@ -197,10 +221,24 @@ class TrainableHMMHead(tf.keras.layers.Layer):
         # the backbone left off. Requires x.shape[-1] == readout_units.
         self.residual_from_input = residual_from_input
 
+        # Runtime HMM mode. Training defaults to POSTERIOR (soft, run
+        # through the readout for loss). Inference callers should flip
+        # this to VITERBI via `set_mode()`; in that case call() bypasses
+        # the readout/residual and returns integer state labels shape
+        # (B, T, H) -- matching vipsania's inference contract.
+        self._mode = HMMMode.POSTERIOR
+
         self._n_states = (
             12 + 3 * self.hmm_config["intron_state_chain"]
         )
         self._heads = self.hmm_config["heads"]
+
+    def set_mode(self, mode: "HMMMode") -> None:
+        self._mode = mode
+
+    @property
+    def intron_state_chain(self) -> int:
+        return int(self.hmm_config["intron_state_chain"])
 
     def _make_norm(self, name: str, kind: str | None):
         if kind is None:
@@ -313,16 +351,24 @@ class TrainableHMMHead(tf.keras.layers.Layer):
         if self.embedding_layer is not None:
             h = self.embedding_layer(h)
 
-        posterior = self.hmmlayer(
+        result = self.hmmlayer(
             h,
             nuc,
-            mode=HMMMode.POSTERIOR,
+            mode=self._mode,
             parallel=self.parallel_factor,
             training=training,
         )
+
+        # Inference (VITERBI / MEA / POSTERIOR_SAMPLE) returns integer
+        # state labels shape (B, T, H); skip the readout entirely, both
+        # because it's undefined on integer labels and to keep the
+        # returned tensor small enough for whole-genome accumulation.
+        if self._mode != HMMMode.POSTERIOR:
+            return result
+
         # posterior: (B, T, H, n_states)
-        shp = tf.shape(posterior)
-        y = tf.reshape(posterior, (shp[0], shp[1], shp[2] * shp[3]))
+        shp = tf.shape(result)
+        y = tf.reshape(result, (shp[0], shp[1], shp[2] * shp[3]))
 
         if self.dropout_layer is not None:
             y = self.dropout_layer(y, training=training)

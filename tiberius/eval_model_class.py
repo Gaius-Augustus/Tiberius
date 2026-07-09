@@ -12,7 +12,7 @@ from tensorflow.keras.models import Model
 from tiberius.models import (custom_cce_f1_loss, build_backbone_from_config, Cast,
                              add_hmm_new_layer)
 from hidten import HMMMode
-from tiberius.hmm import HMMBlock, TrainableHMMHead
+from tiberius.hmm import HMMBlock, TrainableHMMHead, fix_intron_state_chain_labels
 import bricks2marble as b2m
 import math
 
@@ -180,6 +180,12 @@ class PredictionGTF:
                 )
                 full_model.load_weights(weights_h5)
                 self.trainable_hmm_head = full_model.get_layer("trainable_hmm_head")
+                # Follow vipsania's inference contract: flip the HMM into
+                # VITERBI mode so it returns integer state labels
+                # (B, T, H) instead of a (B, T, H*S) posterior we then
+                # softmax over 15 classes. Saves ~15x memory downstream.
+                self.trainable_hmm_head.set_mode(HMMMode.VITERBI)
+                self._trainable_hmm_isc = self.trainable_hmm_head.intron_state_chain
                 self.inp_size = self.lstm_model.output_shape[-1]
                 if summary:
                     self.lstm_model.summary()
@@ -492,22 +498,20 @@ class PredictionGTF:
         for i in range(num_batches):
             start_pos = i * batch_size
             end_pos = (i+1) * batch_size
-            raw = self.predict_vit(nuc_seq[start_pos:end_pos],
-                lstm_predictions[start_pos:end_pos]).numpy()
-            if getattr(self, "trainable_hmm_head", None) is not None:
-                # Trainable head: (B, T, C) class probabilities. Preserve
-                # the leading batch dim (never squeeze) so batch-1 chunks
-                # concat cleanly with batch-N ones.
-                y_hmm = raw if raw.ndim == 3 else np.expand_dims(raw, 0)
-            else:
-                # Old HMM path: preserve original squeeze-then-1D-expand
-                # behaviour so any shape convention the old layer relied
-                # on stays intact.
-                y_hmm = raw.squeeze()
-                if len(y_hmm.shape) == 1:
-                    y_hmm = np.expand_dims(y_hmm, 0)
+            y_hmm = self.predict_vit(nuc_seq[start_pos:end_pos],
+                lstm_predictions[start_pos:end_pos]).numpy().squeeze()
+            if len(y_hmm.shape) == 1:
+                y_hmm = np.expand_dims(y_hmm, 0)
             hmm_predictions.append(y_hmm)
         hmm_predictions = np.concatenate(hmm_predictions, axis=0)
+        # Fold intron-chain labels back to the base 15-class Tiberius
+        # layout when running the trainable head with intron_state_chain>1.
+        # (See vipsania.annotate._fix_intron_state_chain_labels.)
+        isc = getattr(self, "_trainable_hmm_isc", 1)
+        if isc and isc > 1:
+            hmm_predictions = fix_intron_state_chain_labels(
+                hmm_predictions, isc,
+            )
         return hmm_predictions
 
 
@@ -525,11 +529,13 @@ class PredictionGTF:
         Returns:
             tf.Tensor: The predicted state sequence tensor after applying Viterbi decoding.
         """
-        # Prefer the trainable HMM head when it exists (hmm_new checkpoint).
-        # The head returns per-position logits (B, T, C); take argmax so
-        # the return shape/dtype matches the old HMM's Viterbi output
-        # (B, T) int -- otherwise whole-genome inference accumulates
-        # C-times more memory downstream and OOMs.
+        # Prefer the trainable HMM head when it exists (hmm_new
+        # checkpoint). In VITERBI mode (set at load time), the head
+        # returns integer state labels of shape (B, T, H); we take the
+        # first head so the shape matches the old HMM's (B, T) output.
+        # The intron-chain fold to Tiberius's 15-class layout happens
+        # on the numpy side in hmm_prediction so the fix runs after the
+        # @tf.function trace, matching vipsania's approach.
         use_trainable = getattr(self, "trainable_hmm_head", None) is not None
 
         if self.lstm_model and self.hmm:
@@ -537,15 +543,15 @@ class PredictionGTF:
             if y_lstm.ndim == 2:
                 y_lstm = y_lstm[np.newaxis, :, :]
             if use_trainable:
-                logits = self.trainable_hmm_head(y_lstm, nuc, training=False)
-                y_vit = tf.cast(tf.argmax(logits, axis=-1), tf.int32)
+                labels = self.trainable_hmm_head(y_lstm, nuc, training=False)
+                y_vit = tf.cast(labels[..., 0], tf.int32)
             else:
                 y_vit = self.gene_pred_hmm_layer(y_lstm, nuc)
         else:
             nuc = tf.cast(x[:,:,:5], tf.float32)
             if use_trainable:
-                logits = self.trainable_hmm_head(y_lstm, nuc, training=False)
-                y_vit = tf.cast(tf.argmax(logits, axis=-1), tf.int32)
+                labels = self.trainable_hmm_head(y_lstm, nuc, training=False)
+                y_vit = tf.cast(labels[..., 0], tf.int32)
             else:
                 y_vit = self.gene_pred_hmm_layer(y_lstm, nuc)
         return y_vit

@@ -8,7 +8,8 @@ from tensorflow.keras.layers import (Conv1D, LSTM,
 from tensorflow import keras
 from tensorflow.keras import backend as K
 from tiberius.hmm import HMMBlock, TrainableHMMHead, default_trainable_hmm_config
-from tiberius.mixers import DiagonalSSMBlock, SlidingWindowAttentionBlock
+from tiberius.mixers import (DiagonalSSMBlock, SlidingWindowAttentionBlock,
+                              BorderGatedSelfAttention)
 from hidten import HMMMode
 
 class Cast(tf.keras.layers.Layer):
@@ -287,6 +288,152 @@ def lstm_model(units=372, filter_size=128,
     outputs.append(y_end)
 
     return Model(inputs=inp, outputs=outputs)
+
+
+def border_gated_attn_lstm_model(units=372, filter_size=128,
+                                  kernel_size=9, numb_conv=3,
+                                  numb_lstm=2, dropout_rate=0.0,
+                                  pool_size=9, output_size=15,
+                                  clamsa=False, softmasking=True,
+                                  num_heads=8, attn_dropout=0.0,
+                                  attn_position='between',
+                                  border_aux_output=False,
+                                  attn_zero_init=True):
+    """
+    CNN + biLSTM backbone (same structure as `lstm_model`) with a
+    `BorderGatedSelfAttention` block inserted at pooled resolution.
+
+    The attention block is a global multi-head self-attention whose KEY
+    logits are biased by a per-position "exon-border" score predicted by a
+    tiny internal head. High-scoring positions become message-passing hubs
+    that every query attends to; the border head is learned end-to-end
+    from the main loss (optionally with an auxiliary supervision output).
+
+    Placement is controlled by `attn_position`:
+        'between'     -- one block between the two biLSTMs (default, cheap).
+        'before_each' -- one block before every biLSTM (2x on defaults).
+        'before_first'/'before_last' -- one block before only that biLSTM.
+
+    Cost at Tiberius defaults (w_size=9999, pool_size=9 -> L=1111,
+    2*units=744): one attention block adds ~40% of one biLSTM's FLOPs and
+    ~1.3 GB attention-matrix activations at batch=32. `'between'` adds
+    ~15% training time and ~1.3 GB VRAM; `'before_each'` roughly doubles
+    that.
+
+    The attention output is added residually (via a zero-init projection
+    inside `BorderGatedSelfAttention.o_proj`), so at step 0 the block is
+    a no-op and the base CNN+biLSTM pathway is preserved.
+
+    Args:
+        units, filter_size, kernel_size, numb_conv, numb_lstm,
+        dropout_rate, pool_size, output_size, clamsa, softmasking:
+            same as `lstm_model`.
+        num_heads: attention heads (must divide 2*units).
+        attn_dropout: dropout on the attention softmax.
+        attn_position: where to insert attention blocks (see above).
+        border_aux_output: if True, expose per-position border logits
+            as an additional named output ('border_logits_{i}') per
+            attention block. Aux loss/target must be attached by the
+            caller.
+        attn_zero_init: if True, zero-init the attention output
+            projection so the block is identity at step 0.
+
+    Returns:
+        tf.keras.Model with softmax output at nucleotide resolution
+        (plus any auxiliary border-logit outputs if enabled).
+    """
+    valid_positions = {'between', 'before_each', 'before_first', 'before_last'}
+    if attn_position not in valid_positions:
+        raise ValueError(
+            f"attn_position must be one of {sorted(valid_positions)}, "
+            f"got {attn_position!r}."
+        )
+    if numb_lstm < 1:
+        raise ValueError("numb_lstm must be >= 1.")
+
+    d_stream = 2 * units  # width of the pooled recurrent stream
+
+    outputs = []
+    inp_size = 6 if softmasking else 5
+    main_input = Input(shape=(None, inp_size))
+    if clamsa:
+        inp_clamsa = Input(shape=(None, 4), name='clamsa_input')
+        inp = [main_input, inp_clamsa]
+        main_input = keras.layers.Concatenate(axis=-1)([main_input, inp_clamsa])
+        inp_size += 4
+    else:
+        inp = main_input
+
+    # Conv stem (identical to lstm_model).
+    inp_embedding = main_input
+    x = Conv1D(filter_size, 3, padding='same',
+               activation='relu', name='initial_conv')(main_input)
+    for i in range(numb_conv - 1):
+        x = LayerNormalization(name=f'layer_normalization{i+1}')(x)
+        x = Conv1D(filter_size, kernel_size, padding='same',
+                   activation='relu', name=f'conv_{i+1}')(x)
+    cnn_out = x
+    x = keras.layers.Concatenate(axis=-1)([inp_embedding, cnn_out])
+
+    # Pool + project to recurrent-stream width (identical to lstm_model).
+    if pool_size > 1:
+        x = Reshape((-1, pool_size * (filter_size + inp_size)), name='R1')(x)
+    x = Dense(d_stream, name='pre_lstm_dense')(x)
+
+    def _insert_border_attn(x_in, name_prefix, block_idx):
+        """Border-gated attention with residual add."""
+        h = LayerNormalization(name=f'{name_prefix}_ln')(x_in)
+        attn = BorderGatedSelfAttention(
+            d_model=d_stream,
+            num_heads=num_heads,
+            dropout=attn_dropout,
+            zero_init_proj=attn_zero_init,
+            name=f'{name_prefix}_attn',
+        )
+        out, border_logits = attn(h, return_border=True)
+        if border_aux_output:
+            aux = Activation('linear',
+                             name=f'border_logits_{block_idx}')(border_logits)
+            outputs.append(aux)
+        return keras.layers.Add(name=f'{name_prefix}_add')([x_in, out])
+
+    # Decide placement.
+    positions_before_lstm_i = set()  # 0-indexed lstm block indices
+    if attn_position == 'before_each':
+        positions_before_lstm_i.update(range(numb_lstm))
+    elif attn_position == 'before_first':
+        positions_before_lstm_i.add(0)
+    elif attn_position == 'before_last':
+        positions_before_lstm_i.add(numb_lstm - 1)
+    elif attn_position == 'between':
+        if numb_lstm >= 2:
+            positions_before_lstm_i.add(1)
+        # else no-op: 'between' with a single biLSTM is meaningless.
+
+    block_idx = 0
+    for i in range(numb_lstm):
+        if i in positions_before_lstm_i:
+            block_idx += 1
+            x = _insert_border_attn(x, f'attn_blk{block_idx}', block_idx)
+        x_next = Bidirectional(LSTM(units, return_sequences=True),
+                               name=f'biLSTM_{i+1}')(x)
+        if dropout_rate:
+            x_next = Dropout(dropout_rate, name=f'dropout_{i+1}')(x_next)
+            x = LayerNormalization(
+                name=f'layer_normalization_lstm{i+1}')(x_next + x)
+        else:
+            x = x_next
+
+    # Output head (identical to lstm_model's residual_conv=True branch).
+    x = Dense(pool_size * 30, activation='relu', name='dense')(x)
+    x = Reshape((-1, 30), name='Reshape2')(x)
+    x = keras.layers.Concatenate(axis=-1)([x, cnn_out])
+    x = Dense(output_size, name='out_dense')(x)
+    y_end = Activation('softmax', name='out')(x)
+    outputs.append(y_end)
+
+    return Model(inputs=inp, outputs=outputs)
+
 
 def lstm_residual_stream_model(units=372, d_model=None, filter_size=128,
                                 kernel_size=9, numb_conv=3,
@@ -926,6 +1073,17 @@ BACKBONE_REGISTRY = {
             "pool_size", "lstm_mask", "clamsa",
             "output_size", "residual_conv", "softmasking",
             "clamsa_kernel", "lru_layer",
+        ],
+    },
+    "border_gated_attn_lstm": {
+        "builder": border_gated_attn_lstm_model,
+        "keys": [
+            "units", "filter_size", "kernel_size",
+            "numb_conv", "numb_lstm", "dropout_rate",
+            "pool_size", "output_size",
+            "clamsa", "softmasking",
+            "num_heads", "attn_dropout", "attn_position",
+            "border_aux_output", "attn_zero_init",
         ],
     },
     "residual_stream": {

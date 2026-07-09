@@ -12,6 +12,10 @@ Blocks:
         attention with ALiBi. Memory O(L * window * H), not O(L^2).
     DiagonalSSMBlock            -- S4D-style diagonal LTI state-space
         mixer. FFT-conv training / recurrent inference duality.
+    BorderGatedSelfAttention    -- global multi-head self-attention whose
+        key logits are biased by a predicted per-position "exon-border"
+        score, so queries preferentially attend to positions the model
+        thinks are exon borders (graph message-passing over borders).
 """
 import numpy as np
 import tensorflow as tf
@@ -377,5 +381,111 @@ class DiagonalSSMBlock(tf.keras.layers.Layer):
             'mode': self.mode,
             'ffn_mult': self.ffn_mult,
             'dropout': self.dropout_rate,
+        })
+        return cfg
+
+
+class BorderGatedSelfAttention(tf.keras.layers.Layer):
+    """
+    Global multi-head self-attention biased by a predicted per-position
+    "exon-border" score.
+
+    A small internal head (LN -> Dense(hidden, relu) -> Dense(1)) predicts
+    an unactivated border logit for every position. That logit is added
+    as an additive bias along the KEY axis of the attention score matrix
+    before softmax, so all query positions attend more strongly to
+    positions the model thinks are exon borders. This gives a soft,
+    fully differentiable "graph message-passing over exon borders" without
+    hard Top-K selection.
+
+    Shape: (B, L, d_model) -> (B, L, d_model). Attention is full O(L^2)
+    over the pooled sequence length. Intended for use at pooled
+    resolution (e.g. after Tiberius's pool_size=9 reshape).
+
+    The per-position border logits are exposed as an auxiliary tensor
+    via the layer's `border_logits` argument in `call(..., return_border=True)`,
+    so a builder can optionally attach an auxiliary supervision loss.
+    """
+
+    def __init__(self, d_model, num_heads=8, dropout=0.0,
+                 zero_init_proj=True, border_hidden=None, **kwargs):
+        super().__init__(**kwargs)
+        if d_model % num_heads != 0:
+            raise ValueError(
+                f"d_model ({d_model}) must be divisible by num_heads "
+                f"({num_heads})."
+            )
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.head_dim = d_model // num_heads
+        self.dropout_rate = dropout
+        self.zero_init_proj = zero_init_proj
+        self.border_hidden = border_hidden or max(d_model // 2, 32)
+
+    def build(self, input_shape):
+        self.q_proj = Dense(self.d_model, name='q_proj')
+        self.k_proj = Dense(self.d_model, name='k_proj')
+        self.v_proj = Dense(self.d_model, name='v_proj')
+        proj_init = 'zeros' if self.zero_init_proj else 'glorot_uniform'
+        self.o_proj = Dense(self.d_model, kernel_initializer=proj_init,
+                            name='o_proj')
+        self.border_ln = LayerNormalization(name='border_ln')
+        self.border_hidden_layer = Dense(self.border_hidden,
+                                         activation='relu',
+                                         name='border_hidden')
+        self.border_out = Dense(1, name='border_logits')
+        self.attn_dropout = Dropout(self.dropout_rate)
+        super().build(input_shape)
+
+    def call(self, x, training=None, return_border=False):
+        B = tf.shape(x)[0]
+        L = tf.shape(x)[1]
+
+        # Per-position border logits (pre-sigmoid) [B, L, 1]
+        b = self.border_ln(x)
+        b = self.border_hidden_layer(b)
+        border_logits = self.border_out(b)
+
+        q = self.q_proj(x)
+        k = self.k_proj(x)
+        v = self.v_proj(x)
+
+        def _split(t):
+            t = tf.reshape(t, [B, L, self.num_heads, self.head_dim])
+            return tf.transpose(t, [0, 2, 1, 3])  # [B, H, L, dh]
+
+        q = _split(q)
+        k = _split(k)
+        v = _split(v)
+
+        scale = tf.math.rsqrt(tf.cast(self.head_dim, x.dtype))
+        scores = tf.matmul(q, k, transpose_b=True) * scale  # [B, H, L, L]
+
+        # Additive border bias broadcast over queries and heads:
+        # border_logits: [B, L, 1] -> [B, 1, 1, L] (bias on KEY axis).
+        border_bias = tf.transpose(border_logits, [0, 2, 1])  # [B, 1, L]
+        border_bias = border_bias[:, tf.newaxis, :, :]        # [B, 1, 1, L]
+        scores = scores + tf.cast(border_bias, scores.dtype)
+
+        attn = tf.nn.softmax(scores, axis=-1)
+        attn = self.attn_dropout(attn, training=training)
+
+        out = tf.matmul(attn, v)                     # [B, H, L, dh]
+        out = tf.transpose(out, [0, 2, 1, 3])        # [B, L, H, dh]
+        out = tf.reshape(out, [B, L, self.d_model])
+        out = self.o_proj(out)
+
+        if return_border:
+            return out, border_logits
+        return out
+
+    def get_config(self):
+        cfg = super().get_config()
+        cfg.update({
+            'd_model': self.d_model,
+            'num_heads': self.num_heads,
+            'dropout': self.dropout_rate,
+            'zero_init_proj': self.zero_init_proj,
+            'border_hidden': self.border_hidden,
         })
         return cfg

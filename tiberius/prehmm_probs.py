@@ -173,19 +173,19 @@ def compute_class_group_tracks(
 ) -> dict[str, np.ndarray]:
     """Reduce per-position class probabilities to CDS/intron/IR groups.
 
-    Both strands are collapsed via elementwise max so a single track
-    reflects the maximum probability across strands. This is the "easy
-    solution" from the design; revisit if it turns out too coarse.
+    Per-position softmax vectors sum to 1 across all 15 classes on each
+    strand independently. To produce a single track per group that still
+    sums to ~1 across CDS+intron+IR at every position, we average the
+    two strand vectors elementwise and then partition into the three
+    groups. Elementwise max would break the sum-to-one property because
+    the max is taken independently per class group.
     """
-    p_cds = softmax_fwd[:, CDS_CLASS_SLICE].sum(axis=-1)
-    p_intron = softmax_fwd[:, INTRON_CLASS_SLICE].sum(axis=-1)
-    p_ir = softmax_fwd[:, IR_CLASS_INDEX]
+    combined = softmax_fwd
     if softmax_bwd is not None:
-        p_cds = np.maximum(p_cds, softmax_bwd[:, CDS_CLASS_SLICE].sum(axis=-1))
-        p_intron = np.maximum(
-            p_intron, softmax_bwd[:, INTRON_CLASS_SLICE].sum(axis=-1)
-        )
-        p_ir = np.maximum(p_ir, softmax_bwd[:, IR_CLASS_INDEX])
+        combined = 0.5 * (softmax_fwd + softmax_bwd)
+    p_cds = combined[:, CDS_CLASS_SLICE].sum(axis=-1)
+    p_intron = combined[:, INTRON_CLASS_SLICE].sum(axis=-1)
+    p_ir = combined[:, IR_CLASS_INDEX]
     return {"cds": p_cds.astype(np.float32),
             "intron": p_intron.astype(np.float32),
             "ir": p_ir.astype(np.float32)}

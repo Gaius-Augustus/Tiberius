@@ -20,6 +20,11 @@ CDS_CLASS_SLICE = slice(4, 15)
 INTRON_CLASS_SLICE = slice(1, 4)
 IR_CLASS_INDEX = 0
 
+BIGWIG_TRACK_KEYS = (
+    "fwd.cds", "fwd.intron", "fwd.ir",
+    "bwd.cds", "bwd.intron", "bwd.ir",
+)
+
 CDS_PROBS_TSV_HEADER = (
     "sequence\tstrand\ttranscript_id\tcds_index\tstart\tend\t"
     "min_cds_prob\tmax_cds_prob\tmean_cds_prob\n"
@@ -116,7 +121,12 @@ class BigWigBuffer:
 
     def close(self) -> None:
         import pyBigWig
-        for key in ("cds", "intron", "ir"):
+        keys_present = {
+            k for tracks in self._buffered.values() for k in tracks
+        }
+        for key in BIGWIG_TRACK_KEYS:
+            if key not in keys_present:
+                continue
             bw = pyBigWig.open(f"{self._prefix}.{key}.bw", "w")
             try:
                 bw.addHeader(self._header)
@@ -124,8 +134,8 @@ class BigWigBuffer:
                     tracks = self._buffered.get(name)
                     if tracks is None:
                         continue
-                    values = tracks[key]
-                    if values.size == 0:
+                    values = tracks.get(key)
+                    if values is None or values.size == 0:
                         continue
                     bw.addEntries(
                         name,
@@ -171,24 +181,26 @@ def compute_class_group_tracks(
     softmax_fwd: np.ndarray,
     softmax_bwd: np.ndarray | None,
 ) -> dict[str, np.ndarray]:
-    """Reduce per-position class probabilities to CDS/intron/IR groups.
+    """Reduce per-position class probabilities to CDS/intron/IR groups
+    separately for each strand.
 
-    Per-position softmax vectors sum to 1 across all 15 classes on each
-    strand independently. To produce a single track per group that still
-    sums to ~1 across CDS+intron+IR at every position, we average the
-    two strand vectors elementwise and then partition into the three
-    groups. Elementwise max would break the sum-to-one property because
-    the max is taken independently per class group.
+    Returns a dict with six keys ``{fwd,bwd}.{cds,intron,ir}``. Each per-
+    strand softmax vector sums to 1 across the 15 classes, so summing
+    the three per-strand tracks yields ~1 at every position. The bwd
+    entries are missing if ``softmax_bwd`` is None.
     """
-    combined = softmax_fwd
+    tracks: dict[str, np.ndarray] = {
+        "fwd.cds": softmax_fwd[:, CDS_CLASS_SLICE].sum(axis=-1).astype(np.float32),
+        "fwd.intron": softmax_fwd[:, INTRON_CLASS_SLICE].sum(axis=-1).astype(np.float32),
+        "fwd.ir": softmax_fwd[:, IR_CLASS_INDEX].astype(np.float32),
+    }
     if softmax_bwd is not None:
-        combined = 0.5 * (softmax_fwd + softmax_bwd)
-    p_cds = combined[:, CDS_CLASS_SLICE].sum(axis=-1)
-    p_intron = combined[:, INTRON_CLASS_SLICE].sum(axis=-1)
-    p_ir = combined[:, IR_CLASS_INDEX]
-    return {"cds": p_cds.astype(np.float32),
-            "intron": p_intron.astype(np.float32),
-            "ir": p_ir.astype(np.float32)}
+        tracks.update({
+            "bwd.cds": softmax_bwd[:, CDS_CLASS_SLICE].sum(axis=-1).astype(np.float32),
+            "bwd.intron": softmax_bwd[:, INTRON_CLASS_SLICE].sum(axis=-1).astype(np.float32),
+            "bwd.ir": softmax_bwd[:, IR_CLASS_INDEX].astype(np.float32),
+        })
+    return tracks
 
 
 def write_bigwig_sequence(

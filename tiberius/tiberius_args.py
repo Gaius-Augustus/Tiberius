@@ -80,9 +80,10 @@ def parseCmd():
         help='Write per-CDS min/max/mean of the summed preHMM CDS-class probability '
              '(classes 4..14) to a sidecar TSV next to --out (<out>.cds_probs.tsv).')
     tiberius_grp.add_argument('--bigwig_out', type=str, default='',
-        help='If set, write three BigWig files of preHMM class-group probabilities: '
-             '<prefix>.cds.bw (sum of classes 4..14), <prefix>.intron.bw (sum of 1..3) '
-             'and <prefix>.ir.bw (class 0). Requires pyBigWig.')
+        help='If set, write six BigWig files of preHMM class-group probabilities, '
+             'three per strand: <prefix>.{fwd,bwd}.cds.bw (sum of classes 4..14), '
+             '<prefix>.{fwd,bwd}.intron.bw (sum of 1..3), <prefix>.{fwd,bwd}.ir.bw '
+             '(class 0). Per-strand tracks sum to 1 at every position. Requires pyBigWig.')
     tiberius_grp.add_argument('--bigwig_seqs', type=str, default='',
         help='Optional comma-separated list of sequence names to include in the BigWig '
              'output. Default: all sequences.')

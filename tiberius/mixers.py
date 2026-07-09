@@ -398,9 +398,19 @@ class BorderGatedSelfAttention(tf.keras.layers.Layer):
     fully differentiable "graph message-passing over exon borders" without
     hard Top-K selection.
 
-    Shape: (B, L, d_model) -> (B, L, d_model). Attention is full O(L^2)
-    over the pooled sequence length. Intended for use at pooled
-    resolution (e.g. after Tiberius's pool_size=9 reshape).
+    Shape: (B, L, d_model) -> (B, L, d_model). Default is full O(L^2)
+    attention over the pooled sequence length. If `chunk_size` is set,
+    the sequence is split into non-overlapping chunks of that length and
+    attention runs independently within each chunk, giving O(L * chunk)
+    memory and compute. Set `chunk_size` >= the training-time pooled
+    length to preserve training-time semantics exactly (the model was
+    never asked to attend beyond that distance during training).
+
+    `chunk_size` is a mutable, non-trainable attribute -- flipping it
+    after loading a trained model does not require retraining, since
+    the Q/K/V/O weights do not depend on sequence length. Use
+    `enable_chunked_border_attention(model, chunk_size)` to patch it on
+    all `BorderGatedSelfAttention` layers of a loaded model.
 
     The per-position border logits are exposed as an auxiliary tensor
     via the layer's `border_logits` argument in `call(..., return_border=True)`,
@@ -408,7 +418,8 @@ class BorderGatedSelfAttention(tf.keras.layers.Layer):
     """
 
     def __init__(self, d_model, num_heads=8, dropout=0.0,
-                 zero_init_proj=True, border_hidden=None, **kwargs):
+                 zero_init_proj=True, border_hidden=None,
+                 chunk_size=None, **kwargs):
         super().__init__(**kwargs)
         if d_model % num_heads != 0:
             raise ValueError(
@@ -421,6 +432,7 @@ class BorderGatedSelfAttention(tf.keras.layers.Layer):
         self.dropout_rate = dropout
         self.zero_init_proj = zero_init_proj
         self.border_hidden = border_hidden or max(d_model // 2, 32)
+        self.chunk_size = chunk_size
 
     def build(self, input_shape):
         self.q_proj = Dense(self.d_model, name='q_proj')
@@ -450,15 +462,28 @@ class BorderGatedSelfAttention(tf.keras.layers.Layer):
         k = self.k_proj(x)
         v = self.v_proj(x)
 
-        def _split(t):
-            t = tf.reshape(t, [B, L, self.num_heads, self.head_dim])
-            return tf.transpose(t, [0, 2, 1, 3])  # [B, H, L, dh]
+        if self.chunk_size is None:
+            out = self._attend(q, k, v, border_logits, B, L, training)
+        else:
+            out = self._attend_chunked(q, k, v, border_logits, B, L,
+                                       training, self.chunk_size)
 
-        q = _split(q)
-        k = _split(k)
-        v = _split(v)
+        out = self.o_proj(out)
 
-        scale = tf.math.rsqrt(tf.cast(self.head_dim, x.dtype))
+        if return_border:
+            return out, border_logits
+        return out
+
+    def _split_heads(self, t, B, L):
+        t = tf.reshape(t, [B, L, self.num_heads, self.head_dim])
+        return tf.transpose(t, [0, 2, 1, 3])  # [B, H, L, dh]
+
+    def _attend(self, q, k, v, border_logits, B, L, training):
+        q = self._split_heads(q, B, L)
+        k = self._split_heads(k, B, L)
+        v = self._split_heads(v, B, L)
+
+        scale = tf.math.rsqrt(tf.cast(self.head_dim, q.dtype))
         scores = tf.matmul(q, k, transpose_b=True) * scale  # [B, H, L, L]
 
         # Additive border bias broadcast over queries and heads:
@@ -472,12 +497,56 @@ class BorderGatedSelfAttention(tf.keras.layers.Layer):
 
         out = tf.matmul(attn, v)                     # [B, H, L, dh]
         out = tf.transpose(out, [0, 2, 1, 3])        # [B, L, H, dh]
-        out = tf.reshape(out, [B, L, self.d_model])
-        out = self.o_proj(out)
+        return tf.reshape(out, [B, L, self.d_model])
 
-        if return_border:
-            return out, border_logits
-        return out
+    def _attend_chunked(self, q, k, v, border_logits, B, L, training, C):
+        """
+        Attend within non-overlapping chunks of length `C`.
+        Pads L to a multiple of C, reshapes [B, L, d] -> [B*n, C, d],
+        runs full attention within each chunk, then unpads.
+
+        For inference on long sequences where a trained model was never
+        asked to attend beyond distance C during training, this is
+        numerically ~equivalent to global attention up to boundary
+        effects at chunk edges, while cutting memory from O(L^2) to O(L*C).
+        """
+        pad = tf.math.mod(C - tf.math.mod(L, C), C)  # 0 if L % C == 0
+        L_pad = L + pad
+        n_chunks = L_pad // C
+
+        def _pad(t, feature_dim):
+            return tf.pad(t, [[0, 0], [0, pad], [0, 0]])
+
+        q_p = _pad(q, self.d_model)
+        k_p = _pad(k, self.d_model)
+        v_p = _pad(v, self.d_model)
+        b_p = _pad(border_logits, 1)  # [B, L_pad, 1]
+
+        # Reshape to chunked batch: [B, n*C, d] -> [B*n, C, d].
+        def _to_chunks(t, d):
+            t = tf.reshape(t, [B, n_chunks, C, d])
+            return tf.reshape(t, [B * n_chunks, C, d])
+
+        q_c = _to_chunks(q_p, self.d_model)
+        k_c = _to_chunks(k_p, self.d_model)
+        v_c = _to_chunks(v_p, self.d_model)
+        b_c = _to_chunks(b_p, 1)  # [B*n, C, 1]
+
+        # Mask the padded tail so it does not receive/emit attention.
+        valid = tf.pad(tf.ones([B, L], dtype=q.dtype),
+                       [[0, 0], [0, pad]])  # [B, L_pad]
+        valid = tf.reshape(valid, [B, n_chunks, C])
+        valid = tf.reshape(valid, [B * n_chunks, C])  # [B*n, C]
+        # Add -inf to border bias where padded, so softmax ignores.
+        neg_inf = tf.cast(-1e9, b_c.dtype)
+        b_c = b_c + (1.0 - valid[:, :, tf.newaxis]) * neg_inf
+
+        Bn = B * n_chunks
+        out_c = self._attend(q_c, k_c, v_c, b_c, Bn, C, training)  # [Bn, C, d]
+
+        # Reshape back and trim padding.
+        out = tf.reshape(out_c, [B, n_chunks * C, self.d_model])
+        return out[:, :L, :]
 
     def get_config(self):
         cfg = super().get_config()
@@ -487,5 +556,31 @@ class BorderGatedSelfAttention(tf.keras.layers.Layer):
             'dropout': self.dropout_rate,
             'zero_init_proj': self.zero_init_proj,
             'border_hidden': self.border_hidden,
+            'chunk_size': self.chunk_size,
         })
         return cfg
+
+
+def enable_chunked_border_attention(model, chunk_size):
+    """
+    Post-hoc set `chunk_size` on every `BorderGatedSelfAttention` layer in
+    `model` so global attention runs on non-overlapping chunks of length
+    `chunk_size`.
+
+    Use this at inference on a model that was trained with `chunk_size=None`
+    to avoid OOM on long sequences: the layer's Q/K/V/O weights do not
+    depend on sequence length, so no retraining is needed. Setting
+    `chunk_size` >= the training-time pooled length preserves training-time
+    semantics (the model was never asked to attend beyond that distance).
+
+    Returns the number of layers patched.
+    """
+    n = 0
+    for layer in model.layers:
+        if isinstance(layer, BorderGatedSelfAttention):
+            layer.chunk_size = chunk_size
+            n += 1
+        # Recurse into nested Model layers (e.g. functional sub-models).
+        elif hasattr(layer, 'layers'):
+            n += enable_chunked_border_attention(layer, chunk_size)
+    return n

@@ -298,7 +298,8 @@ def border_gated_attn_lstm_model(units=372, filter_size=128,
                                   num_heads=8, attn_dropout=0.0,
                                   attn_position='between',
                                   border_aux_output=False,
-                                  attn_zero_init=True):
+                                  attn_zero_init=True,
+                                  attn_chunk_size=None):
     """
     CNN + biLSTM backbone (same structure as `lstm_model`) with a
     `BorderGatedSelfAttention` block inserted at pooled resolution.
@@ -337,6 +338,13 @@ def border_gated_attn_lstm_model(units=372, filter_size=128,
             caller.
         attn_zero_init: if True, zero-init the attention output
             projection so the block is identity at step 0.
+        attn_chunk_size: if not None, attention runs on non-overlapping
+            chunks of that length (memory O(L*chunk) instead of O(L^2)).
+            For inference on long sequences with a model trained at
+            `chunk_size=None`, prefer patching post-load via
+            `enable_chunked_border_attention(model, chunk_size)` from
+            `tiberius.mixers`, so training-time weights are preserved
+            without rebuilding.
 
     Returns:
         tf.keras.Model with softmax output at nucleotide resolution
@@ -388,6 +396,7 @@ def border_gated_attn_lstm_model(units=372, filter_size=128,
             num_heads=num_heads,
             dropout=attn_dropout,
             zero_init_proj=attn_zero_init,
+            chunk_size=attn_chunk_size,
             name=f'{name_prefix}_attn',
         )
         out, border_logits = attn(h, return_border=True)
@@ -1083,7 +1092,7 @@ BACKBONE_REGISTRY = {
             "pool_size", "output_size",
             "clamsa", "softmasking",
             "num_heads", "attn_dropout", "attn_position",
-            "border_aux_output", "attn_zero_init",
+            "border_aux_output", "attn_zero_init", "attn_chunk_size",
         ],
     },
     "residual_stream": {

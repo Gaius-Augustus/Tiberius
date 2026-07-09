@@ -526,9 +526,10 @@ class PredictionGTF:
             tf.Tensor: The predicted state sequence tensor after applying Viterbi decoding.
         """
         # Prefer the trainable HMM head when it exists (hmm_new checkpoint).
-        # It already produces final logits (with an optional log-input
-        # residual internally), so we softmax to return probabilities
-        # in the same shape as the old HMM's output.
+        # The head returns per-position logits (B, T, C); take argmax so
+        # the return shape/dtype matches the old HMM's Viterbi output
+        # (B, T) int -- otherwise whole-genome inference accumulates
+        # C-times more memory downstream and OOMs.
         use_trainable = getattr(self, "trainable_hmm_head", None) is not None
 
         if self.lstm_model and self.hmm:
@@ -536,15 +537,15 @@ class PredictionGTF:
             if y_lstm.ndim == 2:
                 y_lstm = y_lstm[np.newaxis, :, :]
             if use_trainable:
-                y_vit = self.trainable_hmm_head(y_lstm, nuc, training=False)
-                y_vit = tf.nn.softmax(y_vit, axis=-1)
+                logits = self.trainable_hmm_head(y_lstm, nuc, training=False)
+                y_vit = tf.cast(tf.argmax(logits, axis=-1), tf.int32)
             else:
                 y_vit = self.gene_pred_hmm_layer(y_lstm, nuc)
         else:
             nuc = tf.cast(x[:,:,:5], tf.float32)
             if use_trainable:
-                y_vit = self.trainable_hmm_head(y_lstm, nuc, training=False)
-                y_vit = tf.nn.softmax(y_vit, axis=-1)
+                logits = self.trainable_hmm_head(y_lstm, nuc, training=False)
+                y_vit = tf.cast(tf.argmax(logits, axis=-1), tf.int32)
             else:
                 y_vit = self.gene_pred_hmm_layer(y_lstm, nuc)
         return y_vit

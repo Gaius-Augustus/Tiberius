@@ -11,7 +11,6 @@ import tensorflow.keras as keras
 from tensorflow.keras.models import Model
 from tiberius.models import (custom_cce_f1_loss, build_backbone_from_config, Cast,
                              add_hmm_new_layer)
-from tiberius.mixers import enable_chunked_border_attention
 from hidten import HMMMode
 from tiberius.hmm import HMMBlock, TrainableHMMHead, fix_intron_state_chain_labels
 import bricks2marble as b2m
@@ -146,26 +145,27 @@ class PredictionGTF:
             elif "softmasking" in config:
                 self.softmask = config["softmasking"]
 
-            self.lstm_model = build_backbone_from_config(config, softmasking=self.softmask)
-
             # Chunk `BorderGatedSelfAttention` layers to avoid O(L^2) OOM at
-            # inference on long sequences. Prefers an explicit config key,
-            # else uses the training-time pooled length (w_size / pool_size),
-            # else falls back to a safe default. No-op for archs without
-            # such layers.
-            attn_chunk = config.get("attn_chunk_size")
-            if attn_chunk is None:
+            # inference on long sequences. Injects `attn_chunk_size` into
+            # the config *before* the backbone is built, because a Keras
+            # functional model traces each layer's `call` exactly once at
+            # build time -- mutating `chunk_size` post-hoc has no effect on
+            # the traced graph. Prefers an explicit config key, else uses
+            # the training-time pooled length (w_size / pool_size), else
+            # falls back to a safe default. No-op for archs without a
+            # `BorderGatedSelfAttention` layer since the arg is ignored.
+            if config.get("arch") == "border_gated_attn_lstm" \
+                    and config.get("attn_chunk_size") is None:
                 w_size = config.get("w_size")
                 pool_size = config.get("pool_size", 9)
                 if w_size and pool_size:
-                    attn_chunk = w_size // pool_size
+                    config["attn_chunk_size"] = w_size // pool_size
                 else:
-                    attn_chunk = 1200
-            n_patched = enable_chunked_border_attention(self.lstm_model, attn_chunk)
-            if n_patched:
-                print(f"Patched {n_patched} BorderGatedSelfAttention layer(s) "
-                      f"with chunk_size={attn_chunk} for long-sequence inference.",
-                      file=sys.stderr)
+                    config["attn_chunk_size"] = 1200
+                print(f"Set attn_chunk_size={config['attn_chunk_size']} for "
+                      f"long-sequence inference.", file=sys.stderr)
+
+            self.lstm_model = build_backbone_from_config(config, softmasking=self.softmask)
 
             weights_h5  = f"{self.model_path}/weights.h5"
             if not os.path.exists(weights_h5):

@@ -326,7 +326,7 @@ def run_nextflow(
     if resume:
         cmd.append("-resume")
     if work_dir:
-        cmd.extend(["-work_dir", work_dir])
+        cmd.extend(["-work-dir", work_dir])
     if extra_args:
         cmd.extend(extra_args)
 

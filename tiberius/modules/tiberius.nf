@@ -110,8 +110,12 @@ process PROTEIN_FROM_GFF {
 
   script:
     """
-    gffread ${tiberius} \
-        -g ${genome} \
+    # gffread malloc()s on genes with many isoforms; cap to a safe number
+    # because the resulting protein FASTA is only used by DIAMOND species
+    # ranking, so one representative per gene is enough.
+    cap_isoforms_per_gene.py --max 10 ${tiberius} > tiberius.capped.gff3
+    gffread tiberius.capped.gff3 \\
+        -g ${genome} \\
         -y tiberius_proteins.fa
     """
 }

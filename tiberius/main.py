@@ -28,6 +28,22 @@ SCRIPT_DIR = SCRIPT_PATH.parent
 SCRIPT_ROOT = SCRIPT_DIR
 
 
+def apply_id_prefix(gtf_path: str, prefix: str) -> None:
+    """Prefix every gene_id / transcript_id value in a GTF-attributes column."""
+    import re
+    pattern = re.compile(r'(\b(?:gene_id|transcript_id)\s+")([^"]+)(")')
+    replacer = lambda m: f"{m.group(1)}{prefix}{m.group(2)}{m.group(3)}"
+    tmp_path = gtf_path + ".tmp"
+    with open(gtf_path, "r", encoding="utf-8") as src, \
+         open(tmp_path, "w", encoding="utf-8") as dst:
+        for line in src:
+            if not line or line.startswith("#"):
+                dst.write(line)
+                continue
+            dst.write(pattern.sub(replacer, line))
+    os.replace(tmp_path, gtf_path)
+
+
 class MissingConfigFieldError(RuntimeError):
     """Raised when the model-config file lacks one or more required fields."""
 
@@ -465,6 +481,9 @@ def run_tiberius(args):
         log_config=log_config,
         group_size_limit=args.group_size_limit
     )
+
+    if args.id_prefix:
+        apply_id_prefix(gtf_out, args.id_prefix)
 
     end_time = time.time()
     duration = end_time - start_time

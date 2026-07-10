@@ -16,9 +16,9 @@ Additionally, Tiberius provides an evidence mode that generates highly precise g
 
 > **Core libraries.** Much of Tiberius's core: sequence and annotation data structures, FASTA/GTF I/O, pre- and postprocessing for the models and the differentiable HMM layer is implemented in two separat libraries:
 > - [**bricks2marble**](https://github.com/Gaius-Augustus/bricks2marble) — nucleotide/annotation structures, pre- and postprocessing for DL gene-prediction models.
-> - [**hidten**] — the differentiable HMM primitives used by the HMM layer.
+> - **hidten** — the differentiable HMM logic used by the HMM layer.
 >
-> Tiberius pins both as dependencies (`bricks2marble[tf]`, `hidten[tensorflow]`); this repository focuses on model architecture, training, clade-specific models, evidence pipeline and the launcher.
+> Tiberius installs both as dependencies (`bricks2marble[tf]`, `hidten[tensorflow]`); this repository contains the model architecture, training, clade-specific models, evidence pipeline and the launcher.
 
 
 ![Accuracy comparison for Tiberius *ab initio* predictions](figures/tiberius_acc.png)

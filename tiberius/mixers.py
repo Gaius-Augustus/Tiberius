@@ -492,7 +492,17 @@ class BorderGatedSelfAttention(tf.keras.layers.Layer):
         border_bias = border_bias[:, tf.newaxis, :, :]        # [B, 1, 1, L]
         scores = scores + tf.cast(border_bias, scores.dtype)
 
-        attn = tf.nn.softmax(scores, axis=-1)
+        # Manual softmax instead of `tf.nn.softmax`: at long L combined
+        # with chunked attention, the leading batch dim (B*n_chunks*H*L)
+        # exceeds CUDA gridDim.y (65535) in TF's fused softmax kernel and
+        # crashes with "invalid configuration argument". The manual form
+        # uses generic reduce/elementwise ops that scale to any size.
+        scores_max = tf.stop_gradient(tf.reduce_max(scores, axis=-1,
+                                                    keepdims=True))
+        scores = scores - scores_max
+        scores = tf.exp(scores)
+        scores_sum = tf.reduce_sum(scores, axis=-1, keepdims=True)
+        attn = scores / (scores_sum + 1e-9)
         attn = self.attn_dropout(attn, training=training)
 
         out = tf.matmul(attn, v)                     # [B, H, L, dh]

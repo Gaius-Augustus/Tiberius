@@ -84,6 +84,11 @@ def parseCmd():
              'three per strand: <prefix>.{fwd,bwd}.cds.bw (sum of classes 4..14), '
              '<prefix>.{fwd,bwd}.intron.bw (sum of 1..3), <prefix>.{fwd,bwd}.ir.bw '
              '(class 0). Per-strand tracks sum to 1 at every position. Requires pyBigWig.')
+    tiberius_grp.add_argument('--bigwig_fine_classes', action='store_true',
+        help='With --bigwig_out, emit 30 per-fine-class BigWigs '
+             '(<prefix>.{fwd,bwd}.{IR,I0,I1,I2,E0,E1,E2,START,EI0,EI1,EI2,IE0,IE1,IE2,STOP}.bw) '
+             'instead of the 6 group tracks. Buffers ~120 bytes/bp per selected sequence in '
+             'RAM; use with --bigwig_seqs to bound memory.')
     tiberius_grp.add_argument('--bigwig_seqs', type=str, default='',
         help='Optional comma-separated list of sequence names to include in the BigWig '
              'output. Default: all sequences.')

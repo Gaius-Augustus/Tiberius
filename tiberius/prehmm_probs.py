@@ -25,6 +25,24 @@ BIGWIG_TRACK_KEYS = (
     "bwd.cds", "bwd.intron", "bwd.ir",
 )
 
+# 15 fine-class labels used for --bigwig_fine_classes output. Matches
+# the training encoding in annotation_gtf.py:389-396.
+FINE_CLASS_NAMES = (
+    "IR",
+    "I0", "I1", "I2",
+    "E0", "E1", "E2",
+    "START",
+    "EI0", "EI1", "EI2",
+    "IE0", "IE1", "IE2",
+    "STOP",
+)
+
+BIGWIG_FINE_TRACK_KEYS = tuple(
+    f"{strand}.{name}"
+    for strand in ("fwd", "bwd")
+    for name in FINE_CLASS_NAMES
+)
+
 CDS_PROBS_TSV_HEADER = (
     "sequence\tstrand\ttranscript_id\tcds_index\tstart\tend\t"
     "min_cds_prob\tmax_cds_prob\tmean_cds_prob\n"
@@ -77,13 +95,17 @@ def sequence_lengths_from_fasta(fasta_path: str) -> list[tuple[str, int]]:
 
 
 class BigWigBuffer:
-    """Buffers per-sequence CDS/intron/IR tracks until close.
+    """Buffers per-sequence tracks until close.
 
     pyBigWig requires that ``addEntries`` calls appear in the same
     chromosome order as the header. Sequences arrive in whatever order
-    bricks2marble's grouping picks, so we accumulate the three float32
+    bricks2marble's grouping picks, so we accumulate the float32
     tracks per sequence in a dict and flush them alphabetically on
-    ``close`` right before opening the three BigWig files.
+    ``close`` right before opening one BigWig file per track key.
+
+    ``track_keys`` selects between the 3-group layout
+    (:data:`BIGWIG_TRACK_KEYS`) and the per-fine-class layout
+    (:data:`BIGWIG_FINE_TRACK_KEYS`).
     """
 
     def __init__(
@@ -91,6 +113,7 @@ class BigWigBuffer:
         bigwig_prefix: str,
         seq_lengths: Iterable[tuple[str, int]],
         seq_filter: set[str] | None,
+        track_keys: tuple[str, ...] = BIGWIG_TRACK_KEYS,
     ) -> None:
         header = sorted(
             [
@@ -109,6 +132,7 @@ class BigWigBuffer:
         self._header = header
         self._expected: dict[str, int] = dict(header)
         self._buffered: dict[str, dict[str, np.ndarray]] = {}
+        self._track_keys = track_keys
         Path(bigwig_prefix).parent.mkdir(parents=True, exist_ok=True)
 
     def has(self, seq_name: str) -> bool:
@@ -124,7 +148,7 @@ class BigWigBuffer:
         keys_present = {
             k for tracks in self._buffered.values() for k in tracks
         }
-        for key in BIGWIG_TRACK_KEYS:
+        for key in self._track_keys:
             if key not in keys_present:
                 continue
             bw = pyBigWig.open(f"{self._prefix}.{key}.bw", "w")
@@ -152,8 +176,10 @@ def open_bigwig_writers(
     bigwig_prefix: str,
     seq_lengths: Iterable[tuple[str, int]],
     seq_filter: set[str] | None,
+    fine_classes: bool = False,
 ) -> BigWigBuffer:
-    return BigWigBuffer(bigwig_prefix, seq_lengths, seq_filter)
+    keys = BIGWIG_FINE_TRACK_KEYS if fine_classes else BIGWIG_TRACK_KEYS
+    return BigWigBuffer(bigwig_prefix, seq_lengths, seq_filter, track_keys=keys)
 
 
 def close_bigwig_writers(writers: BigWigBuffer) -> None:
@@ -175,6 +201,24 @@ def _softmax_for_sequence(
     chunk_slice = softmax_all[chunk_shift:chunk_shift + n_chunks]
     n_classes = chunk_slice.shape[-1]
     return chunk_slice.reshape(-1, n_classes)[:seq_size]
+
+
+def compute_fine_class_tracks(
+    softmax_fwd: np.ndarray,
+    softmax_bwd: np.ndarray | None,
+) -> dict[str, np.ndarray]:
+    """Return one track per (strand, fine class), keyed as
+    ``"{fwd,bwd}.{FINE_CLASS_NAMES[i]}"``. Each per-strand set of 15
+    tracks sums to 1 at every position by construction. The bwd tracks
+    are omitted if ``softmax_bwd`` is None.
+    """
+    tracks: dict[str, np.ndarray] = {}
+    for i, name in enumerate(FINE_CLASS_NAMES):
+        tracks[f"fwd.{name}"] = softmax_fwd[:, i].astype(np.float32)
+    if softmax_bwd is not None:
+        for i, name in enumerate(FINE_CLASS_NAMES):
+            tracks[f"bwd.{name}"] = softmax_bwd[:, i].astype(np.float32)
+    return tracks
 
 
 def compute_class_group_tracks(

@@ -440,11 +440,12 @@ def run_tiberius(args):
 
     bw_writers = None
     bw_seq_filter = None
+    bw_fine = bool(getattr(args, "bigwig_fine_classes", False))
     if want_bigwig:
         bw_seq_filter = prehmm_probs.parse_seq_filter(args.bigwig_seqs)
         seq_lengths = prehmm_probs.sequence_lengths_from_fasta(genome_path)
         bw_writers = prehmm_probs.open_bigwig_writers(
-            args.bigwig_out, seq_lengths, bw_seq_filter,
+            args.bigwig_out, seq_lengths, bw_seq_filter, fine_classes=bw_fine,
         )
 
     def postprocess(fasta: b2m.struct.Fasta, \
@@ -480,9 +481,14 @@ def run_tiberius(args):
                 if want_bigwig and (
                     bw_seq_filter is None or seq.name in bw_seq_filter
                 ):
-                    tracks = prehmm_probs.compute_class_group_tracks(
-                        sm_fwd, sm_bwd,
-                    )
+                    if bw_fine:
+                        tracks = prehmm_probs.compute_fine_class_tracks(
+                            sm_fwd, sm_bwd,
+                        )
+                    else:
+                        tracks = prehmm_probs.compute_class_group_tracks(
+                            sm_fwd, sm_bwd,
+                        )
                     prehmm_probs.write_bigwig_sequence(
                         bw_writers, seq.name, tracks,
                     )

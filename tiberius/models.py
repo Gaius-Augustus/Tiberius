@@ -9,7 +9,8 @@ from tensorflow import keras
 from tensorflow.keras import backend as K
 from tiberius.hmm import HMMBlock, TrainableHMMHead, default_trainable_hmm_config
 from tiberius.mixers import (DiagonalSSMBlock, SlidingWindowAttentionBlock,
-                              BorderGatedSelfAttention)
+                              BorderGatedSelfAttention,
+                              BorderTopKMessagePassing)
 from hidten import HMMMode
 
 class Cast(tf.keras.layers.Layer):
@@ -424,6 +425,154 @@ def border_gated_attn_lstm_model(units=372, filter_size=128,
         if i in positions_before_lstm_i:
             block_idx += 1
             x = _insert_border_attn(x, f'attn_blk{block_idx}', block_idx)
+        x_next = Bidirectional(LSTM(units, return_sequences=True),
+                               name=f'biLSTM_{i+1}')(x)
+        if dropout_rate:
+            x_next = Dropout(dropout_rate, name=f'dropout_{i+1}')(x_next)
+            x = LayerNormalization(
+                name=f'layer_normalization_lstm{i+1}')(x_next + x)
+        else:
+            x = x_next
+
+    # Output head (identical to lstm_model's residual_conv=True branch).
+    x = Dense(pool_size * 30, activation='relu', name='dense')(x)
+    x = Reshape((-1, 30), name='Reshape2')(x)
+    x = keras.layers.Concatenate(axis=-1)([x, cnn_out])
+    x = Dense(output_size, name='out_dense')(x)
+    y_end = Activation('softmax', name='out')(x)
+    outputs.append(y_end)
+
+    return Model(inputs=inp, outputs=outputs)
+
+
+def border_topk_lstm_model(units=372, filter_size=128,
+                            kernel_size=9, numb_conv=3,
+                            numb_lstm=2, dropout_rate=0.0,
+                            pool_size=9, output_size=15,
+                            clamsa=False, softmasking=True,
+                            num_heads=8, attn_dropout=0.0,
+                            attn_position='between',
+                            border_aux_output=False,
+                            attn_zero_init=True,
+                            topk_K=32,
+                            straight_through=True):
+    """
+    CNN + biLSTM backbone (same structure as `lstm_model`) with a
+    `BorderTopKMessagePassing` block inserted at pooled resolution.
+
+    Instead of dense self-attention, the block picks the K positions
+    with the highest predicted border score as "hub" nodes and lets
+    every position attend only over those K hubs. Cost is O(L*K), so
+    the block scales linearly to arbitrary sequence lengths.
+
+    Training vs inference K
+    -----------------------
+    `topk_K` is length-independent -- Q/K/V/O projections and the border
+    head are all K-agnostic in parameter count -- so the SAME trained
+    weights can be reloaded into a model built with a different `topk_K`
+    at inference. Typical workflow:
+
+        # training
+        arch: border_topk_lstm
+        topk_K: 10          # <- pick something matched to 10k windows
+
+        # inference: edit model_config.json (or override in eval)
+        topk_K: 50          # <- more hubs to cover 500k sequences
+
+    Same weights.h5 loads into both. Any softmax-distribution shift is
+    controlled solely by the K ratio (`K_infer / K_train`), not by L.
+
+    Args:
+        units, filter_size, kernel_size, numb_conv, numb_lstm,
+        dropout_rate, pool_size, output_size, clamsa, softmasking,
+        num_heads, attn_dropout, attn_position, border_aux_output,
+        attn_zero_init: same as `border_gated_attn_lstm_model`.
+        topk_K: number of hubs picked by Top-K per sample. Keep small
+            enough to be well below sequence length. Can be changed
+            between training and inference without retraining.
+        straight_through: if True, hub features are multiplied by
+            `sigmoid(border_logit)` so the border-score head gets
+            gradient through the discrete selection. If False, only
+            the Q/K/V/O projections train and the border head learns
+            only via an auxiliary supervision loss (needs
+            `border_aux_output=True` plus an outer BCE loss).
+
+    Returns:
+        tf.keras.Model with softmax output at nucleotide resolution
+        (plus per-block border-logit outputs if `border_aux_output=True`).
+    """
+    valid_positions = {'between', 'before_each', 'before_first', 'before_last'}
+    if attn_position not in valid_positions:
+        raise ValueError(
+            f"attn_position must be one of {sorted(valid_positions)}, "
+            f"got {attn_position!r}."
+        )
+    if numb_lstm < 1:
+        raise ValueError("numb_lstm must be >= 1.")
+
+    d_stream = 2 * units
+
+    outputs = []
+    inp_size = 6 if softmasking else 5
+    main_input = Input(shape=(None, inp_size))
+    if clamsa:
+        inp_clamsa = Input(shape=(None, 4), name='clamsa_input')
+        inp = [main_input, inp_clamsa]
+        main_input = keras.layers.Concatenate(axis=-1)([main_input, inp_clamsa])
+        inp_size += 4
+    else:
+        inp = main_input
+
+    # Conv stem (identical to lstm_model).
+    inp_embedding = main_input
+    x = Conv1D(filter_size, 3, padding='same',
+               activation='relu', name='initial_conv')(main_input)
+    for i in range(numb_conv - 1):
+        x = LayerNormalization(name=f'layer_normalization{i+1}')(x)
+        x = Conv1D(filter_size, kernel_size, padding='same',
+                   activation='relu', name=f'conv_{i+1}')(x)
+    cnn_out = x
+    x = keras.layers.Concatenate(axis=-1)([inp_embedding, cnn_out])
+
+    # Pool + project to recurrent-stream width.
+    if pool_size > 1:
+        x = Reshape((-1, pool_size * (filter_size + inp_size)), name='R1')(x)
+    x = Dense(d_stream, name='pre_lstm_dense')(x)
+
+    def _insert_topk_block(x_in, name_prefix, block_idx):
+        h = LayerNormalization(name=f'{name_prefix}_ln')(x_in)
+        block = BorderTopKMessagePassing(
+            d_model=d_stream,
+            K=topk_K,
+            num_heads=num_heads,
+            dropout=attn_dropout,
+            zero_init_proj=attn_zero_init,
+            straight_through=straight_through,
+            name=f'{name_prefix}_topk',
+        )
+        out, border_logits = block(h, return_border=True)
+        if border_aux_output:
+            aux = Activation('linear',
+                             name=f'border_logits_{block_idx}')(border_logits)
+            outputs.append(aux)
+        return keras.layers.Add(name=f'{name_prefix}_add')([x_in, out])
+
+    positions_before_lstm_i = set()
+    if attn_position == 'before_each':
+        positions_before_lstm_i.update(range(numb_lstm))
+    elif attn_position == 'before_first':
+        positions_before_lstm_i.add(0)
+    elif attn_position == 'before_last':
+        positions_before_lstm_i.add(numb_lstm - 1)
+    elif attn_position == 'between':
+        if numb_lstm >= 2:
+            positions_before_lstm_i.add(1)
+
+    block_idx = 0
+    for i in range(numb_lstm):
+        if i in positions_before_lstm_i:
+            block_idx += 1
+            x = _insert_topk_block(x, f'topk_blk{block_idx}', block_idx)
         x_next = Bidirectional(LSTM(units, return_sequences=True),
                                name=f'biLSTM_{i+1}')(x)
         if dropout_rate:
@@ -1093,6 +1242,18 @@ BACKBONE_REGISTRY = {
             "clamsa", "softmasking",
             "num_heads", "attn_dropout", "attn_position",
             "border_aux_output", "attn_zero_init", "attn_chunk_size",
+        ],
+    },
+    "border_topk_lstm": {
+        "builder": border_topk_lstm_model,
+        "keys": [
+            "units", "filter_size", "kernel_size",
+            "numb_conv", "numb_lstm", "dropout_rate",
+            "pool_size", "output_size",
+            "clamsa", "softmasking",
+            "num_heads", "attn_dropout", "attn_position",
+            "border_aux_output", "attn_zero_init",
+            "topk_K", "straight_through",
         ],
     },
     "residual_stream": {

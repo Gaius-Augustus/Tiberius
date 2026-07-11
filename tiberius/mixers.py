@@ -16,6 +16,12 @@ Blocks:
         key logits are biased by a predicted per-position "exon-border"
         score, so queries preferentially attend to positions the model
         thinks are exon borders (graph message-passing over borders).
+    BorderTopKMessagePassing    -- sparse graph message passing: Top-K
+        border-scoring positions are chosen as hubs; each of the L input
+        positions attends only over those K hubs. Straight-through gating
+        makes the border-score head trainable through the hard selection.
+        K is length-independent, so training-time K and inference-time K
+        can differ freely (same weights, just rebuild the model).
 """
 import numpy as np
 import tensorflow as tf
@@ -594,3 +600,159 @@ def enable_chunked_border_attention(model, chunk_size):
         elif hasattr(layer, 'layers'):
             n += enable_chunked_border_attention(layer, chunk_size)
     return n
+
+
+class BorderTopKMessagePassing(tf.keras.layers.Layer):
+    """
+    Sparse "graph message passing over predicted exon-border hubs".
+
+    A small internal head (LN -> Dense(hidden, relu) -> Dense(1)) predicts
+    a per-position border logit s_i. The Top-K positions by s_i are
+    selected as "hub" nodes. Each of the L input positions then attends
+    only over these K hubs to receive a message, and the result is
+    residually added to the stream (via a zero-init output projection).
+
+    Cost is O(L * K) per head, not O(L^2), so this scales linearly to
+    arbitrary L. No softmax normalizes over L -- every softmax runs over
+    K keys -- so length-generalization is decoupled from L and controlled
+    solely by K.
+
+    Training vs inference K
+    -----------------------
+    K is a constructor argument, not a runtime tensor: the graph is
+    traced with a fixed K, and `tf.gather` uses a K-shaped output. The
+    Q/K/V/O projections, border head, and output projection are all
+    K-agnostic in parameter count, so the SAME trained weights can be
+    reloaded into a model built with a different K -- e.g. train with
+    K=10 on 10k windows, then rebuild with K=50 (or K=500) for
+    inference on 500k sequences and load the same weights. The only
+    caveat is a mild softmax-distribution shift when K differs a lot
+    from training K (the Q/K vectors were calibrated to attention over
+    K_train keys).
+
+    Straight-through Top-K
+    ----------------------
+    The Top-K selection itself is discrete and non-differentiable.
+    A straight-through gate makes the border-score head trainable:
+    hub features are multiplied by `sigmoid(border_logit)` before being
+    passed to attention. On the forward pass this is a mild soft
+    reweighting of hub content by border confidence; on the backward
+    pass this multiplicative gate is what routes gradient back into the
+    border-score head, so the head learns to make true-border positions
+    score high. Selection itself has zero gradient (via `tf.math.top_k`).
+
+    The border logits are exposed via `call(x, return_border=True)` so
+    a builder can optionally attach an auxiliary supervision loss (e.g.
+    BCE against pooled true border channels).
+    """
+
+    def __init__(self, d_model, K, num_heads=8, dropout=0.0,
+                 zero_init_proj=True, border_hidden=None,
+                 straight_through=True, **kwargs):
+        super().__init__(**kwargs)
+        if d_model % num_heads != 0:
+            raise ValueError(
+                f"d_model ({d_model}) must be divisible by num_heads "
+                f"({num_heads})."
+            )
+        if K < 1:
+            raise ValueError(f"K ({K}) must be >= 1.")
+        self.d_model = d_model
+        self.K = K
+        self.num_heads = num_heads
+        self.head_dim = d_model // num_heads
+        self.dropout_rate = dropout
+        self.zero_init_proj = zero_init_proj
+        self.border_hidden = border_hidden or max(d_model // 2, 32)
+        self.straight_through = straight_through
+
+    def build(self, input_shape):
+        self.border_ln = LayerNormalization(name='border_ln')
+        self.border_hidden_layer = Dense(self.border_hidden,
+                                         activation='relu',
+                                         name='border_hidden')
+        self.border_out = Dense(1, name='border_logits')
+
+        # L->K attention projections. Q comes from every position;
+        # K, V come from the K selected hubs.
+        self.q_proj = Dense(self.d_model, name='q_proj')
+        self.k_proj = Dense(self.d_model, name='k_proj')
+        self.v_proj = Dense(self.d_model, name='v_proj')
+        proj_init = 'zeros' if self.zero_init_proj else 'glorot_uniform'
+        self.o_proj = Dense(self.d_model, kernel_initializer=proj_init,
+                            name='o_proj')
+        self.attn_dropout = Dropout(self.dropout_rate)
+        super().build(input_shape)
+
+    def call(self, x, training=None, return_border=False):
+        B = tf.shape(x)[0]
+        L = tf.shape(x)[1]
+
+        # Per-position border logits [B, L, 1]
+        b = self.border_ln(x)
+        b = self.border_hidden_layer(b)
+        border_logits = self.border_out(b)
+
+        # Straight-through gate: multiplies feature by sigmoid(score) so
+        # the border head receives gradient through the multiplicative
+        # gate, even though the hard Top-K selection is not itself
+        # differentiable.
+        if self.straight_through:
+            gate = tf.sigmoid(border_logits)  # [B, L, 1]
+            x_gated = x * gate
+        else:
+            x_gated = x
+
+        # Hard Top-K selection by border score.
+        scores_flat = tf.squeeze(border_logits, axis=-1)  # [B, L]
+        _, top_idx = tf.math.top_k(scores_flat, k=self.K, sorted=False)
+        # top_idx: [B, K]. Gather selected positions from x_gated.
+        hub_x = tf.gather(x_gated, top_idx, batch_dims=1)  # [B, K, d]
+
+        # L->K attention.
+        q = self.q_proj(x)          # [B, L, d]
+        k = self.k_proj(hub_x)      # [B, K, d]
+        v = self.v_proj(hub_x)      # [B, K, d]
+
+        def _split(t, T):
+            t = tf.reshape(t, [B, T, self.num_heads, self.head_dim])
+            return tf.transpose(t, [0, 2, 1, 3])  # [B, H, T, dh]
+
+        q = _split(q, L)
+        k_h = _split(k, self.K)
+        v_h = _split(v, self.K)
+
+        scale = tf.math.rsqrt(tf.cast(self.head_dim, q.dtype))
+        scores = tf.matmul(q, k_h, transpose_b=True) * scale  # [B, H, L, K]
+
+        # Manual softmax (avoids CUDA gridDim.y limit hit by tf.nn.softmax
+        # when B*H*L is large).
+        scores_max = tf.stop_gradient(tf.reduce_max(scores, axis=-1,
+                                                    keepdims=True))
+        scores = scores - scores_max
+        scores = tf.exp(scores)
+        scores_sum = tf.reduce_sum(scores, axis=-1, keepdims=True)
+        attn = scores / (scores_sum + 1e-9)
+        attn = self.attn_dropout(attn, training=training)
+
+        out = tf.matmul(attn, v_h)                   # [B, H, L, dh]
+        out = tf.transpose(out, [0, 2, 1, 3])        # [B, L, H, dh]
+        out = tf.reshape(out, [B, L, self.d_model])
+        out = self.o_proj(out)
+
+        if return_border:
+            return out, border_logits
+        return out
+
+    def get_config(self):
+        cfg = super().get_config()
+        cfg.update({
+            'd_model': self.d_model,
+            'K': self.K,
+            'num_heads': self.num_heads,
+            'dropout': self.dropout_rate,
+            'zero_init_proj': self.zero_init_proj,
+            'border_hidden': self.border_hidden,
+            'straight_through': self.straight_through,
+        })
+        return cfg

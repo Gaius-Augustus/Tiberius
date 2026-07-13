@@ -432,7 +432,10 @@ def run_tiberius(args):
 
     want_cds_probs = bool(args.cds_probs)
     want_bigwig = bool(args.bigwig_out)
-    pred_gtf.cache_softmax = want_cds_probs or want_bigwig
+    # cache_softmax is only needed for the CDS-probs postprocess, which
+    # runs after the annotation is built; BigWig streaming does not need
+    # it because it captures directly inside predict_function.
+    pred_gtf.cache_softmax = want_cds_probs
 
     cds_probs_path = (
         prehmm_probs.init_cds_probs_tsv(gtf_out) if want_cds_probs else None
@@ -448,6 +451,29 @@ def run_tiberius(args):
             args.bigwig_out, seq_lengths, bw_seq_filter, fine_classes=bw_fine,
         )
 
+        def _bigwig_stream(fasta, sm_fwd_all, sm_bwd_all):
+            shift = 0
+            for seq in fasta:
+                if bw_seq_filter is None or seq.name in bw_seq_filter:
+                    sm_fwd = prehmm_probs._softmax_for_sequence(
+                        sm_fwd_all, shift, seq.N, seq.size,
+                    )
+                    sm_bwd = None
+                    if sm_bwd_all is not None:
+                        sm_bwd = prehmm_probs._softmax_for_sequence(
+                            sm_bwd_all, shift, seq.N, seq.size,
+                        )
+                    if bw_fine:
+                        tracks = prehmm_probs.compute_fine_class_tracks(sm_fwd, sm_bwd)
+                    else:
+                        tracks = prehmm_probs.compute_class_group_tracks(sm_fwd, sm_bwd)
+                    prehmm_probs.write_bigwig_sequence(
+                        bw_writers, seq.name, tracks,
+                    )
+                shift += seq.N
+
+        pred_gtf.softmax_callback = _bigwig_stream
+
     def postprocess(fasta: b2m.struct.Fasta, \
                 annot: b2m.struct.Annotation) -> b2m.struct.Annotation:
 
@@ -462,7 +488,7 @@ def run_tiberius(args):
         if args.protseq:
             annot.sequence_to_file(target="protein", fasta=fasta, path=args.protseq, mode="a")
 
-        if pred_gtf.cache_softmax and pred_gtf.last_softmax_fwd is not None:
+        if want_cds_probs and pred_gtf.last_softmax_fwd is not None:
             sm_fwd_all = pred_gtf.last_softmax_fwd
             sm_bwd_all = pred_gtf.last_softmax_bwd
             softmax_by_seq: dict[str, tuple] = {}
@@ -477,28 +503,10 @@ def run_tiberius(args):
                         sm_bwd_all, shift, seq.N, seq.size,
                     )
                 softmax_by_seq[seq.name] = (sm_fwd, sm_bwd)
-
-                if want_bigwig and (
-                    bw_seq_filter is None or seq.name in bw_seq_filter
-                ):
-                    if bw_fine:
-                        tracks = prehmm_probs.compute_fine_class_tracks(
-                            sm_fwd, sm_bwd,
-                        )
-                    else:
-                        tracks = prehmm_probs.compute_class_group_tracks(
-                            sm_fwd, sm_bwd,
-                        )
-                    prehmm_probs.write_bigwig_sequence(
-                        bw_writers, seq.name, tracks,
-                    )
                 shift += seq.N
-
-            if want_cds_probs:
-                prehmm_probs.append_cds_probs_for_annotation(
-                    cds_probs_path, annot, softmax_by_seq,
-                )
-
+            prehmm_probs.append_cds_probs_for_annotation(
+                cds_probs_path, annot, softmax_by_seq,
+            )
             pred_gtf.last_softmax_fwd = None
             pred_gtf.last_softmax_bwd = None
         return annot

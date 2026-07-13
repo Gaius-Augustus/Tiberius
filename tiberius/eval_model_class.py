@@ -106,6 +106,12 @@ class PredictionGTF:
         self.cache_softmax = False
         self.last_softmax_fwd: np.ndarray | None = None
         self.last_softmax_bwd: np.ndarray | None = None
+        # Optional callback fired inside predict_function immediately after
+        # the LSTM softmax is computed for a group. Signature:
+        # ``callback(fasta, softmax_fwd, softmax_bwd)`` where both arrays are
+        # shaped ``(N_chunks, T, 15)`` and already indexed in forward-strand
+        # genome coordinates. Used for the streaming BigWig output.
+        self.softmax_callback = None
 
 
     def load_model(self, summary=True):
@@ -342,12 +348,19 @@ class PredictionGTF:
 
         hmm_out_bwd = hmm_out_bwd[:,::-1]
 
-        if self.cache_softmax:
+        if self.cache_softmax or self.softmax_callback is not None:
             # bwd lstm was computed on reverse-complemented chunks that were
             # additionally flipped along the time axis; flip back so both
-            # arrays are indexed in forward-strand coordinates.
-            self.last_softmax_fwd = np.asarray(lstm_out_fwd)
-            self.last_softmax_bwd = np.asarray(lstm_out_bwd)[:, ::-1, :]
+            # arrays are indexed in forward-strand coordinates. These arrays
+            # are the exact preHMM emission distribution that the HMM has
+            # just consumed above.
+            sm_fwd = np.asarray(lstm_out_fwd)
+            sm_bwd = np.asarray(lstm_out_bwd)[:, ::-1, :]
+            if self.cache_softmax:
+                self.last_softmax_fwd = sm_fwd
+                self.last_softmax_bwd = sm_bwd
+            if self.softmax_callback is not None:
+                self.softmax_callback(fasta, sm_fwd, sm_bwd)
 
         return hmm_out_fwd, hmm_out_bwd
 

@@ -5,9 +5,10 @@ import argparse
 import pathlib
 import sys
 import json
+import tensorflow as tf
 from tensorflow import keras
 from tiberius import DataGenerator
-from tiberius.models import lstm_model, custom_cce_f1_loss, Cast
+from tiberius.models import lstm_model, custom_cce_f1_loss, Cast, build_backbone_from_config
 
 def parse_args(argv = None) -> argparse.Namespace:
     """Parse CLI arguments, convert to absolute paths, and perform basic path sanity checks."""
@@ -126,15 +127,26 @@ def main(argv = None) -> None:
     result = []
     for epoch in epochs_dirs:
         print(str(epoch))
-        model = keras.models.load_model(
-                    str(epoch),
-                    custom_objects={
-                    'custom_cce_f1_loss': custom_cce_f1_loss(2, args.batch_size),
-                    'loss_': custom_cce_f1_loss(2, args.batch_size),
-                    "Cast": Cast},
-                    compile=False,
-                    )
-        use_hmm = any("gene_pred_hmm_layer" in layer.name for layer in model.submodules)
+        weights_h5 = epoch / "weights.h5"
+        if not weights_h5.exists():
+            weights_h5 = epoch / "model.weights.h5"
+        if weights_h5.exists():
+            # New epoch-folder format: rebuild backbone from config, load weights
+            softmask = config.get("inp_size") == 6 if "inp_size" in config else config.get("softmasking", True)
+            model = build_backbone_from_config(config, softmasking=softmask)
+            model.load_weights(str(weights_h5))
+            use_hmm = False
+        else:
+            # Legacy SavedModel / .keras format
+            model = keras.models.load_model(
+                        str(epoch),
+                        custom_objects={
+                        'custom_cce_f1_loss': custom_cce_f1_loss(2, args.batch_size),
+                        'loss_': custom_cce_f1_loss(2, args.batch_size),
+                        "Cast": Cast},
+                        compile=False,
+                        )
+            use_hmm = any("gene_pred_hmm_layer" in layer.name for layer in model.submodules)
         model.compile(
             optimizer=keras.optimizers.Adam(learning_rate=config["lr"]),
             loss=custom_cce_f1_loss(2, args.batch_size, from_logits=use_hmm),

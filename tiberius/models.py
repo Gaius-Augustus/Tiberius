@@ -78,7 +78,7 @@ class BatchSave(tf.keras.callbacks.Callback):
 def custom_cce_f1_loss(f1_factor, batch_size,
                     include_reading_frame=True, use_cce=True, from_logits=False,
                     exon_count_factor=0.0, exon_count_per_class=False,
-                    exon_count_threshold=0.0):
+                    exon_count_threshold=0.0, label_smoothing=0.0):
     # 15-class label layout (see gene_pred_hmm_emitter.py):
     # (Ir, I0, I1, I2, E0, E1, E2, START, EI0, EI1, EI2, IE0, IE1, IE2, STOP)
     # Exon borders: starts = START(7), IE0-IE2(11-13); ends = EI0-EI2(8-10), STOP(14).
@@ -89,7 +89,7 @@ def custom_cce_f1_loss(f1_factor, batch_size,
         y_true = tf.cast(y_true, y_pred.dtype)
         if use_cce:
             # Compute the categorical cross-entropy loss
-            cce_loss = tf.keras.losses.categorical_crossentropy(y_true, y_pred, from_logits=from_logits)
+            cce_loss = tf.keras.losses.categorical_crossentropy(y_true, y_pred, from_logits=from_logits, label_smoothing=label_smoothing)
             cce_loss = tf.reduce_mean(cce_loss, -1) #mean over sequence length
             cce_loss = tf.reduce_sum(cce_loss) / batch_size #mean over batch with global batch size
         else:

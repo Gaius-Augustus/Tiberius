@@ -340,6 +340,7 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
     exon_count_factor = config.get("loss_exon_count_factor", 0.0)
     exon_count_per_class = config.get("loss_exon_count_per_class", False)
     exon_count_threshold = config.get("loss_exon_count_threshold", 0.0)
+    label_smoothing = config.get("loss_label_smoothing", 0.0)
 
     # Base loss (for non-HMM outputs or LSTM output in multi-loss)
     if config.get("loss_f1_factor"):
@@ -349,6 +350,7 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
             exon_count_factor=exon_count_factor,
             exon_count_per_class=exon_count_per_class,
             exon_count_threshold=exon_count_threshold,
+            label_smoothing=label_smoothing,
         )
     else:
         base_loss = tf.keras.losses.CategoricalCrossentropy()
@@ -368,6 +370,7 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
             exon_count_factor=exon_count_factor,
             exon_count_per_class=exon_count_per_class,
             exon_count_threshold=exon_count_threshold,
+            label_smoothing=label_smoothing,
         )
         return [base_loss, hmm_loss], [1, config.get("hmm_loss_weight_mul", 0.1)]
 
@@ -670,6 +673,7 @@ def main():
             "loss_exon_count_factor": 0.0,
             "loss_exon_count_per_class": False,
             "loss_exon_count_threshold": 0.0,
+            "loss_label_smoothing": 0.0,
             "sgd": False,
             "oracle": False,
             "lru_layer": False,

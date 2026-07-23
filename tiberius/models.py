@@ -77,12 +77,12 @@ class BatchSave(tf.keras.callbacks.Callback):
 
 def custom_cce_f1_loss(f1_factor, batch_size,
                     include_reading_frame=True, use_cce=True, from_logits=False,
-                    exon_count_factor=0.0):
+                    exon_count_factor=0.0, exon_count_per_class=False,
+                    exon_count_threshold=0.0):
     # 15-class label layout (see gene_pred_hmm_emitter.py):
     # (Ir, I0, I1, I2, E0, E1, E2, START, EI0, EI1, EI2, IE0, IE1, IE2, STOP)
-    # Exon starts = START (ch 7) for the first exon + IE0/IE1/IE2 (ch 11-13)
-    # for internal/terminal exons. Used by the soft exon-count penalty.
-    exon_start_channels = [7, 11, 12, 13]
+    # Exon borders: starts = START(7), IE0-IE2(11-13); ends = EI0-EI2(8-10), STOP(14).
+    exon_border_channels = [7, 8, 9, 10, 11, 12, 13, 14]
 
     @tf.function
     def loss_(y_true, y_pred):
@@ -135,13 +135,25 @@ def custom_cce_f1_loss(f1_factor, batch_size,
         # where exon-start markers exist as separate channels.
         n_classes = y_true.shape[-1]
         if exon_count_factor > 0 and n_classes == 15:
-            starts_pred = tf.reduce_sum(
-                tf.gather(y_pred, exon_start_channels, axis=-1), axis=-1)
-            starts_true = tf.reduce_sum(
-                tf.gather(y_true, exon_start_channels, axis=-1), axis=-1)
-            count_pred = tf.reduce_sum(starts_pred, axis=1)
-            count_true = tf.reduce_sum(starts_true, axis=1)
-            exon_count_loss = tf.reduce_sum(tf.abs(count_pred - count_true)) / batch_size
+            gathered_pred = tf.gather(y_pred, exon_border_channels, axis=-1)  # (B, L, 8)
+            gathered_true = tf.gather(y_true, exon_border_channels, axis=-1)  # (B, L, 8)
+            if exon_count_threshold > 0.0:
+                # zero out per-class positions below threshold before counting
+                mask = tf.cast(gathered_pred > exon_count_threshold, gathered_pred.dtype)
+                gathered_pred = gathered_pred * mask
+            if exon_count_per_class:
+                # L1 per channel (B, 8) -> mean over 8 border classes -> scalar
+                count_pred = tf.reduce_sum(gathered_pred, axis=1)  # (B, 8)
+                count_true = tf.reduce_sum(gathered_true, axis=1)  # (B, 8)
+                per_class = tf.reduce_sum(tf.abs(count_pred - count_true), axis=0) / batch_size  # (8,)
+                exon_count_loss = tf.reduce_mean(per_class)
+            else:
+                # original: merge channels first, then L1
+                starts_pred = tf.reduce_sum(gathered_pred, axis=-1)  # (B, L)
+                starts_true = tf.reduce_sum(gathered_true, axis=-1)  # (B, L)
+                count_pred = tf.reduce_sum(starts_pred, axis=1)
+                count_true = tf.reduce_sum(starts_true, axis=1)
+                exon_count_loss = tf.reduce_sum(tf.abs(count_pred - count_true)) / batch_size
         else:
             exon_count_loss = tf.cast(0.0, cce_loss.dtype if use_cce else f1_loss.dtype)
 

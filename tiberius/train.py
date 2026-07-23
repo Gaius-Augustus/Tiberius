@@ -338,6 +338,8 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
       - otherwise: use from_logits=True loss for HMM output
     """
     exon_count_factor = config.get("loss_exon_count_factor", 0.0)
+    exon_count_per_class = config.get("loss_exon_count_per_class", False)
+    exon_count_threshold = config.get("loss_exon_count_threshold", 0.0)
 
     # Base loss (for non-HMM outputs or LSTM output in multi-loss)
     if config.get("loss_f1_factor"):
@@ -345,6 +347,8 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
             config["loss_f1_factor"],
             batch_size=config["batch_size"],
             exon_count_factor=exon_count_factor,
+            exon_count_per_class=exon_count_per_class,
+            exon_count_threshold=exon_count_threshold,
         )
     else:
         base_loss = tf.keras.losses.CategoricalCrossentropy()
@@ -362,6 +366,8 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
             batch_size=config["batch_size"],
             from_logits=True,
             exon_count_factor=exon_count_factor,
+            exon_count_per_class=exon_count_per_class,
+            exon_count_threshold=exon_count_threshold,
         )
         return [base_loss, hmm_loss], [1, config.get("hmm_loss_weight_mul", 0.1)]
 
@@ -371,6 +377,8 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
         batch_size=config["batch_size"],
         from_logits=True,
         exon_count_factor=exon_count_factor,
+        exon_count_per_class=exon_count_per_class,
+        exon_count_threshold=exon_count_threshold,
     )
     return hmm_only_loss, None
 
@@ -660,6 +668,8 @@ def main():
             "clamsa_with_lstm": True,
             "loss_f1_factor": 2.0,
             "loss_exon_count_factor": 0.0,
+            "loss_exon_count_per_class": False,
+            "loss_exon_count_threshold": 0.0,
             "sgd": False,
             "oracle": False,
             "lru_layer": False,

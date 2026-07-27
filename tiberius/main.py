@@ -369,6 +369,14 @@ def run_tiberius(args):
     primary_out = out_paths[0]
     secondary_outs = out_paths[1:]
 
+    if len(out_paths) != len(set(out_paths)):
+        seen, dupes = set(), []
+        for p in out_paths:
+            if p in seen:
+                dupes.append(p)
+            seen.add(p)
+        logging.error(f"Error: Duplicate output path(s): {', '.join(dupes)}")
+        sys.exit(1)
     for p in out_paths:
         if Path(p).suffix.lower() not in _VALID_OUT_EXTS:
             logging.error(f"Error: Output file '{p}' must end in .gtf, .gff, or .gff3.")

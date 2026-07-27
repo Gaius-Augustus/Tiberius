@@ -1,5 +1,7 @@
 ![Docker Pulls](https://img.shields.io/docker/pulls/larsgabriel23/tiberius)
 
+⚠️ **Web server available.** You can run Tiberius without any local installation at [https://bioinf.uni-greifswald.de/tiberius](https://bioinf.uni-greifswald.de/tiberius). Upload a gzipped genome FASTA, select a clade model and the predicted annotation will be sent vie mail (no account required).
+
 ### ⚠️ Important Update Tiberius 2.0.0 — April 2026
 - **Tiberius models for many new clades are now available.**
 - **Runtime has been reduced by 30%.**
@@ -9,7 +11,6 @@
 For more information, see the Tiberius clade training [preprint](https://doi.org/10.64898/2026.04.24.720536) or the original Tiberius [paper](https://academic.oup.com/bioinformatics/article/40/12/btae685/7903281).
 
 
-⚠️ **Web server available.** You can run Tiberius without any local installation at [https://bioinf.uni-greifswald.de/tiberius](https://bioinf.uni-greifswald.de/tiberius). Upload a gzipped genome FASTA, select a clade model and the predicted annotation will be sent vie mail (no account required).
 
 Tiberius is a deep learning-based *ab initio* gene structure prediction tool that end-to-end integrates convolutional
 and long short-term memory layers with a differentiable HMM layer. It can be used to predict gene structures from **genomic sequences only** (*ab initio*), while matching the accuracy of tools that use extrinsic evidence.

@@ -46,8 +46,11 @@ def parseCmd():
         help=argparse.SUPPRESS)
     tiberius_grp.add_argument('--model_old', type=str,
         help=argparse.SUPPRESS, default='')
-    tiberius_grp.add_argument('--out', type=str,
-        help='Output GTF file with Tiberius gene prediction, the file must end in .gtf, .gff or .gff3.', default='tiberius.gtf')
+    tiberius_grp.add_argument('--out', type=str, nargs='+',
+        help=('Output annotation file(s). Each path must end in .gtf, .gff, or .gff3. '
+              'Specify multiple paths to write several formats simultaneously '
+              '(e.g. --out tiberius.gtf tiberius.gff3).'),
+        default=['tiberius.gtf'])
     tiberius_grp.add_argument('--parallel_factor', type=int, default=0,
         help='Parallel factor used in Viterbi (default uses sqrt(seq_len)).')
 
@@ -75,7 +78,7 @@ def parseCmd():
     tiberius_grp.add_argument('--batch_size', type=int, default=None,
         help='Number of sub-sequences per batch.')
     tiberius_grp.add_argument('--id_prefix', type=str, default='',
-        help='Prefix for gene and transcript IDs in output GTF file.')
+        help='Prefix for gene and transcript IDs in output file(s). Works for both GTF and GFF3.')
     tiberius_grp.add_argument('--min_genome_seqlen', type=int, default=1000,
         help='Minimum length of input sequences used for predictions.')
     tiberius_grp.add_argument('--singularity', action='store_true',

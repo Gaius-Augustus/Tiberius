@@ -44,6 +44,22 @@ def apply_id_prefix(gtf_path: str, prefix: str) -> None:
     os.replace(tmp_path, gtf_path)
 
 
+def apply_id_prefix_gff3(gff3_path: str, prefix: str) -> None:
+    """Prefix every ID= and Parent= attribute value in a GFF3 attributes column."""
+    import re
+    pattern = re.compile(r'((?:^|;)(?:ID|Parent)=)([^;\n]+)')
+    replacer = lambda m: f"{m.group(1)}{prefix}{m.group(2)}"
+    tmp_path = gff3_path + ".tmp"
+    with open(gff3_path, "r", encoding="utf-8") as src, \
+         open(tmp_path, "w", encoding="utf-8") as dst:
+        for line in src:
+            if not line or line.startswith("#"):
+                dst.write(line)
+                continue
+            dst.write(pattern.sub(replacer, line))
+    os.replace(tmp_path, gff3_path)
+
+
 class MissingConfigFieldError(RuntimeError):
     """Raised when the model-config file lacks one or more required fields."""
 
@@ -342,10 +358,25 @@ def import_tensorflow():
     return tf
 
 
+_GFF_EXTS = {'.gff', '.gff3'}
+_VALID_OUT_EXTS = {'.gtf'} | _GFF_EXTS
+
+
 def run_tiberius(args):
     config, model_path, model_path_hmm = resolve_model_paths(args)
 
-    gtf_out = os.path.abspath(args.out)
+    out_paths = [os.path.abspath(p) for p in args.out]
+    primary_out = out_paths[0]
+    secondary_outs = out_paths[1:]
+
+    for p in out_paths:
+        if Path(p).suffix.lower() not in _VALID_OUT_EXTS:
+            logging.error(f"Error: Output file '{p}' must end in .gtf, .gff, or .gff3.")
+            sys.exit(1)
+    for p in secondary_outs:
+        if os.path.exists(p):
+            logging.error(f"Error: Output file '{p}' already exists.")
+            sys.exit(1)
 
     if args.seq_len is not None:
         seq_len = args.seq_len
@@ -457,6 +488,11 @@ def run_tiberius(args):
             annot.sequence_to_file(target="coding", fasta=fasta, path=args.codingseq, mode="a")
         if args.protseq:
             annot.sequence_to_file(target="protein", fasta=fasta, path=args.protseq, mode="a")
+        for sec_path in secondary_outs:
+            if Path(sec_path).suffix.lower() == '.gtf':
+                annot.to_gtf(sec_path, source="Tiberius", append=True)
+            else:
+                annot.to_gff3(sec_path, source="Tiberius", append=True)
         return annot
 
     clamsa=None
@@ -467,7 +503,7 @@ def run_tiberius(args):
     b2m.tools.annotate.annotate_genome(
         fasta = Path(genome_path).expanduser(),
         predict_func = predict_fun,
-        output = gtf_out,
+        output = primary_out,
         allow_extract_gz = True,
         T_max = seq_len,
         T_delta = 0.1,
@@ -483,7 +519,11 @@ def run_tiberius(args):
     )
 
     if args.id_prefix:
-        apply_id_prefix(gtf_out, args.id_prefix)
+        for out_path in out_paths:
+            if Path(out_path).suffix.lower() == '.gtf':
+                apply_id_prefix(out_path, args.id_prefix)
+            else:
+                apply_id_prefix_gff3(out_path, args.id_prefix)
 
     end_time = time.time()
     duration = end_time - start_time

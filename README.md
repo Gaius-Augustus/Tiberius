@@ -200,7 +200,14 @@ python tiberius.py --singularity --genome input.fasta \
 
 In order to run Tiberius with a local installation omit `--singularity`.
 
-Tiberius produces a GTF or GFF3 file containing the predicted gene structures (default: `tiberius.gff3`). The output format depends on the file extension of the specified `--out` file but the ouptut file has to end in either `.gtf`, `.gff` or `.gff3`. It can also generate FASTA-formatted files of coding sequences and protein sequences when locations are specified using the `--codingseq` and `--protseq` options, respectively.
+Tiberius produces a GTF or GFF3 file containing the predicted gene structures (default: `tiberius.gtf`). The output format is inferred from the file extension, which must be `.gtf`, `.gff`, or `.gff3`. It can also generate FASTA-formatted files of coding sequences and protein sequences when locations are specified using the `--codingseq` and `--protseq` options, respectively.
+
+**Writing multiple output formats simultaneously.** Pass more than one path to `--out` to write several formats in a single run:
+
+```shell
+python tiberius.py --genome input.fasta --model_cfg mammalia_softmasking_v2 \
+    --out tiberius.gtf tiberius.gff3
+```
 
 
 ### Running Tiberius with Nextflow

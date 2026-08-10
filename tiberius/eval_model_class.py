@@ -220,6 +220,37 @@ class PredictionGTF:
 
             self.lstm_model.load_weights(weights_h5)
 
+            # hmm_middle_residual_stream: the backbone already contains a
+            # TrainableHMMHead at 'hmm_middle_head'. For inference we:
+            #   1. Extract a sub-model that ends at 'hmm_in_softmax'
+            #      (the pre-HMM class probabilities).  This becomes lstm_model
+            #      so lstm_prediction returns the inputs the HMM expects.
+            #   2. Switch the baked-in HMM head to VITERBI mode and expose it
+            #      as self.trainable_hmm_head so predict_vit's existing
+            #      `use_trainable` path drives it -- no new HMM is added.
+            if config.get("arch") == "hmm_middle_residual_stream":
+                full_backbone = self.lstm_model
+                if self.parallel_factor and self.parallel_factor > 1:
+                    inference_parallel = self.parallel_factor
+                else:
+                    inference_parallel = compute_parallel_factor(self.seq_len)
+                    self.parallel_factor = inference_parallel
+                # Extract HMM head before narrowing lstm_model.
+                hmm_head = full_backbone.get_layer('hmm_middle_head')
+                hmm_head.parallel_factor = inference_parallel
+                hmm_head.set_mode(HMMMode.VITERBI)
+                self.trainable_hmm_head = hmm_head
+                self._trainable_hmm_isc = hmm_head.intron_state_chain
+                # Narrow to the pre-HMM sub-model (shares layer weights).
+                self.lstm_model = Model(
+                    inputs=full_backbone.inputs,
+                    outputs=full_backbone.get_layer('hmm_in_softmax').output,
+                )
+                self.inp_size = self.lstm_model.output_shape[-1]
+                if summary:
+                    self.lstm_model.summary()
+                return
+
             if self.model_path_hmm:
                 model_hmm = keras.models.load_model(
                         self.model_path_hmm,

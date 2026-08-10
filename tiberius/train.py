@@ -359,6 +359,12 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
         base_loss = tf.keras.losses.BinaryCrossentropy()
 
     if head not in ("hmm", "hmm_new"):
+        # Two-loss training for hmm_middle_residual_stream with aux_hmm_loss:
+        # outputs = [hmm_aux_out (softmax), out (softmax)], both use base_loss.
+        if (config.get("arch") == "hmm_middle_residual_stream"
+                and config.get("aux_hmm_loss", False)):
+            aux_weight = float(config.get("aux_hmm_loss_weight", 0.1))
+            return [base_loss, base_loss], [aux_weight, 1.0]
         return base_loss, config.get("loss_weights") if config.get("loss_weights") else None
 
     # HMM head case (old fixed-param HMM or new trainable HMM):
@@ -695,6 +701,11 @@ def main():
             # identity residual on the backbone: y = readout(hmm) + log(x)
             # with zero-init readout, so softmax(y)==x at step 0.
             "hmm_new_residual": True,
+            # hmm_middle_residual_stream: auxiliary loss at the mid-model HMM output.
+            # Adds a softmax head at hmm_out and supervises it with base_loss
+            # weighted by aux_hmm_loss_weight.  No effect for other archs.
+            "aux_hmm_loss": False,
+            "aux_hmm_loss_weight": 0.1,
         }
 
     # Normalize paths / args

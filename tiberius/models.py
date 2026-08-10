@@ -900,11 +900,12 @@ def hmm_middle_residual_stream_model(units=160, d_model=None,
     hmm_out = Reshape((-1, output_size), name='hmm_out_reshape')(hmm_out)
 
     if aux_hmm_loss:
-        # Readout is unactivated (logit-like) -- softmax first for a
-        # log-probability auxiliary target, matching add_hmm_layer's format.
-        y_hmm = Activation('softmax', name='hmm_out_softmax')(hmm_out)
-        y_hmm = Activation(safe_clipped_log,
-                           name='hmm_out_safe_clipped_log')(y_hmm)
+        # hmm_out carries logit-like values (readout + log(class_probs) residual).
+        # Softmax converts to class probabilities for the standard base_loss
+        # (CategoricalCrossentropy with from_logits=False). Output is named
+        # 'hmm_aux_out' so the inference loader can build the sub-model
+        # without touching this tensor.
+        y_hmm = Activation('softmax', name='hmm_aux_out')(hmm_out)
         outputs.append(y_hmm)
 
     # Project HMM output to d_model and additively fuse with the pre-HMM stream.

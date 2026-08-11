@@ -604,6 +604,19 @@ def train_model(
 
         model.summary()
 
+        # Multi-output: Keras requires y_true to mirror the output structure.
+        # When loss is a list of N losses, duplicate y_true N times so every
+        # output head receives the same labels.  Sample weights stay as-is.
+        n_out = len(loss) if isinstance(loss, list) else 1
+        if n_out > 1:
+            dataset = dataset.map(
+                lambda x, y, w: (x, (y,) * n_out, w),
+                num_parallel_calls=tf.data.AUTOTUNE,
+            )
+            if val_data is not None:
+                x_v, y_v = val_data[0], val_data[1]
+                val_data = (x_v, (y_v,) * n_out)
+
         # Logging
         csv_logger = CSVLogger(str(model_save_dir / "training.log"), append=True, separator=";")
 

@@ -599,7 +599,8 @@ def train_model(
             model = attach_head(backbone, config, head=head)
 
         loss, loss_weights = build_loss_and_weights(config, head=head)
-        model.compile(loss=loss, optimizer=optimizer, metrics=["accuracy"], loss_weights=loss_weights)
+        metrics = [["accuracy"]] * len(loss) if isinstance(loss, list) else ["accuracy"]
+        model.compile(loss=loss, optimizer=optimizer, metrics=metrics, loss_weights=loss_weights)
 
         model.summary()
 

@@ -29,7 +29,7 @@ import numpy as np
 import tensorflow as tf
 
 from bricks2marble.struct.index import IndexedBGZipFasta
-from bricks2marble.io import load_annotation as b2m_load_annotation
+from bricks2marble.struct.annotation import Annotation as B2MAnnotation, Gene as B2MGene, Transcript as B2MTranscript
 
 # ---------------------------------------------------------------------------
 # One-hot lookup: bricks2marble int8 encoding → Tiberius one-hot rows
@@ -57,6 +57,52 @@ def _sequence_to_onehot(seq, softmasking: bool = True) -> np.ndarray:
     if not softmasking:
         x = x[:, :5]
     return x
+
+
+# ---------------------------------------------------------------------------
+# GenePred loader with gene-level isoform grouping
+# ---------------------------------------------------------------------------
+
+def _load_genepred_grouped(path: str | Path) -> B2MAnnotation:
+    """Load a GenePred (extended) file and group isoforms by gene name.
+
+    Uses field 11 (name2, gene name) from gtfToGenePred -genePredExt output
+    to group multiple isoforms of the same gene into a single Gene object so
+    that gene.longest() correctly picks the isoform with the longest CDS.
+
+    Falls back to the transcript name (field 0) as the gene key when field 11
+    is absent (plain GenePred without -genePredExt).
+    """
+    # gene_key → (Gene object, sequence, strand)
+    genes: dict[str, B2MGene] = {}
+
+    with open(path) as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            fields = line.split("\t")
+            tx = B2MTranscript.from_genepred_row(line)
+            if not tx.cds:
+                continue
+            # Field 11 is the gene name in -genePredExt format.
+            gene_name = fields[11].strip() if len(fields) > 11 else fields[0].strip()
+            # Include sequence + strand in the key so same-name genes on
+            # different sequences or strands are not merged.
+            gene_key = f"{tx.sequence}|{tx.strand}|{gene_name}"
+            if gene_key not in genes:
+                genes[gene_key] = B2MGene(
+                    name=gene_name,
+                    sequence=tx.sequence,
+                    strand=tx.strand,
+                    transcripts=[],
+                )
+            genes[gene_key].add(tx)
+
+    ann = B2MAnnotation()
+    for gene in genes.values():
+        ann.add(gene)
+    return ann
 
 
 # ---------------------------------------------------------------------------
@@ -242,7 +288,7 @@ def get_species_data_indexed(
     ]
     seq_lens = [ifasta.length(s) for s in seq_names]
 
-    b2m_annot = b2m_load_annotation(annot_path)
+    b2m_annot = _load_genepred_grouped(annot_path)
 
     return ifasta, b2m_annot, seq_names, seq_lens
 

@@ -772,9 +772,18 @@ def main():
         species_data = []
         for s in species:
             print(f"  [{s}] indexing …")
+            for _gp_suffix in (".gp", ".genePred"):
+                _gp_path = data_path / f"{s}{_gp_suffix}"
+                if _gp_path.exists():
+                    break
+            else:
+                raise FileNotFoundError(
+                    f"No annotation file found for {s!r} in {data_path}. "
+                    f"Expected {s}.gp or {s}.genePred"
+                )
             data_tuple = get_species_data_indexed(
                 genome_path=str(data_path / f"{s}.fa.gz"),
-                annot_path=str(data_path / f"{s}.gp"),
+                annot_path=str(_gp_path),
                 seq_len=config.get("w_size", 9999),
                 min_seq_len=config.get("w_size", 9999),
             )

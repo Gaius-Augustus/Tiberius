@@ -37,8 +37,9 @@ def parseCmd():
     parser.add_argument('--both_strands', action='store_true',
         help='Train dual-strand prediction: predict genes on forward and reverse '
              'strand simultaneously.  Requires --hmm_new.  Data is loaded via '
-             'IndexedDataGenerator (no TFRecord pre-generation); --data must '
-             'point to a directory containing {species}.fa and {species}.gtf '
-             'files for each species in --train_species_file.')
+             'IndexedBGZipFasta (no TFRecord pre-generation); --data must '
+             'point to a directory containing {species}.fa.gz (bgzip) and '
+             '{species}.gtf files for each species in --train_species_file. '
+             'Each .fa.gz must have a pyfaidx index: samtools faidx species.fa.gz')
 
     return parser.parse_args()

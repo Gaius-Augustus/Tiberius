@@ -27,8 +27,7 @@ from tensorflow.keras.optimizers import Adam, SGD
 import tiberius.parse_args as parse_args
 import tiberius.models as models
 from tiberius import DataGenerator
-from tiberius.data_indexed import IndexedDataGenerator
-from tiberius.write_tfrecord_species import get_species_data_hmm
+from tiberius.data_indexed import IndexedDataGenerator, get_species_data_indexed
 from tiberius.models import (
     Cast,
     add_hmm_layer,
@@ -767,17 +766,19 @@ def main():
     if config.get("both_strands", False):
         # Indexed data loading — no TFRecord pre-generation needed.
         # Expects {data_path}/{species}.fa and {data_path}/{species}.gtf.
-        print("[both_strands] Loading indexed genome + annotation data …")
+        # IndexedFasta reads only the requested window bytes from disk;
+        # genome sequences are never fully loaded into RAM.
+        print("[both_strands] Building indexed genome + annotation data …")
         species_data = []
         for s in species:
-            fasta_obj, annot_obj = get_species_data_hmm(
-                genome_path=str(data_path / f"{s}.fa"),
+            print(f"  [{s}] indexing …")
+            ifasta, annot = get_species_data_indexed(
+                genome_path=str(data_path / f"{s}.fa.gz"),
                 annot_path=str(data_path / f"{s}.gtf"),
                 seq_len=config.get("w_size", 9999),
-                overlap_size=0,
-                min_seq_len=config.get("w_size", 9999) - 1,
+                min_seq_len=config.get("w_size", 9999),
             )
-            species_data.append((fasta_obj, annot_obj))
+            species_data.append((ifasta, annot))
         generator = IndexedDataGenerator(
             species_data=species_data,
             batch_size=config["batch_size"],

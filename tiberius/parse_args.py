@@ -39,7 +39,8 @@ def parseCmd():
              'strand simultaneously.  Requires --hmm_new.  Data is loaded via '
              'IndexedBGZipFasta (no TFRecord pre-generation); --data must '
              'point to a directory containing {species}.fa.gz (bgzip) and '
-             '{species}.gtf files for each species in --train_species_file. '
-             'Each .fa.gz must have a pyfaidx index: samtools faidx species.fa.gz')
+             '{species}.gp (GenePred) files for each species in --train_species_file. '
+             'Create .fa.gz.fai with: samtools faidx species.fa.gz. '
+             'Convert GTF to GenePred with: gtfToGenePred -genePredExt species.gtf species.gp')
 
     return parser.parse_args()

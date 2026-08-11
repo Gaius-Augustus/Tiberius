@@ -2,12 +2,14 @@
 
 Uses bricks2marble.struct.index.IndexedBGZipFasta for memory-mapped sequence
 access on bgzip-compressed FASTA files (only the requested window bytes are
-read from disk) and keeps Tiberius's Annotation in memory (transcript
-coordinates only, ~10-100 MB per genome).
+read from disk).  Annotation is loaded via bricks2marble.io.load_annotation
+from a GenePred file (.gp); isoform selection uses gene.longest().
 
 Requires:
   - bgzip-compressed genome: species.fa.gz  (bgzip, NOT gzip)
   - pyfaidx index alongside it: species.fa.gz.fai  (samtools faidx species.fa.gz)
+  - GenePred annotation: species.gp  (convert from GTF with:
+        gtfToGenePred -genePredExt species.gtf species.gp)
 
 For both_strands=True each batch yields:
   x : (batch, seq_len, inp_size)   forward-strand one-hot sequence
@@ -27,7 +29,7 @@ import numpy as np
 import tensorflow as tf
 
 from bricks2marble.struct.index import IndexedBGZipFasta
-from tiberius.annotation_gtf import Annotation
+from bricks2marble.io import load_annotation as b2m_load_annotation
 
 # ---------------------------------------------------------------------------
 # One-hot lookup: bricks2marble int8 encoding → Tiberius one-hot rows
@@ -57,21 +59,151 @@ def _sequence_to_onehot(seq, softmasking: bool = True) -> np.ndarray:
     return x
 
 
-def _build_window_index(
-    annotation: Annotation,
-) -> list[tuple[str, int, int, int]]:
-    """Return (seq_name, start_bp, end_bp, genomic_k) for every chunk window.
+# ---------------------------------------------------------------------------
+# 15-class label generation from bricks2marble Annotation
+# ---------------------------------------------------------------------------
 
-    Iterates through sequences in annotation.seqnames order, matching the
-    layout that Annotation.seq2chunk_pos["-"] uses.
+def _b2m_transcript_to_genomic_labels(tx) -> np.ndarray:
+    """Convert bricks2marble Transcript to 15-class integer labels in genomic order.
+
+    Returns array of shape (tx_end - tx_start,) with values 0-14.
+    Index 0 corresponds to genomic position tx.cds[0].start (0-based).
+
+    Label scheme (Tiberius HMM):
+      0=IR, 1-3=I0-I2, 4-6=E0-E2, 7=START, 8-10=EI0-EI2,
+      11-13=IE0-IE2, 14=STOP
     """
+    from tiberius.annotation_gtf import GeneFeature
+
+    cds_blocks = tx.cds   # list of CDS(start, end) — 0-based, end exclusive
+    strand = tx.strand
+
+    if not cds_blocks:
+        return np.array([], dtype=np.int32)
+
+    tx_start = cds_blocks[0].start   # 0-based inclusive
+    tx_end = cds_blocks[-1].end      # 0-based exclusive
+    tx_len = tx_end - tx_start
+
+    # Build GeneFeature list (1-based inclusive convention).
+    # CDS block  0-based [s, e) → 1-based [s+1, e]
+    # Intron gap 0-based [e1, s2) → 1-based [e1+1, s2]
+    features = []
+    for i, blk in enumerate(cds_blocks):
+        features.append(GeneFeature('CDS', blk.start + 1, blk.end, strand, 0))
+        if i < len(cds_blocks) - 1:
+            next_blk = cds_blocks[i + 1]
+            features.append(GeneFeature('intron', blk.end + 1, next_blk.start, strand, 0))
+
+    features.sort(key=lambda f: f.start)
+
+    # Compute reading-frame phases — same algorithm as Tiberius Transcript.read_input.
+    # For + strand iterate left-to-right; for - strand right-to-left (5'→3').
+    idx_order = (
+        list(range(len(features))) if strand == '+'
+        else list(range(len(features) - 1, -1, -1))
+    )
+    prev_cds_phase = 0
+    for i in idx_order:
+        f = features[i]
+        if f.type == 'CDS':
+            f.phase = prev_cds_phase
+            prev_cds_phase = (3 - (f.end - f.start + 1 - prev_cds_phase) % 3) % 3
+
+    for k, i in enumerate(idx_order):
+        f = features[i]
+        if f.type == 'intron':
+            try:
+                f.phase = features[idx_order[k + 1]].phase
+            except IndexError:
+                f.phase = 0
+
+    # Fill label array (index 0 = genomic position tx_start).
+    tx_labels = np.zeros(tx_len, dtype=np.int32)
+    for f in features:
+        # Convert 1-based inclusive → 0-based relative to tx_start.
+        rs = f.start - 1 - tx_start   # 0-based relative start (inclusive)
+        re = f.end - tx_start          # 0-based relative end (exclusive)
+        rs_c = max(0, rs)
+        re_c = min(tx_len, re)
+        if rs_c >= re_c:
+            continue
+        feat_labels = f.to_class_labels()   # length = f.end - f.start + 1
+        clip_s = rs_c - rs
+        tx_labels[rs_c:re_c] = feat_labels[clip_s: clip_s + (re_c - rs_c)]
+
+    # Mark START and STOP at transcript 5' and 3' ends.
+    if strand == '+':
+        tx_labels[0] = 7    # START
+        tx_labels[-1] = 14  # STOP
+    else:
+        # - strand: 5' end is at the highest genomic coordinate.
+        tx_labels[-1] = 7   # START
+        tx_labels[0] = 14   # STOP
+
+    return tx_labels
+
+
+def _chunk_labels_from_b2m(
+    b2m_annot,
+    seq_name: str,
+    chunk_start: int,   # 0-based inclusive
+    chunk_end: int,     # 0-based exclusive
+    strand: str,        # "+" or "-"
+) -> np.ndarray:
+    """Generate 15-class labels for one strand in a genomic window.
+
+    For strand="+": labels[i] = label at genomic position chunk_start+i.
+    For strand="-": labels[j] = label at RC position j, i.e. the - strand
+        label at genomic position chunk_end-1-j  (5'→3' on - strand).
+    """
+    chunk_len = chunk_end - chunk_start
+    labels = np.zeros(chunk_len, dtype=np.int32)
+
+    if seq_name not in b2m_annot:
+        return labels
+
+    seq_ann = b2m_annot[seq_name]
+
+    for gene in seq_ann.genes():
+        if gene.strand != strand:
+            continue
+        tx = gene.longest()
+        if not tx.cds:
+            continue
+        gene_start = tx.cds[0].start   # 0-based inclusive
+        gene_end = tx.cds[-1].end       # 0-based exclusive
+        if gene_end <= chunk_start or gene_start >= chunk_end:
+            continue
+
+        tx_labels = _b2m_transcript_to_genomic_labels(tx)  # genomic (left-to-right) order
+
+        ovlp_start = max(chunk_start, gene_start)
+        ovlp_end = min(chunk_end, gene_end)
+        seg_len = ovlp_end - ovlp_start
+
+        labels[ovlp_start - chunk_start: ovlp_start - chunk_start + seg_len] = \
+            tx_labels[ovlp_start - gene_start: ovlp_start - gene_start + seg_len]
+
+    if strand == '-':
+        labels = labels[::-1].copy()   # 5'→3' on - strand = reversed genomic order
+
+    return labels
+
+
+def _build_window_index(
+    seq_names: list[str],
+    seq_lens: list[int],
+    seq_len: int,
+) -> list[tuple[str, int, int, int]]:
+    """Return (seq_name, start_bp, end_bp, genomic_k) for every chunk window."""
     windows: list[tuple[str, int, int, int]] = []
     genomic_k = 0
-    for seq_name, seq_len in zip(annotation.seqnames, annotation.seq_lens):
-        n_chunks = seq_len // annotation.chunk_len
+    for seq_name, slen in zip(seq_names, seq_lens):
+        n_chunks = slen // seq_len
         for local_k in range(n_chunks):
-            start = local_k * annotation.chunk_len
-            end = start + annotation.chunk_len
+            start = local_k * seq_len
+            end = start + seq_len
             windows.append((seq_name, start, end, genomic_k))
             genomic_k += 1
     return windows
@@ -82,19 +214,20 @@ def get_species_data_indexed(
     annot_path: str | Path,
     seq_len: int,
     min_seq_len: int | None = None,
-) -> tuple[IndexedBGZipFasta, Annotation]:
-    """Build (IndexedBGZipFasta, Annotation) for one species.
+) -> tuple:
+    """Build (IndexedBGZipFasta, B2MAnnotation, seq_names, seq_lens) for one species.
 
     Parameters
     ----------
     genome_path:
         Path to a bgzip-compressed FASTA (.fa.gz).  A pyfaidx index
-        (.fa.gz.fai) must exist alongside it; create one with:
+        (.fa.gz.fai) must exist alongside it; create with:
             samtools faidx species.fa.gz
     annot_path:
-        Path to a GTF or GFF file with CDS/intron features.
+        Path to a GenePred file (.gp).  Convert from GTF with:
+            gtfToGenePred -genePredExt species.gtf species.gp
     seq_len:
-        Training window length (chunk_len for Annotation).
+        Training window length.
     min_seq_len:
         Sequences shorter than this are skipped.  Defaults to seq_len.
     """
@@ -109,32 +242,33 @@ def get_species_data_indexed(
     ]
     seq_lens = [ifasta.length(s) for s in seq_names]
 
-    annot = Annotation(str(annot_path), seq_names, seq_lens, seq_len)
-    annot.read_inputfile()
+    b2m_annot = b2m_load_annotation(annot_path)
 
-    return ifasta, annot
+    return ifasta, b2m_annot, seq_names, seq_lens
 
 
 class IndexedDataGenerator:
-    """Data generator backed by bricks2marble IndexedFasta (memory-mapped).
+    """Data generator backed by bricks2marble IndexedBGZipFasta (memory-mapped).
 
     Only the window bytes requested per training step are read from disk;
-    genome sequences are never fully loaded into RAM.  The Annotation
-    (transcript coordinates) is held in memory as before.
+    genome sequences are never fully loaded into RAM.  Annotation is loaded
+    once via bricks2marble.io.load_annotation (GenePred format); the longest
+    transcript per gene is used for label generation.
 
     Parameters
     ----------
     species_data:
-        List of (IndexedBGZipFasta, Annotation) pairs, one per training species.
-        Use get_species_data_indexed() to construct each pair.
-    batch_size, shuffle, repeat, both_strands, softmasking:
-        Same semantics as the previous TFRecord-based DataGenerator.
+        List of (IndexedBGZipFasta, B2MAnnotation, seq_names, seq_lens) tuples,
+        one per training species.  Use get_species_data_indexed() to build each.
+    batch_size, seq_len, shuffle, repeat, both_strands, softmasking:
+        Same semantics as the TFRecord-based DataGenerator.
     """
 
     def __init__(
         self,
-        species_data: List[Tuple[IndexedBGZipFasta, Annotation]],
+        species_data: List[Tuple],
         batch_size: int,
+        seq_len: int,
         shuffle: bool = True,
         repeat: bool = True,
         both_strands: bool = True,
@@ -142,6 +276,7 @@ class IndexedDataGenerator:
     ) -> None:
         self.species_data = species_data
         self.batch_size = batch_size
+        self.seq_len = seq_len
         self.shuffle = shuffle
         self.repeat = repeat
         self.both_strands = both_strands
@@ -149,8 +284,9 @@ class IndexedDataGenerator:
 
         # Flat index: (species_idx, seq_name, start_bp, end_bp, genomic_k)
         self._index: list[tuple[int, str, int, int, int]] = []
-        for sp_idx, (_, annot) in enumerate(species_data):
-            for seq_name, start, end, gk in _build_window_index(annot):
+        for sp_idx, (_ifasta, _annot, seq_names, seq_lens) in enumerate(species_data):
+            for entry in _build_window_index(seq_names, seq_lens, seq_len):
+                seq_name, start, end, gk = entry
                 self._index.append((sp_idx, seq_name, start, end, gk))
 
     @property
@@ -163,9 +299,9 @@ class IndexedDataGenerator:
         seq_name: str,
         start: int,
         end: int,
-        genomic_k: int,
+        genomic_k: int,  # unused; retained for index-tuple compatibility
     ) -> tuple[np.ndarray, np.ndarray]:
-        ifasta, annot = self.species_data[sp_idx]
+        ifasta, b2m_annot, _seq_names, _seq_lens = self.species_data[sp_idx]
 
         # Forward-strand sequence (memory-mapped read, window bytes only)
         seq = ifasta.fetch(seq_name, (start, end))
@@ -173,10 +309,14 @@ class IndexedDataGenerator:
 
         # Labels
         if self.both_strands:
-            fwd_oh, rev_oh = annot.get_onehot_dual_strand(genomic_k)
-            y = np.concatenate([fwd_oh, rev_oh], axis=-1).astype(np.float32)
+            fwd_labels = _chunk_labels_from_b2m(b2m_annot, seq_name, start, end, '+')
+            rev_labels = _chunk_labels_from_b2m(b2m_annot, seq_name, start, end, '-')
+            fwd_oh = np.eye(15, dtype=np.float32)[fwd_labels]
+            rev_oh = np.eye(15, dtype=np.float32)[rev_labels]
+            y = np.concatenate([fwd_oh, rev_oh], axis=-1)
         else:
-            y = annot.get_onehot(annot.n_genomic_chunks + genomic_k).astype(np.float32)
+            fwd_labels = _chunk_labels_from_b2m(b2m_annot, seq_name, start, end, '+')
+            y = np.eye(15, dtype=np.float32)[fwd_labels]
 
         return x, y
 

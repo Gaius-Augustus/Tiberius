@@ -736,7 +736,7 @@ def main():
             "aux_hmm_loss_weight": 0.1,
             # Dual-strand prediction (requires head='hmm_new').
             # Data is loaded via IndexedDataGenerator; --data must contain
-            # {species}.fa and {species}.gtf for each entry in train_species_file.
+            # {species}.fa.gz (bgzip) and {species}.gp (GenePred) per species.
             "both_strands": False,
         }
 
@@ -765,23 +765,24 @@ def main():
 
     if config.get("both_strands", False):
         # Indexed data loading — no TFRecord pre-generation needed.
-        # Expects {data_path}/{species}.fa and {data_path}/{species}.gtf.
-        # IndexedFasta reads only the requested window bytes from disk;
-        # genome sequences are never fully loaded into RAM.
+        # Expects {data_path}/{species}.fa.gz (bgzip) + .fa.gz.fai index
+        # and {data_path}/{species}.gp (GenePred, from gtfToGenePred -genePredExt).
+        # Only the requested window bytes are read from disk per step.
         print("[both_strands] Building indexed genome + annotation data …")
         species_data = []
         for s in species:
             print(f"  [{s}] indexing …")
-            ifasta, annot = get_species_data_indexed(
+            data_tuple = get_species_data_indexed(
                 genome_path=str(data_path / f"{s}.fa.gz"),
-                annot_path=str(data_path / f"{s}.gtf"),
+                annot_path=str(data_path / f"{s}.gp"),
                 seq_len=config.get("w_size", 9999),
                 min_seq_len=config.get("w_size", 9999),
             )
-            species_data.append((ifasta, annot))
+            species_data.append(data_tuple)
         generator = IndexedDataGenerator(
             species_data=species_data,
             batch_size=config["batch_size"],
+            seq_len=config.get("w_size", 9999),
             shuffle=True,
             repeat=True,
             both_strands=True,

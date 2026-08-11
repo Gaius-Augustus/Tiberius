@@ -162,6 +162,41 @@ def custom_cce_f1_loss(f1_factor, batch_size,
         return combined_loss
     return loss_
 
+def custom_cce_f1_loss_dual_strand(f1_factor, batch_size,
+                                   include_reading_frame=True, use_cce=True,
+                                   from_logits=False,
+                                   exon_count_factor=0.0,
+                                   exon_count_per_class=False,
+                                   exon_count_threshold=0.0,
+                                   label_smoothing=0.0):
+    """Dual-strand wrapper around custom_cce_f1_loss.
+
+    Expects y_pred / y_true of shape (B, T, 2*C) where the first C channels
+    are the forward strand and the last C are the reverse strand.  Loss is
+    computed independently per strand and averaged.
+    """
+    per_strand = custom_cce_f1_loss(
+        f1_factor, batch_size,
+        include_reading_frame=include_reading_frame,
+        use_cce=use_cce,
+        from_logits=from_logits,
+        exon_count_factor=exon_count_factor,
+        exon_count_per_class=exon_count_per_class,
+        exon_count_threshold=exon_count_threshold,
+        label_smoothing=label_smoothing,
+    )
+
+    @tf.function
+    def loss_(y_true, y_pred):
+        y_true = tf.cast(y_true, y_pred.dtype)
+        n = tf.shape(y_pred)[-1] // 2
+        loss_fwd = per_strand(y_true[:, :, :n], y_pred[:, :, :n])
+        loss_rev = per_strand(y_true[:, :, n:], y_pred[:, :, n:])
+        return (loss_fwd + loss_rev) / tf.cast(2, loss_fwd.dtype)
+
+    return loss_
+
+
 def lstm_model(units=372, filter_size=128,
               kernel_size=9, numb_conv=3,
                numb_lstm=2, dropout_rate=0.0,
@@ -1492,7 +1527,8 @@ def add_hmm_new_layer(model,
                       readout_conv_kernel: int = 9,
                       parallel_factor: int = 125,
                       residual_from_input: bool = True,
-                      include_lstm_in_output: bool = False):
+                      include_lstm_in_output: bool = False,
+                      both_strands: bool = False):
     """Attach the trainable HMM head (vipsania-style) to a backbone.
 
     Unlike `add_hmm_layer`, all HMM parameters here are trainable and
@@ -1500,6 +1536,15 @@ def add_hmm_new_layer(model,
     giving 18 states), which is projected back to `output_size` classes by
     the head's readout so the loss can stay the standard categorical CE
     with `from_logits=True`.
+
+    When both_strands=True the HMM processes both the forward sequence and its
+    reverse complement in a single pass (use_reverse_strand=True is set in
+    hmm_config automatically).  The readout output size is doubled to
+    2 * output_size; the first output_size channels are the forward-strand
+    predictions and the last output_size are the reverse-strand predictions
+    (in genomic, i.e. forward-coordinate, orientation).
+    residual_from_input is disabled in this mode because the backbone output
+    dim (output_size) does not match the readout dim (2 * output_size).
     """
     inputs = model.input
     x = model.output
@@ -1518,12 +1563,21 @@ def add_hmm_new_layer(model,
 
     nuc = Cast()(inputs)  # (B, T, 5) A,C,G,T,N -- Cast already slices to [:5]
 
+    if both_strands:
+        hmm_config = dict(hmm_config or {})
+        hmm_config["use_reverse_strand"] = True
+        readout_units = output_size * 2
+        # residual_from_input requires backbone_dim == readout_dim; disable here.
+        residual_from_input = False
+    else:
+        readout_units = output_size
+
     head = TrainableHMMHead(
         hmm_config=hmm_config,
         embed=embed,
         embed_norm=embed_norm,
         embed_activation=embed_activation,
-        readout_units=output_size,
+        readout_units=readout_units,
         readout_type=readout_type,
         readout_conv_kernel=readout_conv_kernel,
         parallel_factor=parallel_factor,
@@ -1532,7 +1586,7 @@ def add_hmm_new_layer(model,
     )
     y_hmm = head(x, nuc, training=True)
 
-    y = Reshape((-1, output_size), name="hmm_out")(y_hmm)
+    y = Reshape((-1, readout_units), name="hmm_out")(y_hmm)
 
     return Model(
         inputs=inputs,

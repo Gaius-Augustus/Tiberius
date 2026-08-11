@@ -108,8 +108,8 @@ class HMMBlock(AnnotationHMM):
 
 
 # Default HMM config for TrainableHMMHead. Mirrors the vipsania config in
-# vipsania/vipsania/model/hmm.py, but with use_reverse_strand=False since
-# Tiberius predicts on a single strand only.
+# vipsania/vipsania/model/hmm.py. use_reverse_strand defaults to False
+# (single-strand); set it to True via hmm_new_config for dual-strand training.
 _DEFAULT_HMM_CFG: dict = {
     "start_codons": [["ATG", 1.0]],
     "stop_codons": [["TAG", 0.34], ["TAA", 0.33], ["TGA", 0.33]],
@@ -157,19 +157,23 @@ def default_trainable_hmm_config() -> dict:
 class TrainableHMMHead(tf.keras.layers.Layer):
     """Trainable-HMM head for Tiberius, adapted from vipsania's HMMBlock.
 
-    Signal path (single-strand):
+    Signal path:
         x   -- (B, T, D_in) pre-emission stream from backbone
         nuc -- (B, T, 5)    one-hot A,C,G,T,N (no softmask column)
 
         1. Optional LayerNorm on x.
         2. Dense projection to `embed` dim with softmax activation:
            acts as the state-emission distribution over `embed` bins.
-        3. AnnotationHMM.call(x_emb, nuc, mode=POSTERIOR) with all HMM
-           parameters (emitter, transitions, start dist) trainable.
-        4. Posterior (B, T, H, n_states) reshaped to (B, T, H*n_states).
-        5. Conv1D (kernel=readout_conv_kernel) or Dense projection to
-           `readout_units` (default = D_in), returning logit-like output
-           consumed by categorical cross-entropy with from_logits=True.
+        3. AnnotationHMM.call(x_emb, nuc, mode=POSTERIOR).
+           Single-strand: posterior shape (B, T, H, n_states).
+           Dual-strand (use_reverse_strand=True in hmm_config): the HMM
+           internally appends the RC sequence, giving (B, T, 2H, n_states).
+        4. Posterior reshaped to (B, T, effective_H * n_states).
+        5. Conv1D or Dense readout to `readout_units`.
+
+    For dual-strand use set hmm_config["use_reverse_strand"]=True and
+    readout_units = 2 * num_gene_classes.  residual_from_input must be
+    False in that case (backbone dim != readout dim).
 
     Serializable via Keras get_config/from_config so full-model save/load
     round-trips the head together with the backbone.
@@ -198,7 +202,6 @@ class TrainableHMMHead(tf.keras.layers.Layer):
         cfg = default_trainable_hmm_config()
         if hmm_config is not None:
             cfg.update(hmm_config)
-        cfg["use_reverse_strand"] = False
         self.hmm_config = cfg
 
         self.embed = embed
@@ -296,8 +299,13 @@ class TrainableHMMHead(tf.keras.layers.Layer):
         )
         self._readout_units = readout_units
 
-        # Reshaped posterior shape: (B, T, H * n_states)
-        posterior_shape = tuple(x_shape[:-1]) + (self._heads * self._n_states,)
+        # When use_reverse_strand=True the AnnotationHMM postprocess step
+        # concatenates forward and backward heads, doubling the head count.
+        _effective_heads = self._heads * (
+            2 if self.hmm_config.get("use_reverse_strand", False) else 1
+        )
+        # Reshaped posterior shape: (B, T, effective_heads * n_states)
+        posterior_shape = tuple(x_shape[:-1]) + (_effective_heads * self._n_states,)
 
         self.readout_norm_layer = self._make_norm(
             "readout_norm", self.readout_norm_name,

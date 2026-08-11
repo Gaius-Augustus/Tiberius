@@ -27,12 +27,15 @@ from tensorflow.keras.optimizers import Adam, SGD
 import tiberius.parse_args as parse_args
 import tiberius.models as models
 from tiberius import DataGenerator
+from tiberius.data_indexed import IndexedDataGenerator
+from tiberius.write_tfrecord_species import get_species_data_hmm
 from tiberius.models import (
     Cast,
     add_hmm_layer,
     add_hmm_new_layer,
     build_backbone_from_config,
     custom_cce_f1_loss,
+    custom_cce_f1_loss_dual_strand,
 )
 from tiberius.hmm import TrainableHMMHead, sanitize_parallel_factor
 
@@ -369,7 +372,12 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
 
     # HMM head case (old fixed-param HMM or new trainable HMM):
     if config.get("multi_loss", False):
-        hmm_loss = custom_cce_f1_loss(
+        hmm_loss_cls = (
+            custom_cce_f1_loss_dual_strand
+            if config.get("both_strands", False)
+            else custom_cce_f1_loss
+        )
+        hmm_loss = hmm_loss_cls(
             config.get("loss_f1_factor", 0.0),
             batch_size=config["batch_size"],
             from_logits=True,
@@ -380,8 +388,13 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
         )
         return [base_loss, hmm_loss], [1, config.get("hmm_loss_weight_mul", 0.1)]
 
-    # single-output HMM
-    hmm_only_loss = custom_cce_f1_loss(
+    # single-output HMM (single-strand or dual-strand)
+    loss_cls = (
+        custom_cce_f1_loss_dual_strand
+        if config.get("both_strands", False)
+        else custom_cce_f1_loss
+    )
+    hmm_only_loss = loss_cls(
         config.get("loss_f1_factor", 0.0),
         batch_size=config["batch_size"],
         from_logits=True,
@@ -474,6 +487,7 @@ def attach_head(
         for layer in backbone.layers:
             layer.trainable = bool(config.get("trainable_lstm", True))
         hmm_new_cfg = config.get("hmm_new_config") or {}
+        both_strands = config.get("both_strands", False)
         return add_hmm_new_layer(
             backbone,
             output_size=config["output_size"],
@@ -486,6 +500,7 @@ def attach_head(
             parallel_factor=config.get("hmm_new_parallel_factor", 125),
             residual_from_input=config.get("hmm_new_residual", True),
             include_lstm_in_output=config.get("multi_loss", False),
+            both_strands=both_strands,
         )
 
     if head != "hmm":
@@ -706,6 +721,10 @@ def main():
             # weighted by aux_hmm_loss_weight.  No effect for other archs.
             "aux_hmm_loss": False,
             "aux_hmm_loss_weight": 0.1,
+            # Dual-strand prediction (requires head='hmm_new').
+            # Data is loaded via IndexedDataGenerator; --data must contain
+            # {species}.fa and {species}.gtf for each entry in train_species_file.
+            "both_strands": False,
         }
 
     # Normalize paths / args
@@ -714,6 +733,9 @@ def main():
     config["model_load_hmm"] = os.path.abspath(args.load_hmm) if args.load_hmm else None
     config["mask_tx_list_file"] = os.path.abspath(args.mask_tx_list) if args.mask_tx_list else None
     config["mask_flank"] = args.mask_flank if args.mask_flank else 100
+    # CLI flag overrides config value (False by default in both places)
+    if getattr(args, "both_strands", False):
+        config["both_strands"] = True
 
     model_save_dir = Path(config["model_save_dir"])
     ensure_dir(model_save_dir)
@@ -726,29 +748,51 @@ def main():
     mask_tx_list = read_species(config["mask_tx_list_file"]) if config.get("mask_tx_list_file") else []
 
     data_path = Path(args.data)
-
-    # Tfrecord paths
     species = read_species(str(args.train_species_file))
-    file_paths = [str(data_path / f"{s}_{i}.tfrecords") for s in species for i in range(100)]
 
-    # Dataset
-    generator = DataGenerator(
-        file_path=file_paths,
-        batch_size=config["batch_size"],
-        shuffle=True,
-        repeat=True,
-        filter=config["filter"],
-        output_size=config["output_size"],
-        hmm_factor=0,
-        seq_weights=config["seq_weights"],
-        softmasking=config["softmasking"],
-        clamsa=config.get("clamsa", False),
-        oracle=config.get("oracle", False),
-        threads=config["threads"],
-        tx_filter=mask_tx_list,
-        tx_filter_region=config["mask_flank"],
-    )
-    dataset = generator.get_dataset()
+    if config.get("both_strands", False):
+        # Indexed data loading — no TFRecord pre-generation needed.
+        # Expects {data_path}/{species}.fa and {data_path}/{species}.gtf.
+        print("[both_strands] Loading indexed genome + annotation data …")
+        species_data = []
+        for s in species:
+            fasta_obj, annot_obj = get_species_data_hmm(
+                genome_path=str(data_path / f"{s}.fa"),
+                annot_path=str(data_path / f"{s}.gtf"),
+                seq_len=config.get("w_size", 9999),
+                overlap_size=0,
+                min_seq_len=config.get("w_size", 9999) - 1,
+            )
+            species_data.append((fasta_obj, annot_obj))
+        generator = IndexedDataGenerator(
+            species_data=species_data,
+            batch_size=config["batch_size"],
+            shuffle=True,
+            repeat=True,
+            both_strands=True,
+            softmasking=config.get("softmasking", True),
+        )
+        dataset = generator.get_dataset()
+    else:
+        # Original TFRecord-based data loading (single-strand).
+        file_paths = [str(data_path / f"{s}_{i}.tfrecords") for s in species for i in range(100)]
+        generator = DataGenerator(
+            file_path=file_paths,
+            batch_size=config["batch_size"],
+            shuffle=True,
+            repeat=True,
+            filter=config["filter"],
+            output_size=config["output_size"],
+            hmm_factor=0,
+            seq_weights=config["seq_weights"],
+            softmasking=config["softmasking"],
+            clamsa=config.get("clamsa", False),
+            oracle=config.get("oracle", False),
+            threads=config["threads"],
+            tx_filter=mask_tx_list,
+            tx_filter_region=config["mask_flank"],
+        )
+        dataset = generator.get_dataset()
 
     # Val data
     val_data = None
@@ -778,6 +822,12 @@ def main():
     # which head was trained -- required by inference to reconstruct
     # the trainable HMM.
     config["head"] = head
+
+    if config.get("both_strands", False) and head != "hmm_new":
+        raise ValueError(
+            "--both_strands requires --hmm_new (the trainable HMM head). "
+            f"Got head={head!r}."
+        )
 
     # HMM parallel_factor must divide the training sequence length,
     # otherwise the internal parallel-scan reshape fails. Auto-correct

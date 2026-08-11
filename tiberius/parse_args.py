@@ -34,5 +34,11 @@ def parseCmd():
         help='File containing a list of transcript IDs (one per line) to be masked during training')
     parser.add_argument('--mask_flank',  type=int, default=500,
         help='Number of bases flanking the masked transcript on both sides to be masked as well')
+    parser.add_argument('--both_strands', action='store_true',
+        help='Train dual-strand prediction: predict genes on forward and reverse '
+             'strand simultaneously.  Requires --hmm_new.  Data is loaded via '
+             'IndexedDataGenerator (no TFRecord pre-generation); --data must '
+             'point to a directory containing {species}.fa and {species}.gtf '
+             'files for each species in --train_species_file.')
 
     return parser.parse_args()

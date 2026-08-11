@@ -309,6 +309,44 @@ class Annotation:
         labels: np.ndarray = self.get_chunk_labels(chunk_idx, get_tx_ids=get_tx_ids)
         return np.eye(15, dtype=np.int32)[labels]
 
+    @property
+    def n_genomic_chunks(self) -> int:
+        """Total number of non-overlapping genomic windows (strand-agnostic)."""
+        return sum(s // self.chunk_len for s in self.seq_lens)
+
+    def get_chunk_labels_dual_strand(
+        self, genomic_chunk_idx: int
+    ) -> tuple:
+        """Return (fwd_labels, rev_labels) for genomic window genomic_chunk_idx.
+
+        Both arrays have shape (chunk_len,) with integer class labels 0-14.
+
+        fwd_labels: labels from + strand transcripts at this window, in
+                    genomic (forward) coordinates.
+        rev_labels: labels from - strand transcripts at this window, in
+                    genomic (forward) coordinates — i.e. already reversed so
+                    that position i corresponds to genomic position i.
+
+        This relies on the existing chunk-index layout set up by __init__:
+          minus-strand chunks occupy indices [0, N)
+          plus-strand chunks occupy indices [N, 2N)
+        where N = n_genomic_chunks.
+        """
+        N = self.n_genomic_chunks
+        fwd_labels = self.get_chunk_labels(N + genomic_chunk_idx)
+        rev_labels = self.get_chunk_labels(genomic_chunk_idx)
+        return fwd_labels, rev_labels
+
+    def get_onehot_dual_strand(
+        self, genomic_chunk_idx: int
+    ) -> tuple:
+        """Return (fwd_onehot, rev_onehot) of shape (chunk_len, 15) each."""
+        fwd_labels, rev_labels = self.get_chunk_labels_dual_strand(genomic_chunk_idx)
+        return (
+            np.eye(15, dtype=np.int32)[fwd_labels],
+            np.eye(15, dtype=np.int32)[rev_labels],
+        )
+
 
 class GeneStructure: # deprecated for now
     """Handles gene structure information from a gtf file,

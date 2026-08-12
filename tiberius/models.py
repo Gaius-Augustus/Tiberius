@@ -237,7 +237,8 @@ def lstm_model(units=372, filter_size=128,
                pool_size=9,
                lstm_mask=False, output_size=15,
                multi_loss=False, residual_conv=True,
-               clamsa=False, clamsa_kernel=6, softmasking=True, lru_layer=False
+               clamsa=False, clamsa_kernel=6, softmasking=True, lru_layer=False,
+               final_activation='softmax',
               ):
     """
     Constructs a hybrid model that combines CNNs and bLSTM layers for gene prediction.
@@ -365,7 +366,7 @@ def lstm_model(units=372, filter_size=128,
         if pool_size > 1:
             x = Reshape((-1, output_size), name='Reshape2')(x)
 
-    y_end = Activation('softmax', name='out')(x)
+    y_end = Activation(final_activation, name='out')(x)
 
     outputs.append(y_end)
 
@@ -1312,7 +1313,7 @@ BACKBONE_REGISTRY = {
             "numb_conv", "numb_lstm", "dropout_rate",
             "pool_size", "lstm_mask", "clamsa",
             "output_size", "residual_conv", "softmasking",
-            "clamsa_kernel", "lru_layer",
+            "clamsa_kernel", "lru_layer", "final_activation",
         ],
     },
     "border_gated_attn_lstm": {

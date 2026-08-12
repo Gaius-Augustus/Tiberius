@@ -363,10 +363,13 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
 
     if head not in ("hmm", "hmm_new"):
         # Dual-strand backbone-only training: swap base_loss for dual-strand variant.
+        # from_logits=True because the backbone uses linear final activation so that
+        # softmax is applied independently per 15-class strand slice in the loss.
         if config.get("both_strands", False):
             base_loss = custom_cce_f1_loss_dual_strand(
                 config.get("loss_f1_factor", 0.0),
                 batch_size=config["batch_size"],
+                from_logits=True,
                 exon_count_factor=exon_count_factor,
                 exon_count_per_class=exon_count_per_class,
                 exon_count_threshold=exon_count_threshold,
@@ -876,10 +879,14 @@ def main():
     # Dual-strand backbone always emits 30 values (15 fwd + 15 rev).
     # For hmm_new the per-strand size passed to add_hmm_new_layer is output_size//2=15;
     # the HMM head's readout_units = 15*2 = 30, matching the backbone output.
+    # Linear final activation keeps the two strands as independent logits so the
+    # dual-strand loss can apply softmax per strand separately (from_logits=True).
     if config.get("both_strands", False):
         if config.get("output_size", 15) != 30:
             print("[both_strands] Auto-setting output_size=30 (15 fwd + 15 rev).")
             config["output_size"] = 30
+        if "final_activation" not in config:
+            config["final_activation"] = "linear"
 
     # HMM parallel_factor must divide the training sequence length,
     # otherwise the internal parallel-scan reshape fails. Auto-correct

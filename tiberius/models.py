@@ -1550,8 +1550,19 @@ def add_hmm_new_layer(model,
     x = model.output
     x = x[0] if isinstance(x, list) else x
 
+    if both_strands:
+        hmm_config = dict(hmm_config or {})
+        hmm_config["use_reverse_strand"] = True
+        readout_units = output_size * 2
+        # residual_from_input requires backbone_dim == readout_dim; disable here.
+        residual_from_input = False
+    else:
+        readout_units = output_size
+
     if x.shape[-1] > output_size:
-        if x.shape[-1] == 7:
+        if both_strands and x.shape[-1] == readout_units:
+            pass  # backbone already outputs 2*output_size; no reduction needed
+        elif x.shape[-1] == 7:
             x = reduce_lstm_output_7(x, new_size=output_size)
         elif x.shape[-1] == 5:
             x = reduce_lstm_output_5(x, new_size=output_size)
@@ -1562,15 +1573,6 @@ def add_hmm_new_layer(model,
             )
 
     nuc = Cast()(inputs)  # (B, T, 5) A,C,G,T,N -- Cast already slices to [:5]
-
-    if both_strands:
-        hmm_config = dict(hmm_config or {})
-        hmm_config["use_reverse_strand"] = True
-        readout_units = output_size * 2
-        # residual_from_input requires backbone_dim == readout_dim; disable here.
-        residual_from_input = False
-    else:
-        readout_units = output_size
 
     head = TrainableHMMHead(
         hmm_config=hmm_config,

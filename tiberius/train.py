@@ -361,6 +361,16 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
         base_loss = tf.keras.losses.BinaryCrossentropy()
 
     if head not in ("hmm", "hmm_new"):
+        # Dual-strand backbone-only training: swap base_loss for dual-strand variant.
+        if config.get("both_strands", False):
+            base_loss = custom_cce_f1_loss_dual_strand(
+                config.get("loss_f1_factor", 0.0),
+                batch_size=config["batch_size"],
+                exon_count_factor=exon_count_factor,
+                exon_count_per_class=exon_count_per_class,
+                exon_count_threshold=exon_count_threshold,
+                label_smoothing=label_smoothing,
+            )
         # Two-loss training for hmm_middle_residual_stream with aux_hmm_loss:
         # outputs = [hmm_aux_out (softmax), out (softmax)], both use base_loss.
         if (config.get("arch") == "hmm_middle_residual_stream"
@@ -487,9 +497,11 @@ def attach_head(
             layer.trainable = bool(config.get("trainable_lstm", True))
         hmm_new_cfg = config.get("hmm_new_config") or {}
         both_strands = config.get("both_strands", False)
+        # Backbone outputs 30 when both_strands; HMM head operates per-strand (15).
+        hmm_output_size = config["output_size"] // 2 if both_strands else config["output_size"]
         return add_hmm_new_layer(
             backbone,
-            output_size=config["output_size"],
+            output_size=hmm_output_size,
             hmm_config=hmm_new_cfg,
             embed=config.get("hmm_new_embed", 160),
             embed_norm=config.get("hmm_new_embed_norm", "layer"),
@@ -848,11 +860,18 @@ def main():
     # the trainable HMM.
     config["head"] = head
 
-    if config.get("both_strands", False) and head != "hmm_new":
+    if config.get("both_strands", False) and head == "hmm":
         raise ValueError(
-            "--both_strands requires --hmm_new (the trainable HMM head). "
-            f"Got head={head!r}."
+            "--both_strands is not compatible with the frozen --hmm head "
+            "(hardcoded 15-state transitions). Use --hmm_new or no HMM head."
         )
+    # Dual-strand backbone always emits 30 values (15 fwd + 15 rev).
+    # For hmm_new the per-strand size passed to add_hmm_new_layer is output_size//2=15;
+    # the HMM head's readout_units = 15*2 = 30, matching the backbone output.
+    if config.get("both_strands", False):
+        if config.get("output_size", 15) != 30:
+            print("[both_strands] Auto-setting output_size=30 (15 fwd + 15 rev).")
+            config["output_size"] = 30
 
     # HMM parallel_factor must divide the training sequence length,
     # otherwise the internal parallel-scan reshape fails. Auto-correct

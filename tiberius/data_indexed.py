@@ -29,7 +29,7 @@ import numpy as np
 import tensorflow as tf
 
 from bricks2marble.struct.index import IndexedBGZipFasta
-from bricks2marble.struct.annotation import Annotation as B2MAnnotation, Gene as B2MGene, Transcript as B2MTranscript
+from bricks2marble.struct.annotation import Annotation as B2MAnnotation, Transcript as B2MTranscript
 
 # ---------------------------------------------------------------------------
 # One-hot lookup: bricks2marble int8 encoding → Tiberius one-hot rows
@@ -64,17 +64,17 @@ def _sequence_to_onehot(seq, softmasking: bool = True) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 def _load_genepred_grouped(path: str | Path) -> B2MAnnotation:
-    """Load a GenePred (extended) file and group isoforms by gene name.
+    """Load a GenePred (extended) file and add only the longest isoform per gene.
 
-    Uses field 11 (name2, gene name) from gtfToGenePred -genePredExt output
-    to group multiple isoforms of the same gene into a single Gene object so
-    that gene.longest() correctly picks the isoform with the longest CDS.
+    Uses field 11 (name2, gene name) from gtfToGenePred -genePredExt output to
+    group isoforms.  The transcript with the longest total CDS length is kept;
+    all others are discarded before building the bricks2marble Annotation.
 
-    Falls back to the transcript name (field 0) as the gene key when field 11
-    is absent (plain GenePred without -genePredExt).
+    Falls back to the transcript name (field 0) as the grouping key when
+    field 11 is absent (plain GenePred without -genePredExt).
     """
-    # gene_key → (Gene object, sequence, strand)
-    genes: dict[str, B2MGene] = {}
+    # gene_key → list of Transcript
+    groups: dict[str, list] = {}
 
     with open(path) as fh:
         for line in fh:
@@ -87,21 +87,15 @@ def _load_genepred_grouped(path: str | Path) -> B2MAnnotation:
                 continue
             # Field 11 is the gene name in -genePredExt format.
             gene_name = fields[11].strip() if len(fields) > 11 else fields[0].strip()
-            # Include sequence + strand in the key so same-name genes on
-            # different sequences or strands are not merged.
+            # Include sequence + strand so same-name genes on different
+            # sequences or strands are never merged.
             gene_key = f"{tx.sequence}|{tx.strand}|{gene_name}"
-            if gene_key not in genes:
-                genes[gene_key] = B2MGene(
-                    name=gene_name,
-                    sequence=tx.sequence,
-                    strand=tx.strand,
-                    transcripts=[],
-                )
-            genes[gene_key].add(tx)
+            groups.setdefault(gene_key, []).append(tx)
 
     ann = B2MAnnotation()
-    for gene in genes.values():
-        ann.add(gene)
+    for txs in groups.values():
+        longest = max(txs, key=lambda t: sum(c.end - c.start for c in t.cds))
+        ann.add(longest)   # ann.add(tx) wraps the transcript in a solo Gene internally
     return ann
 
 

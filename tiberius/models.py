@@ -176,8 +176,8 @@ class StrandAccuracy(tf.keras.metrics.Metric):
         super().__init__(name=name, **kwargs)
         self._s = slice_start
         self._e = slice_end
-        self._correct = self.add_weight("correct", initializer="zeros")
-        self._total = self.add_weight("total", initializer="zeros")
+        self._correct = self.add_weight(name="correct", initializer="zeros", shape=())
+        self._total = self.add_weight(name="total", initializer="zeros", shape=())
 
     def update_state(self, y_true, y_pred, sample_weight=None):  # noqa: ARG002
         yt = tf.cast(y_true[..., self._s:self._e], y_pred.dtype)

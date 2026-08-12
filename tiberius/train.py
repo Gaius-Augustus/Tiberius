@@ -30,6 +30,7 @@ from tiberius import DataGenerator
 from tiberius.data_indexed import IndexedDataGenerator, get_species_data_indexed
 from tiberius.models import (
     Cast,
+    StrandAccuracy,
     add_hmm_layer,
     add_hmm_new_layer,
     build_backbone_from_config,
@@ -610,7 +611,15 @@ def train_model(
             model = attach_head(backbone, config, head=head)
 
         loss, loss_weights = build_loss_and_weights(config, head=head)
-        metrics = [["accuracy"]] * len(loss) if isinstance(loss, list) else ["accuracy"]
+        n_out = len(loss) if isinstance(loss, list) else 1
+        base_metrics = ["accuracy"]
+        if config.get("both_strands", False):
+            n_cls = config.get("output_size", 30) // 2
+            base_metrics = base_metrics + [
+                StrandAccuracy("fwd_acc", 0, n_cls),
+                StrandAccuracy("rev_acc", n_cls, 2 * n_cls),
+            ]
+        metrics = [["accuracy"]] * (n_out - 1) + [base_metrics] if n_out > 1 else base_metrics
         model.compile(loss=loss, optimizer=optimizer, metrics=metrics, loss_weights=loss_weights)
 
         model.summary()
@@ -618,7 +627,6 @@ def train_model(
         # Multi-output: Keras requires y_true to mirror the output structure.
         # When loss is a list of N losses, duplicate y_true N times so every
         # output head receives the same labels.  Sample weights stay as-is.
-        n_out = len(loss) if isinstance(loss, list) else 1
         if n_out > 1:
             dataset = dataset.map(
                 lambda x, y, w: (x, (y,) * n_out, w),

@@ -162,6 +162,40 @@ def custom_cce_f1_loss(f1_factor, batch_size,
         return combined_loss
     return loss_
 
+class StrandAccuracy(tf.keras.metrics.Metric):
+    """Categorical accuracy for one strand of a dual-strand (B,T,2C) output.
+
+    Parameters
+    ----------
+    name       : metric name shown in training logs
+    slice_start: first class index of this strand (0 for fwd, C for rev)
+    slice_end  : one-past-last class index (C for fwd, 2C for rev)
+    """
+
+    def __init__(self, name: str, slice_start: int, slice_end: int, **kwargs):
+        super().__init__(name=name, **kwargs)
+        self._s = slice_start
+        self._e = slice_end
+        self._correct = self.add_weight("correct", initializer="zeros")
+        self._total = self.add_weight("total", initializer="zeros")
+
+    def update_state(self, y_true, y_pred, sample_weight=None):  # noqa: ARG002
+        yt = tf.cast(y_true[..., self._s:self._e], y_pred.dtype)
+        yp = y_pred[..., self._s:self._e]
+        match = tf.equal(tf.argmax(yt, axis=-1), tf.argmax(yp, axis=-1))
+        self._correct.assign_add(
+            tf.cast(tf.reduce_sum(tf.cast(match, tf.int32)), tf.float32)
+        )
+        self._total.assign_add(tf.cast(tf.size(match), tf.float32))
+
+    def result(self):
+        return tf.math.divide_no_nan(self._correct, self._total)
+
+    def reset_state(self):
+        self._correct.assign(0.0)
+        self._total.assign(0.0)
+
+
 def custom_cce_f1_loss_dual_strand(f1_factor, batch_size,
                                    include_reading_frame=True, use_cce=True,
                                    from_logits=False,

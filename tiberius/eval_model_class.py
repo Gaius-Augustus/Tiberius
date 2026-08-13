@@ -98,6 +98,7 @@ class PredictionGTF:
         self.parallel_factor = parallel_factor
         self.lstm_model = None
         self.inp_size = 15
+        self.both_strands = False
         # Optional cache of the last preHMM (LSTM) softmax output, populated
         # inside predict_function when cache_softmax=True. Holds one entry per
         # group as processed by bricks2marble.tools.annotate.annotate_genome,
@@ -192,9 +193,13 @@ class PredictionGTF:
                 else:
                     inference_parallel = compute_parallel_factor(self.seq_len)
                     self.parallel_factor = inference_parallel
+                both_strands = config.get("both_strands", False)
+                # Backbone outputs 30 for both_strands; HMM head operates on
+                # per-strand size of 15.
+                hmm_output_size = config["output_size"] // 2 if both_strands else config["output_size"]
                 full_model = add_hmm_new_layer(
                     self.lstm_model,
-                    output_size=config["output_size"],
+                    output_size=hmm_output_size,
                     hmm_config=hmm_new_cfg,
                     embed=config.get("hmm_new_embed", 160),
                     embed_norm=config.get("hmm_new_embed_norm", "layer"),
@@ -203,6 +208,7 @@ class PredictionGTF:
                     readout_conv_kernel=config.get("hmm_new_readout_conv_kernel", 9),
                     parallel_factor=inference_parallel,
                     residual_from_input=config.get("hmm_new_residual", True),
+                    both_strands=both_strands,
                 )
                 full_model.load_weights(weights_h5)
                 self.trainable_hmm_head = full_model.get_layer("trainable_hmm_head")
@@ -212,6 +218,7 @@ class PredictionGTF:
                 # softmax over 15 classes. Saves ~15x memory downstream.
                 self.trainable_hmm_head.set_mode(HMMMode.VITERBI)
                 self._trainable_hmm_isc = self.trainable_hmm_head.intron_state_chain
+                self.both_strands = both_strands
                 self.inp_size = self.lstm_model.output_shape[-1]
                 if summary:
                     self.lstm_model.summary()
@@ -349,6 +356,9 @@ class PredictionGTF:
             fasta: b2m.struct.Fasta
         ) -> tuple[np.ndarray, np.ndarray]:
 
+        if self.both_strands:
+            return self._predict_function_dual_strand(fasta)
+
         # fwd prediction
         x_one_hot_fwd = fasta.one_hot(
                 pad_index = 4,
@@ -399,6 +409,10 @@ class PredictionGTF:
             self,
             fasta: b2m.struct.Fasta
         ) -> tuple[np.ndarray, np.ndarray]:
+
+        if self.both_strands:
+            return self._repredict_function_dual_strand(fasta)
+
         # fwd prediction
         indices_fwd = np.where(np.isin(fasta.evidence[:,0], [0, 2]))[0]
         hmm_out_fwd_expand = np.empty((fasta.N, fasta.T), dtype=np.int32)
@@ -439,6 +453,110 @@ class PredictionGTF:
             hmm_out_bwd = hmm_out_bwd[:,::-1]
             hmm_out_bwd_expand[indices_bwd] = hmm_out_bwd
         return hmm_out_fwd_expand, hmm_out_bwd_expand
+
+    def _predict_function_dual_strand(
+            self,
+            fasta: b2m.struct.Fasta
+        ) -> tuple[np.ndarray, np.ndarray]:
+        """Single-pass dual-strand prediction using hmm_new + both_strands.
+
+        The backbone sees only the forward sequence; the HMM head with
+        use_reverse_strand=True handles both strands in one Viterbi pass and
+        returns labels (B, T, 2) where [..., 0] = fwd, [..., 1] = rev, both
+        already in genomic forward-strand coordinates.
+        """
+        x = fasta.one_hot(
+            pad_index=4,
+            repeats="track" if self.softmask else "omit",
+            N="track",
+            dtype=np.float32,
+        )
+        lstm_out = self.lstm_prediction(x)
+        hmm_fwd, hmm_bwd = self.hmm_prediction_dual(x, lstm_out)
+
+        if self.cache_softmax or self.softmax_callback is not None:
+            # lstm_out has shape (N, T, 30): logits for fwd [:15] and rev [15:]
+            logits = np.asarray(lstm_out)
+            sm_fwd = tf.nn.softmax(logits[:, :, :15]).numpy()
+            sm_bwd = tf.nn.softmax(logits[:, :, 15:]).numpy()
+            if self.cache_softmax:
+                self.last_softmax_fwd = sm_fwd
+                self.last_softmax_bwd = sm_bwd
+            if self.softmax_callback is not None:
+                self.softmax_callback(fasta, sm_fwd, sm_bwd)
+
+        return hmm_fwd, hmm_bwd
+
+    def _repredict_function_dual_strand(
+            self,
+            fasta: b2m.struct.Fasta
+        ) -> tuple[np.ndarray, np.ndarray]:
+        """Evidence-filtered dual-strand prediction using hmm_new + both_strands.
+
+        Runs a single forward pass for all chunks that need fwd, bwd, or both
+        (evidence values 0, 1, 2).  Both strands are predicted together; the
+        downstream framework picks the relevant output per chunk.
+        """
+        indices = np.where(np.isin(fasta.evidence[:, 0], [0, 1, 2]))[0]
+        hmm_fwd_expand = np.empty((fasta.N, fasta.T), dtype=np.int32)
+        hmm_bwd_expand = np.empty((fasta.N, fasta.T), dtype=np.int32)
+        if indices.size > 0:
+            x = fasta.one_hot(
+                pad_index=4,
+                repeats="track" if self.softmask else "omit",
+                N="track",
+                dtype=np.float32,
+            )[indices]
+            lstm_out = self.lstm_prediction(x)
+            hmm_fwd, hmm_bwd = self.hmm_prediction_dual(x, lstm_out)
+            hmm_fwd_expand[indices] = hmm_fwd
+            hmm_bwd_expand[indices] = hmm_bwd
+        return hmm_fwd_expand, hmm_bwd_expand
+
+    def hmm_prediction_dual(self, nuc_seq, lstm_predictions, batch_size=None):
+        """Batched Viterbi for both strands simultaneously via hmm_new.
+
+        Returns (hmm_fwd, hmm_bwd) each shaped (N, T) with intron-chain labels
+        folded back to the 15-class Tiberius layout when intron_state_chain > 1.
+        """
+        if not batch_size:
+            batch_size = self.adapted_batch_size
+        n = nuc_seq.shape[0]
+        num_batches = (n + batch_size - 1) // batch_size
+        hmm_fwd_all, hmm_bwd_all = [], []
+        for i in range(num_batches):
+            s, e = i * batch_size, (i + 1) * batch_size
+            y_fwd, y_bwd = self.predict_vit_dual(
+                nuc_seq[s:e], lstm_predictions[s:e]
+            )
+            y_fwd = y_fwd.numpy().squeeze()
+            y_bwd = y_bwd.numpy().squeeze()
+            if y_fwd.ndim == 1:
+                y_fwd = np.expand_dims(y_fwd, 0)
+            if y_bwd.ndim == 1:
+                y_bwd = np.expand_dims(y_bwd, 0)
+            hmm_fwd_all.append(y_fwd)
+            hmm_bwd_all.append(y_bwd)
+        hmm_fwd = np.concatenate(hmm_fwd_all, axis=0)
+        hmm_bwd = np.concatenate(hmm_bwd_all, axis=0)
+        isc = getattr(self, "_trainable_hmm_isc", 1)
+        if isc and isc > 1:
+            hmm_fwd = fix_intron_state_chain_labels(hmm_fwd, isc)
+            hmm_bwd = fix_intron_state_chain_labels(hmm_bwd, isc)
+        return hmm_fwd, hmm_bwd
+
+    @tf.function
+    def predict_vit_dual(self, x, y_lstm):
+        """Viterbi for both strands in a single HMM pass.
+
+        Requires self.trainable_hmm_head in VITERBI mode with
+        use_reverse_strand=True (set by add_hmm_new_layer when both_strands=True).
+        Returns (y_fwd, y_bwd) each (B, T) int32 in genomic forward-strand order.
+        The HMM un-reverses the minus-strand output internally.
+        """
+        nuc = tf.cast(x[:, :, :5], tf.float32)
+        labels = self.trainable_hmm_head(y_lstm, nuc, training=False)
+        return tf.cast(labels[..., 0], tf.int32), tf.cast(labels[..., 1], tf.int32)
 
     def get_predictions(
             self,

@@ -615,13 +615,14 @@ def train_model(
 
         loss, loss_weights = build_loss_and_weights(config, head=head)
         n_out = len(loss) if isinstance(loss, list) else 1
-        base_metrics = ["accuracy"]
         if config.get("both_strands", False):
             n_cls = config.get("output_size", 30) // 2
-            base_metrics = base_metrics + [
+            base_metrics = [
                 StrandAccuracy("fwd_acc", 0, n_cls),
                 StrandAccuracy("rev_acc", n_cls, 2 * n_cls),
             ]
+        else:
+            base_metrics = ["accuracy"]
         metrics = [["accuracy"]] * (n_out - 1) + [base_metrics] if n_out > 1 else base_metrics
         model.compile(loss=loss, optimizer=optimizer, metrics=metrics, loss_weights=loss_weights)
 

@@ -758,7 +758,10 @@ def main():
             # weighted by aux_hmm_loss_weight.  No effect for other archs.
             "aux_hmm_loss": False,
             "aux_hmm_loss_weight": 0.1,
-            # Dual-strand prediction (requires head='hmm_new').
+            # Use bgzip FASTA + GenePred files instead of TFRecords (IndexedDataGenerator).
+            # Implied by both_strands=True; can also be set independently for single-strand.
+            "indexed": False,
+            # Dual-strand prediction: backbone outputs 30 (15 fwd + 15 rev).
             # Data is loaded via IndexedDataGenerator; --data must contain
             # {species}.fa.gz (bgzip) and {species}.gp (GenePred) per species.
             "both_strands": False,
@@ -770,9 +773,14 @@ def main():
     config["model_load_hmm"] = os.path.abspath(args.load_hmm) if args.load_hmm else None
     config["mask_tx_list_file"] = os.path.abspath(args.mask_tx_list) if args.mask_tx_list else None
     config["mask_flank"] = args.mask_flank if args.mask_flank else 100
-    # CLI flag overrides config value (False by default in both places)
+    # CLI flags override config values
+    if getattr(args, "indexed", False):
+        config["indexed"] = True
     if getattr(args, "both_strands", False):
         config["both_strands"] = True
+    # both_strands always implies indexed
+    if config.get("both_strands", False):
+        config["indexed"] = True
 
     model_save_dir = Path(config["model_save_dir"])
     ensure_dir(model_save_dir)
@@ -787,12 +795,13 @@ def main():
     data_path = Path(args.data)
     species = read_species(str(args.train_species_file))
 
-    if config.get("both_strands", False):
+    if config.get("indexed", False):
         # Indexed data loading — no TFRecord pre-generation needed.
         # Expects {data_path}/{species}.fa.gz (bgzip) + .fa.gz.fai index
         # and {data_path}/{species}.gp (GenePred, from gtfToGenePred -genePredExt).
         # Only the requested window bytes are read from disk per step.
-        print("[both_strands] Building indexed genome + annotation data …")
+        _strand_tag = "[both_strands]" if config.get("both_strands") else "[single_strand]"
+        print(f"{_strand_tag} Building indexed genome + annotation data …")
         species_data = []
         for s in species:
             print(f"  [{s}] indexing …")
@@ -818,7 +827,7 @@ def main():
             seq_len=config.get("w_size", 9999),
             shuffle=True,
             repeat=True,
-            both_strands=True,
+            both_strands=config.get("both_strands", False),
             softmasking=config.get("softmasking", True),
         )
         dataset = generator.get_dataset()

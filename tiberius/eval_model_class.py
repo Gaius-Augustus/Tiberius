@@ -280,7 +280,12 @@ class PredictionGTF:
                                 outputs=lstm_output
                                 )
             else:
-                self.make_default_hmm(inp_size=self.lstm_model.output_shape[-1])
+                out_dim = self.lstm_model.output_shape[-1]
+                if config.get("both_strands", False):
+                    # Backbone outputs 30; HMM operates on each strand's 15-class slice.
+                    self.both_strands = True
+                    out_dim = out_dim // 2
+                self.make_default_hmm(inp_size=out_dim)
         # loading full models for training or old models
         elif self.model_path_lstm_old:
             self.lstm_model = keras.models.load_model(self.model_path_lstm_old,
@@ -458,12 +463,24 @@ class PredictionGTF:
             self,
             fasta: b2m.struct.Fasta
         ) -> tuple[np.ndarray, np.ndarray]:
-        """Single-pass dual-strand prediction using hmm_new + both_strands.
+        """Single-pass dual-strand prediction.
 
-        The backbone sees only the forward sequence; the HMM head with
-        use_reverse_strand=True handles both strands in one Viterbi pass and
-        returns labels (B, T, 2) where [..., 0] = fwd, [..., 1] = rev, both
-        already in genomic forward-strand coordinates.
+        Dispatches to the trainable HMM head path (hmm_new) when available,
+        otherwise uses the backbone-only path that splits the 30-dim output.
+        """
+        if getattr(self, "trainable_hmm_head", None) is not None:
+            return self._predict_dual_strand_hmm_new(fasta)
+        return self._predict_dual_strand_backbone(fasta)
+
+    def _predict_dual_strand_hmm_new(
+            self,
+            fasta: b2m.struct.Fasta
+        ) -> tuple[np.ndarray, np.ndarray]:
+        """hmm_new + both_strands: single forward pass through backbone + HMM.
+
+        The HMM head with use_reverse_strand=True handles both strands in one
+        Viterbi pass and returns labels (B, T, 2) where [..., 0] = fwd,
+        [..., 1] = rev, both already in genomic forward-strand coordinates.
         """
         x = fasta.one_hot(
             pad_index=4,
@@ -487,16 +504,58 @@ class PredictionGTF:
 
         return hmm_fwd, hmm_bwd
 
+    def _predict_dual_strand_backbone(
+            self,
+            fasta: b2m.struct.Fasta
+        ) -> tuple[np.ndarray, np.ndarray]:
+        """Backbone-only both_strands: single forward pass, split 30-dim output.
+
+        The backbone is run once on the forward sequence.  Its output
+        (N, T, 30) is split: [:15] = fwd logits (genomic forward order),
+        [15:] = rev logits (5'→3' on minus strand = reversed genomic).
+        The rev slice is time-flipped before being fed to the HMM so that
+        both strand outputs end up in genomic forward-strand coordinates.
+        RC nucleotides are passed to the bwd HMM for splice-site scoring.
+        """
+        repeats = "track" if self.softmask else "omit"
+        x_fwd = fasta.one_hot(pad_index=4, repeats=repeats, N="track", dtype=np.float32)
+        lstm_out = self.lstm_prediction(x_fwd)      # (N, T, 30)
+
+        out_fwd = lstm_out[:, :, :15]               # genomic forward order
+        out_rev = lstm_out[:, ::-1, 15:]            # flip to genomic forward order
+
+        x_bwd = fasta.complement().one_hot(
+            pad_index=4, repeats=repeats, N="track", dtype=np.float32,
+        )[:, ::-1, :]                               # RC + time-reverse for splice scoring
+
+        hmm_fwd = self.hmm_prediction(x_fwd, out_fwd)
+        hmm_bwd = self.hmm_prediction(x_bwd, out_rev)
+
+        if self.cache_softmax or self.softmax_callback is not None:
+            sm_fwd = tf.nn.softmax(out_fwd).numpy()
+            sm_bwd = tf.nn.softmax(out_rev).numpy()  # already in genomic forward order
+            if self.cache_softmax:
+                self.last_softmax_fwd = sm_fwd
+                self.last_softmax_bwd = sm_bwd
+            if self.softmax_callback is not None:
+                self.softmax_callback(fasta, sm_fwd, sm_bwd)
+
+        return hmm_fwd, hmm_bwd
+
     def _repredict_function_dual_strand(
             self,
             fasta: b2m.struct.Fasta
         ) -> tuple[np.ndarray, np.ndarray]:
-        """Evidence-filtered dual-strand prediction using hmm_new + both_strands.
+        """Evidence-filtered dual-strand prediction. Dispatches by head type."""
+        if getattr(self, "trainable_hmm_head", None) is not None:
+            return self._repredict_dual_strand_hmm_new(fasta)
+        return self._repredict_dual_strand_backbone(fasta)
 
-        Runs a single forward pass for all chunks that need fwd, bwd, or both
-        (evidence values 0, 1, 2).  Both strands are predicted together; the
-        downstream framework picks the relevant output per chunk.
-        """
+    def _repredict_dual_strand_hmm_new(
+            self,
+            fasta: b2m.struct.Fasta
+        ) -> tuple[np.ndarray, np.ndarray]:
+        """hmm_new + both_strands evidence-filtered repredict."""
         indices = np.where(np.isin(fasta.evidence[:, 0], [0, 1, 2]))[0]
         hmm_fwd_expand = np.empty((fasta.N, fasta.T), dtype=np.int32)
         hmm_bwd_expand = np.empty((fasta.N, fasta.T), dtype=np.int32)
@@ -511,6 +570,32 @@ class PredictionGTF:
             hmm_fwd, hmm_bwd = self.hmm_prediction_dual(x, lstm_out)
             hmm_fwd_expand[indices] = hmm_fwd
             hmm_bwd_expand[indices] = hmm_bwd
+        return hmm_fwd_expand, hmm_bwd_expand
+
+    def _repredict_dual_strand_backbone(
+            self,
+            fasta: b2m.struct.Fasta
+        ) -> tuple[np.ndarray, np.ndarray]:
+        """Backbone-only both_strands evidence-filtered repredict."""
+        indices = np.where(np.isin(fasta.evidence[:, 0], [0, 1, 2]))[0]
+        hmm_fwd_expand = np.empty((fasta.N, fasta.T), dtype=np.int32)
+        hmm_bwd_expand = np.empty((fasta.N, fasta.T), dtype=np.int32)
+        if indices.size > 0:
+            repeats = "track" if self.softmask else "omit"
+            x_fwd = fasta.one_hot(
+                pad_index=4, repeats=repeats, N="track", dtype=np.float32,
+            )[indices]
+            lstm_out = self.lstm_prediction(x_fwd)          # (k, T, 30)
+
+            out_fwd = lstm_out[:, :, :15]
+            out_rev = lstm_out[:, ::-1, 15:]                # flip to genomic forward order
+
+            x_bwd = fasta.complement().one_hot(
+                pad_index=4, repeats=repeats, N="track", dtype=np.float32,
+            )[indices][:, ::-1, :]
+
+            hmm_fwd_expand[indices] = self.hmm_prediction(x_fwd, out_fwd)
+            hmm_bwd_expand[indices] = self.hmm_prediction(x_bwd, out_rev)
         return hmm_fwd_expand, hmm_bwd_expand
 
     def hmm_prediction_dual(self, nuc_seq, lstm_predictions, batch_size=None):

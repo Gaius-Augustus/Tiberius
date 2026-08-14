@@ -34,10 +34,14 @@ def parseCmd():
         help='File containing a list of transcript IDs (one per line) to be masked during training')
     parser.add_argument('--mask_flank',  type=int, default=500,
         help='Number of bases flanking the masked transcript on both sides to be masked as well')
+    parser.add_argument('--indexed', action='store_true',
+        help='Load training data from bgzip FASTA + GenePred files instead of TFRecords. '
+             '--data must contain {species}.fa.gz (bgzip, with .fa.gz.fai index) and '
+             '{species}.gp or {species}.genePred per species in --train_species_file. '
+             'Compatible with single-strand and --both_strands training.')
     parser.add_argument('--both_strands', action='store_true',
         help='Train dual-strand prediction: predict genes on forward and reverse '
-             'strand simultaneously.  Requires --hmm_new.  Data is loaded via '
-             'IndexedBGZipFasta (no TFRecord pre-generation); --data must '
+             'strand simultaneously.  Implies --indexed.  --data must '
              'point to a directory containing {species}.fa.gz (bgzip) and '
              '{species}.gp (GenePred) files for each species in --train_species_file. '
              'Create .fa.gz.fai with: samtools faidx species.fa.gz. '

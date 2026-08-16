@@ -322,12 +322,18 @@ class IndexedDataGenerator:
         self.both_strands = both_strands
         self.softmasking = softmasking
 
-        # Flat index: (species_idx, seq_name, start_bp, end_bp, genomic_k)
-        self._index: list[tuple[int, str, int, int, int]] = []
+        # Flat index: (species_idx, seq_name, start_bp, end_bp, genomic_k, strand)
+        # For both_strands=True one '+' entry covers both strands in a single pass.
+        # For both_strands=False both '+' and '-' entries are emitted so that
+        # minus-strand genes receive a proper RC sequence and reversed labels
+        # (matching the TFRecord pipeline which stores 2N chunks: N minus + N plus).
+        self._index: list[tuple[int, str, int, int, int, str]] = []
         for sp_idx, (_ifasta, _annot, seq_names, seq_lens) in enumerate(species_data):
             for entry in _build_window_index(seq_names, seq_lens, seq_len):
                 seq_name, start, end, gk = entry
-                self._index.append((sp_idx, seq_name, start, end, gk))
+                self._index.append((sp_idx, seq_name, start, end, gk, '+'))
+                if not self.both_strands:
+                    self._index.append((sp_idx, seq_name, start, end, gk, '-'))
 
     @property
     def n_examples(self) -> int:
@@ -340,31 +346,40 @@ class IndexedDataGenerator:
         start: int,
         end: int,
         genomic_k: int,  # unused; retained for index-tuple compatibility
+        strand: str = '+',
     ) -> tuple[np.ndarray, np.ndarray]:
         ifasta, b2m_annot, _seq_names, _seq_lens = self.species_data[sp_idx]
 
-        # Forward-strand sequence (memory-mapped read, window bytes only)
         seq = ifasta.fetch(seq_name, (start, end))
-        x = _sequence_to_onehot(seq, softmasking=self.softmasking)
+        x_fwd = _sequence_to_onehot(seq, softmasking=self.softmasking)
 
-        # Labels
-        if self.both_strands:
+        if strand == '-':
+            # Reverse-complement: time-reverse then swap A↔T (col 0↔3) and C↔G (col 1↔2).
+            # One-hot columns: [A, C, G, T, N] or [A, C, G, T, N, softmask].
+            nc = x_fwd.shape[1]
+            col = [3, 2, 1, 0, 4] if nc == 5 else [3, 2, 1, 0, 4, 5]
+            x = x_fwd[::-1][:, col].copy()
+            labels = _chunk_labels_from_b2m(b2m_annot, seq_name, start, end, '-')
+            y = np.eye(15, dtype=np.float32)[labels]
+        elif self.both_strands:
+            x = x_fwd
             fwd_labels = _chunk_labels_from_b2m(b2m_annot, seq_name, start, end, '+')
             rev_labels = _chunk_labels_from_b2m(b2m_annot, seq_name, start, end, '-')
             fwd_oh = np.eye(15, dtype=np.float32)[fwd_labels]
             rev_oh = np.eye(15, dtype=np.float32)[rev_labels]
             y = np.concatenate([fwd_oh, rev_oh], axis=-1)
         else:
-            fwd_labels = _chunk_labels_from_b2m(b2m_annot, seq_name, start, end, '+')
-            y = np.eye(15, dtype=np.float32)[fwd_labels]
+            x = x_fwd
+            labels = _chunk_labels_from_b2m(b2m_annot, seq_name, start, end, '+')
+            y = np.eye(15, dtype=np.float32)[labels]
 
         return x, y
 
     def get_dataset(self) -> tf.data.Dataset:
         """Return a tf.data.Dataset ready for model.fit()."""
         # Infer output shapes from first example
-        sp0, sn0, s0, e0, gk0 = self._index[0]
-        x0, y0 = self._fetch(sp0, sn0, s0, e0, gk0)
+        sp0, sn0, s0, e0, gk0, st0 = self._index[0]
+        x0, y0 = self._fetch(sp0, sn0, s0, e0, gk0, st0)
         inp_size = x0.shape[-1]
         out_size = y0.shape[-1]
 
@@ -377,8 +392,8 @@ class IndexedDataGenerator:
             if shuffle:
                 import random
                 random.shuffle(idx)
-            for sp_idx, seq_name, start, end, gk in idx:
-                x, y = fetch(sp_idx, seq_name, start, end, gk)
+            for sp_idx, seq_name, start, end, gk, strand in idx:
+                x, y = fetch(sp_idx, seq_name, start, end, gk, strand)
                 yield x, y
 
         dataset = tf.data.Dataset.from_generator(

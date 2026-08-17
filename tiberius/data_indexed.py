@@ -29,7 +29,11 @@ import numpy as np
 import tensorflow as tf
 
 from bricks2marble.struct.index import IndexedBGZipFasta
-from bricks2marble.struct.annotation import Annotation as B2MAnnotation, Transcript as B2MTranscript
+from bricks2marble.struct.annotation import (
+    Annotation as B2MAnnotation,
+    CDS as B2MCDS,
+    Transcript as B2MTranscript,
+)
 
 # ---------------------------------------------------------------------------
 # One-hot lookup: bricks2marble int8 encoding → Tiberius one-hot rows
@@ -72,6 +76,13 @@ def _load_genepred_grouped(path: str | Path) -> B2MAnnotation:
 
     Falls back to the transcript name (field 0) as the grouping key when
     field 11 is absent (plain GenePred without -genePredExt).
+
+    Coordinate note: GenePred fields 8/9 are ALL exon intervals (including UTR
+    exons).  Fields 5/6 give the CDS boundaries (cdsStart, cdsEnd; 0-based
+    half-open).  This function intersects each exon interval with [cdsStart,
+    cdsEnd] so that only coding sequence is included in tx.cds — matching the
+    behaviour of the TFRecord pipeline which reads CDS-only features from the
+    GTF.  Transcripts with cdsStart == cdsEnd (non-coding) are skipped.
     """
     # gene_key → list of Transcript
     groups: dict[str, list] = {}
@@ -82,14 +93,39 @@ def _load_genepred_grouped(path: str | Path) -> B2MAnnotation:
             if not line or line.startswith("#"):
                 continue
             fields = line.split("\t")
-            tx = B2MTranscript.from_genepred_row(line)
-            if not tx.cds:
+
+            # Skip non-coding transcripts (cdsStart == cdsEnd).
+            cds_start = int(fields[5])   # 0-based inclusive
+            cds_end   = int(fields[6])   # 0-based exclusive
+            if cds_start >= cds_end:
                 continue
+
+            # Parse sequence/strand from fields; exon coords from fields 8/9.
+            sequence = fields[1]
+            strand   = fields[2]
+            name     = fields[0]
+            starts = [int(x) for x in fields[8].rstrip(",").split(",")]
+            ends   = [int(x) for x in fields[9].rstrip(",").split(",")]
+
+            # Intersect each exon with [cds_start, cds_end] to strip UTR exons.
+            cds_blocks = []
+            for s, e in zip(starts, ends):
+                cs = max(s, cds_start)
+                ce = min(e, cds_end)
+                if cs < ce:
+                    cds_blocks.append(B2MCDS(start=cs, end=ce))
+
+            if not cds_blocks:
+                continue
+
+            tx = B2MTranscript(name=name, sequence=sequence, strand=strand,
+                               cds=cds_blocks)
+
             # Field 11 is the gene name in -genePredExt format.
             gene_name = fields[11].strip() if len(fields) > 11 else fields[0].strip()
             # Include sequence + strand so same-name genes on different
             # sequences or strands are never merged.
-            gene_key = f"{tx.sequence}|{tx.strand}|{gene_name}"
+            gene_key = f"{sequence}|{strand}|{gene_name}"
             groups.setdefault(gene_key, []).append(tx)
 
     ann = B2MAnnotation()
@@ -313,6 +349,7 @@ class IndexedDataGenerator:
         repeat: bool = True,
         both_strands: bool = True,
         softmasking: bool = True,
+        filter_empty: bool = False,
     ) -> None:
         self.species_data = species_data
         self.batch_size = batch_size
@@ -321,6 +358,7 @@ class IndexedDataGenerator:
         self.repeat = repeat
         self.both_strands = both_strands
         self.softmasking = softmasking
+        self.filter_empty = filter_empty
 
         # Flat index: (species_idx, seq_name, start_bp, end_bp, genomic_k, strand)
         # For both_strands=True one '+' entry covers both strands in a single pass.
@@ -386,6 +424,16 @@ class IndexedDataGenerator:
         index = list(self._index)
         fetch = self._fetch
         shuffle = self.shuffle
+        filter_empty = self.filter_empty
+
+        def _has_gene(y: np.ndarray) -> bool:
+            # y is (T, 15) for single-strand or (T, 30) for both_strands.
+            # Returns True if any position carries a non-IR (non-zero) label.
+            nc = y.shape[-1]
+            if nc == 30:
+                return (np.any(np.argmax(y[:, :15], axis=-1) != 0)
+                        or np.any(np.argmax(y[:, 15:], axis=-1) != 0))
+            return np.any(np.argmax(y, axis=-1) != 0)
 
         def generator():
             idx = list(index)
@@ -394,6 +442,8 @@ class IndexedDataGenerator:
                 random.shuffle(idx)
             for sp_idx, seq_name, start, end, gk, strand in idx:
                 x, y = fetch(sp_idx, seq_name, start, end, gk, strand)
+                if filter_empty and not _has_gene(y):
+                    continue
                 yield x, y
 
         dataset = tf.data.Dataset.from_generator(

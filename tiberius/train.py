@@ -829,6 +829,7 @@ def main():
             repeat=True,
             both_strands=config.get("both_strands", False),
             softmasking=config.get("softmasking", True),
+            filter_empty=config.get("filter", False),
         )
         dataset = generator.get_dataset()
     else:

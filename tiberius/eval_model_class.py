@@ -492,7 +492,8 @@ class PredictionGTF:
         hmm_fwd, hmm_bwd = self.hmm_prediction_dual(x, lstm_out)
 
         if self.cache_softmax or self.softmax_callback is not None:
-            # lstm_out has shape (N, T, 30): logits for fwd [:15] and rev [15:]
+            # lstm_out has shape (N, T, 30): logits for fwd [:15] and rev [15:],
+            # both in genomic forward order (the HMM handles RC internally).
             logits = np.asarray(lstm_out)
             sm_fwd = tf.nn.softmax(logits[:, :, :15]).numpy()
             sm_bwd = tf.nn.softmax(logits[:, :, 15:]).numpy()
@@ -510,11 +511,13 @@ class PredictionGTF:
         ) -> tuple[np.ndarray, np.ndarray]:
         """Backbone-only both_strands: single forward pass, split 30-dim output.
 
-        The backbone is run once on the forward sequence.  Its output
-        (N, T, 30) is split: [:15] = fwd logits (genomic forward order),
-        [15:] = rev logits (5'→3' on minus strand = reversed genomic).
-        The rev slice is time-flipped before being fed to the HMM so that
-        both strand outputs end up in genomic forward-strand coordinates.
+        The backbone is trained with both strands in genomic forward order:
+          lstm_out[:, t, :15] = fwd-strand logits at genomic position t
+          lstm_out[:, t, 15:] = rev-strand logits at genomic position t
+
+        The backward HMM expects 5'→3' (minus-strand) order, so the rev slice
+        is time-flipped before being fed to the HMM.  The HMM output is then
+        flipped back to genomic forward-strand coordinates.
         RC nucleotides are passed to the bwd HMM for splice-site scoring.
         """
         repeats = "track" if self.softmask else "omit"
@@ -522,18 +525,19 @@ class PredictionGTF:
         lstm_out = self.lstm_prediction(x_fwd)      # (N, T, 30)
 
         out_fwd = lstm_out[:, :, :15]               # genomic forward order
-        out_rev = lstm_out[:, ::-1, 15:]            # flip to genomic forward order
+        out_rev = lstm_out[:, ::-1, 15:]            # flip to 5'→3' order for backward HMM
 
         x_bwd = fasta.complement().one_hot(
             pad_index=4, repeats=repeats, N="track", dtype=np.float32,
-        )[:, ::-1, :]                               # RC + time-reverse for splice scoring
+        )[:, ::-1, :]                               # RC + time-reverse → 5'→3' order
 
         hmm_fwd = self.hmm_prediction(x_fwd, out_fwd)
-        hmm_bwd = self.hmm_prediction(x_bwd, out_rev)
+        hmm_bwd = self.hmm_prediction(x_bwd, out_rev)[:, ::-1]   # flip to genomic order
 
         if self.cache_softmax or self.softmax_callback is not None:
             sm_fwd = tf.nn.softmax(out_fwd).numpy()
-            sm_bwd = tf.nn.softmax(out_rev).numpy()  # already in genomic forward order
+            # out_rev is in 5'→3' order; flip to genomic order for caching
+            sm_bwd = tf.nn.softmax(out_rev).numpy()[:, ::-1, :]
             if self.cache_softmax:
                 self.last_softmax_fwd = sm_fwd
                 self.last_softmax_bwd = sm_bwd
@@ -588,14 +592,14 @@ class PredictionGTF:
             lstm_out = self.lstm_prediction(x_fwd)          # (k, T, 30)
 
             out_fwd = lstm_out[:, :, :15]
-            out_rev = lstm_out[:, ::-1, 15:]                # flip to genomic forward order
+            out_rev = lstm_out[:, ::-1, 15:]                # flip to 5'→3' for backward HMM
 
             x_bwd = fasta.complement().one_hot(
                 pad_index=4, repeats=repeats, N="track", dtype=np.float32,
             )[indices][:, ::-1, :]
 
             hmm_fwd_expand[indices] = self.hmm_prediction(x_fwd, out_fwd)
-            hmm_bwd_expand[indices] = self.hmm_prediction(x_bwd, out_rev)
+            hmm_bwd_expand[indices] = self.hmm_prediction(x_bwd, out_rev)[:, ::-1]  # flip to genomic
         return hmm_fwd_expand, hmm_bwd_expand
 
     def hmm_prediction_dual(self, nuc_seq, lstm_predictions, batch_size=None):

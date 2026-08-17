@@ -14,6 +14,11 @@ Requires:
 For both_strands=True each batch yields:
   x : (batch, seq_len, inp_size)   forward-strand one-hot sequence
   y : (batch, seq_len, 30)         fwd labels ([:15]) | rev labels ([15:])
+                                   Both halves use genomic forward order:
+                                   y[b, t, :15] = plus-strand class at chunk_start+t
+                                   y[b, t, 15:] = minus-strand class at chunk_start+t
+                                   This matches the bricks2marble HMM postprocess
+                                   convention (use_reverse_strand un-reverses rev output).
 
 For both_strands=False:
   x : (batch, seq_len, inp_size)   forward-strand one-hot sequence
@@ -226,12 +231,19 @@ def _chunk_labels_from_b2m(
     chunk_start: int,   # 0-based inclusive
     chunk_end: int,     # 0-based exclusive
     strand: str,        # "+" or "-"
+    genomic_order: bool = False,
 ) -> np.ndarray:
     """Generate 15-class labels for one strand in a genomic window.
 
     For strand="+": labels[i] = label at genomic position chunk_start+i.
-    For strand="-": labels[j] = label at RC position j, i.e. the - strand
-        label at genomic position chunk_end-1-j  (5'→3' on - strand).
+    For strand="-", genomic_order=False (default): labels[j] = label at
+        RC position j, i.e. the - strand label at genomic position
+        chunk_end-1-j  (5'→3' on - strand).  Use this when the input
+        sequence is also RC'd (single-strand indexed '-' windows).
+    For strand="-", genomic_order=True: labels[i] = label at genomic
+        position chunk_start+i, same convention as "+".  Use this for
+        both_strands training where the HMM postprocess un-reverses the
+        rev-strand output back to genomic forward order.
     """
     chunk_len = chunk_end - chunk_start
     labels = np.zeros(chunk_len, dtype=np.int32)
@@ -261,7 +273,7 @@ def _chunk_labels_from_b2m(
         labels[ovlp_start - chunk_start: ovlp_start - chunk_start + seg_len] = \
             tx_labels[ovlp_start - gene_start: ovlp_start - gene_start + seg_len]
 
-    if strand == '-':
+    if strand == '-' and not genomic_order:
         labels = labels[::-1].copy()   # 5'→3' on - strand = reversed genomic order
 
     return labels
@@ -402,7 +414,11 @@ class IndexedDataGenerator:
         elif self.both_strands:
             x = x_fwd
             fwd_labels = _chunk_labels_from_b2m(b2m_annot, seq_name, start, end, '+')
-            rev_labels = _chunk_labels_from_b2m(b2m_annot, seq_name, start, end, '-')
+            # genomic_order=True: HMM postprocess un-reverses rev strand to genomic
+            # forward order, so labels must match that convention (position t →
+            # genomic chunk_start+t for both strands).
+            rev_labels = _chunk_labels_from_b2m(b2m_annot, seq_name, start, end, '-',
+                                                 genomic_order=True)
             fwd_oh = np.eye(15, dtype=np.float32)[fwd_labels]
             rev_oh = np.eye(15, dtype=np.float32)[rev_labels]
             y = np.concatenate([fwd_oh, rev_oh], axis=-1)

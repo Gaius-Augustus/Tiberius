@@ -381,6 +381,23 @@ def build_loss_and_weights(config: dict[str, Any], head: HeadType):
                 and config.get("aux_hmm_loss", False)):
             aux_weight = float(config.get("aux_hmm_loss_weight", 0.1))
             return [base_loss, base_loss], [aux_weight, 1.0]
+        # Deep supervision for looped_residual_stream: n_loops outputs
+        # (out_iter1, out_iter2, ..., out). Attach the same base_loss to
+        # every output. Weights: equal by default (1/n_loops each) so the
+        # total loss scale matches a single-output model; overridable via
+        # config['iter_loss_weights'] (list of floats, len == n_loops).
+        if config.get("arch") == "looped_residual_stream":
+            n_loops = int(config.get("n_loops", 2))
+            if n_loops > 1:
+                weights = config.get("iter_loss_weights")
+                if weights is None:
+                    weights = [1.0 / n_loops] * n_loops
+                elif len(weights) != n_loops:
+                    raise ValueError(
+                        f"iter_loss_weights length {len(weights)} "
+                        f"!= n_loops {n_loops}"
+                    )
+                return [base_loss] * n_loops, list(weights)
         return base_loss, config.get("loss_weights") if config.get("loss_weights") else None
 
     # HMM head case (old fixed-param HMM or new trainable HMM):

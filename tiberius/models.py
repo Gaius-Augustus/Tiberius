@@ -1280,6 +1280,190 @@ def looped_hmm_residual_stream_model(units=160, d_model=None,
     return Model(inputs=inp, outputs=y_out)
 
 
+def looped_residual_stream_model(units=160, d_model=None,
+                                  pool_size=9,
+                                  numb_lstm=4,
+                                  numb_conv=3, filter_size=128,
+                                  kernel_size=9, dropout_rate=0.0,
+                                  output_size=30,
+                                  n_loops=2,
+                                  clamsa=False, softmasking=True,
+                                  zero_init_residual=True):
+    """
+    Looped residual-stream backbone WITHOUT an HMM. Iterative refinement
+    with the model's own softmax prediction fed back into the residual
+    stream. Deep supervision: one output per iteration.
+
+    Structure per iteration (shared weights across iterations):
+
+        x = InputEmbed(z) + FeedbackProj(h_prev)   # zero-init proj
+        x = [numb_conv residual conv blocks at nt-resolution]
+        x = pool -> [numb_lstm biLSTM residual blocks] -> unpool
+        logits_i = OutHead(x)                      # shared LN + Dense(2C)
+        h_{i+1} = _DualStrandSoftmax(logits_i)     # per-strand softmax
+
+    Iter-1 is seeded with an all-zeros feedback tensor, so the zero-init
+    FeedbackProj emits a zero contribution and the first pass is
+    equivalent to a plain residual-stream forward pass.
+
+    Dual-strand only: like `looped_hmm_residual_stream`, `output_size`
+    must be the full 2C width (matches train.py's auto-set 30 under
+    `--both_strands`). Per-strand class count is `output_size // 2`.
+
+    Multi-output: the model returns `n_loops` output tensors named
+    `out_iter1`, `out_iter2`, ..., with the LAST tensor named `out`
+    (canonical head name so inference tooling that references
+    `model.get_layer('out')` keeps working). All outputs are logits
+    (linear activation); train.py attaches
+    `custom_cce_f1_loss_dual_strand(from_logits=True)` to each with
+    equal weights (or `iter_loss_weights` from config).
+
+    Compared to `looped_hmm_residual_stream`:
+      - No HMM forward-backward: dramatically cheaper in memory and
+        wall time. Roughly ~1.5-1.8x a single-pass residual-stream at
+        n_loops=2.
+      - No structural gene-model prior. The feedback signal is only as
+        good as the model's current prediction.
+
+    Args:
+        units, d_model:        biLSTM hidden and stream width.
+        pool_size:             pool factor between conv and LSTM stacks.
+        numb_lstm:             biLSTM residual blocks in the shared stack.
+        numb_conv,
+        filter_size,
+        kernel_size:           conv stem.
+        dropout_rate:          dropout inside each biLSTM block.
+        output_size:           full 2C output width. Must be even.
+        n_loops:               shared-backbone iterations.
+        clamsa, softmasking,
+        zero_init_residual:    see other builders.
+    """
+    if d_model is None:
+        d_model = 2 * units
+    if n_loops < 1:
+        raise ValueError(f"n_loops must be >= 1, got {n_loops}")
+    if output_size % 2 != 0:
+        raise ValueError(
+            f"looped_residual_stream requires an even output_size "
+            f"(full 2*per_strand width); got {output_size}. Use "
+            f"--both_strands so train.py sets output_size=30."
+        )
+
+    inp_size = 6 if softmasking else 5
+    main_input = Input(shape=(None, inp_size))
+    if clamsa:
+        inp_clamsa = Input(shape=(None, 4), name='clamsa_input')
+        inp = [main_input, inp_clamsa]
+        x_in = keras.layers.Concatenate(axis=-1)([main_input, inp_clamsa])
+    else:
+        inp = main_input
+        x_in = main_input
+
+    zero_init = 'zeros' if zero_init_residual else 'glorot_uniform'
+    nuc = Cast()(inp)
+
+    # ------------------------------------------------------------------
+    # Shared layers (built once, called n_loops times).
+    # ------------------------------------------------------------------
+    input_embed_layer = Dense(d_model, name='input_embed')
+    feedback_proj_layer = Dense(d_model, kernel_initializer=zero_init,
+                                 name='pred_feedback_proj')
+
+    conv_layers = []
+    for i in range(numb_conv):
+        k = 3 if i == 0 else kernel_size
+        conv_layers.append({
+            'ln':   LayerNormalization(name=f'ln_conv_{i+1}'),
+            'conv': Conv1D(filter_size, k, padding='same',
+                            activation='relu', name=f'conv_{i+1}'),
+            'proj': Conv1D(d_model, 1, padding='same',
+                            kernel_initializer=zero_init,
+                            name=f'conv_proj_{i+1}'),
+            'add':  keras.layers.Add(name=f'add_conv_{i+1}'),
+        })
+
+    if pool_size > 1:
+        pool_reshape_layer = Reshape((-1, pool_size * d_model),
+                                      name='pool_reshape')
+        post_pool_proj_layer = Dense(d_model, name='post_pool_proj')
+        unpool_dense_layer = Dense(pool_size * d_model,
+                                    name='unpool_proj')
+        unpool_reshape_layer = Reshape((-1, d_model), name='unpool_reshape')
+    else:
+        pool_reshape_layer = None
+        post_pool_proj_layer = None
+        unpool_dense_layer = None
+        unpool_reshape_layer = None
+
+    lstm_layers = []
+    for i in range(numb_lstm):
+        lstm_layers.append({
+            'ln':      LayerNormalization(name=f'ln_rec_{i+1}'),
+            'biLSTM':  Bidirectional(LSTM(units, return_sequences=True),
+                                      name=f'biLSTM_{i+1}'),
+            'proj':    Dense(d_model, kernel_initializer=zero_init,
+                              name=f'rec_proj_{i+1}'),
+            'drop':    (Dropout(dropout_rate, name=f'dropout_{i+1}')
+                        if dropout_rate else None),
+            'add':     keras.layers.Add(name=f'add_rec_{i+1}'),
+        })
+
+    out_ln = LayerNormalization(name='ln_out')
+    out_dense = Dense(output_size, name='out_dense')
+    feedback_softmax = _DualStrandSoftmax(name='pred_feedback_softmax')
+
+    # ------------------------------------------------------------------
+    z_embed = input_embed_layer(x_in)
+
+    def _forward(h_prev):
+        fb = feedback_proj_layer(h_prev)
+        x = keras.layers.Add()([z_embed, fb])
+
+        for lyr in conv_layers:
+            h = lyr['ln'](x)
+            h = lyr['conv'](h)
+            h = lyr['proj'](h)
+            x = lyr['add']([x, h])
+
+        if pool_size > 1:
+            x = pool_reshape_layer(x)
+            x = post_pool_proj_layer(x)
+
+        for lyr in lstm_layers:
+            h = lyr['ln'](x)
+            h = lyr['biLSTM'](h)
+            h = lyr['proj'](h)
+            if lyr['drop'] is not None:
+                h = lyr['drop'](h)
+            x = lyr['add']([x, h])
+
+        if pool_size > 1:
+            x = unpool_dense_layer(x)
+            x = unpool_reshape_layer(x)
+
+        return out_dense(out_ln(x))
+
+    # ------------------------------------------------------------------
+    h_prev = _ZerosLikeShape(output_size, name='pred_feedback_init')(nuc)
+    outputs = []
+    for i in range(n_loops):
+        logits_i = _forward(h_prev)
+        # Last iteration's output gets the canonical name 'out';
+        # earlier ones get 'out_iter{i+1}' for deep-supervision loss.
+        if i == n_loops - 1:
+            outputs.append(Activation('linear', name='out')(logits_i))
+        else:
+            outputs.append(
+                Activation('linear', name=f'out_iter{i+1}')(logits_i)
+            )
+            h_prev = feedback_softmax(logits_i)
+
+    if len(outputs) == 1:
+        outputs = outputs[0]  # single-output model when n_loops=1
+
+    return Model(inputs=inp, outputs=outputs)
+
+
 def multires_lstm_residual_stream_model(units=160, d_model=None,
                                          pool_schedule=None,
                                          numb_blocks_per_level=2,
@@ -1686,6 +1870,16 @@ BACKBONE_REGISTRY = {
             "hmm_parallel", "hmm_config",
             "hmm_embed", "hmm_embed_norm", "hmm_embed_activation",
             "hmm_readout_type", "hmm_readout_conv_kernel",
+            "clamsa", "softmasking", "zero_init_residual",
+        ],
+    },
+    "looped_residual_stream": {
+        "builder": looped_residual_stream_model,
+        "keys": [
+            "units", "d_model", "pool_size",
+            "numb_lstm", "numb_conv", "filter_size", "kernel_size",
+            "dropout_rate", "output_size",
+            "n_loops",
             "clamsa", "softmasking", "zero_init_residual",
         ],
     },

@@ -999,6 +999,287 @@ def hmm_middle_residual_stream_model(units=160, d_model=None,
     return Model(inputs=inp, outputs=outputs)
 
 
+@tf.keras.utils.register_keras_serializable(package="tiberius")
+class _DualStrandSoftmax(tf.keras.layers.Layer):
+    """Apply softmax independently to the first and second halves of the
+    last dim (per-strand softmax on a dual-strand logits tensor)."""
+
+    def call(self, x):
+        n = tf.shape(x)[-1] // 2
+        fwd = tf.nn.softmax(x[..., :n], axis=-1)
+        rev = tf.nn.softmax(x[..., n:], axis=-1)
+        return tf.concat([fwd, rev], axis=-1)
+
+    def compute_output_shape(self, input_shape):
+        return tuple(input_shape)
+
+
+@tf.keras.utils.register_keras_serializable(package="tiberius")
+class _ZerosLikeShape(tf.keras.layers.Layer):
+    """Emit a zeros tensor of shape (B, T, last_dim) matching the sequence
+    dims of the reference tensor. Used to seed the HMM-feedback stream on
+    the first loop iteration of `looped_hmm_residual_stream_model`."""
+
+    def __init__(self, last_dim: int, **kwargs):
+        super().__init__(**kwargs)
+        self.last_dim = int(last_dim)
+
+    def call(self, ref):
+        shp = tf.shape(ref)
+        return tf.zeros((shp[0], shp[1], self.last_dim), dtype=ref.dtype)
+
+    def compute_output_shape(self, input_shape):
+        return tuple(input_shape[:-1]) + (self.last_dim,)
+
+    def get_config(self):
+        cfg = super().get_config()
+        cfg["last_dim"] = self.last_dim
+        return cfg
+
+
+def looped_hmm_residual_stream_model(units=160, d_model=None,
+                                      pool_size=9,
+                                      numb_lstm=4,
+                                      numb_conv=3, filter_size=128,
+                                      kernel_size=9, dropout_rate=0.0,
+                                      output_size=15,
+                                      n_loops=2,
+                                      hmm_parallel=9,
+                                      hmm_config=None,
+                                      hmm_embed=160,
+                                      hmm_embed_norm='layer',
+                                      hmm_embed_activation='softmax',
+                                      hmm_readout_type='conv',
+                                      hmm_readout_conv_kernel=9,
+                                      clamsa=False, softmasking=True,
+                                      zero_init_residual=True):
+    """
+    Looped residual-stream backbone with a dual-strand HMM head at the end.
+
+    The full backbone (conv stack + biLSTM stack + pre-HMM class head + HMM
+    head) is a single shared computation `f(z, h_prev) -> h_next` that is
+    invoked `n_loops` times with shared weights. Between iterations, the
+    HMM's softmax posterior is projected back into the input side of the
+    residual stream. The first iteration is seeded with an all-zeros HMM
+    feedback tensor, so it behaves like a plain (HMM-augmented) forward
+    pass; the second iteration sees the iter-1 posterior:
+
+        h_0 = zeros((B, T, 2*output_size))
+        for i in 0 .. n_loops-1:
+            x   = InputEmbed(z) + FeedbackProj(h_i)   # zero-init proj
+            x   = ResidualConvStack(x)
+            x   = pool -> ResidualLSTMStack -> unpool
+            p   = softmax(Dense(output_size)(LN(x)))  # single-strand probs
+            lg  = TrainableHMMHead(p, nuc)            # (B, T, 2*output_size)
+            h_{i+1} = softmax(lg)
+        y   = softmax(lg_last)                        # final output
+
+    Weight sharing: all layers are constructed once outside the loop and
+    invoked `n_loops` times, so a single set of parameters is trained end
+    to end. Gradients flow through both iterations (full BPTT), so peak
+    activation memory scales roughly linearly with `n_loops`.
+
+    Dual-strand only: this arch bakes in `use_reverse_strand=True` and
+    only makes sense under `--both_strands`. `output_size` follows the
+    backbone convention (full 2C width, matches label width and the
+    value train.py auto-sets to 30). Internally the pre-HMM class-prob
+    head emits `output_size // 2` (per-strand), and the HMM head is
+    configured with `readout_units=output_size`, `residual_from_input=
+    False`. The HMM's `use_reverse_strand` mechanism appends the RC
+    internally to produce the 2C-wide posterior. The final output tensor
+    is named 'out' and is *logits* (linear activation), so training must
+    use the dual-strand loss with `from_logits=True` (which is what
+    train.py does automatically when `both_strands=True` and the head
+    is 'none').
+
+    Do NOT wrap this model with `add_hmm_layer(..., head='hmm')` or
+    `--hmm_new` -- the HMM is baked into the backbone, so use `head='none'`
+    (or no head flag) when training.
+
+    Notes:
+      - Requires `L % pool_size == 0` at training and inference.
+      - `hmm_parallel` applies to each HMM call; total HMM work scales
+        with `n_loops`. Users on long inference sequences may need to
+        override this to stay within GPU memory (~sqrt(L) is a good rule).
+      - The full trainable model (backbone + inline HMM) is saved and
+        reloaded together because the HMM parameters are trainable.
+
+    Args:
+        units, d_model:               biLSTM hidden and stream width.
+        pool_size:                    pool factor between conv and LSTM stacks.
+        numb_lstm:                    biLSTM residual blocks in the shared stack.
+        numb_conv, filter_size,
+        kernel_size:                  conv stem.
+        dropout_rate:                 dropout inside each biLSTM block.
+        output_size:                  full output width (2 * per_strand).
+                                      Must be even. Matches label width /
+                                      train.py's auto-set value of 30
+                                      when `--both_strands` is used.
+        n_loops:                      number of times the shared backbone is
+                                      applied. `n_loops=1` reduces to a
+                                      one-pass HMM-at-end variant; the
+                                      HMM-feedback path still exists but
+                                      is never exercised.
+        hmm_parallel:                 HMM parallel_factor.
+        hmm_config:                   dict merged into
+                                      `default_trainable_hmm_config()`.
+                                      `use_reverse_strand` is forced True.
+        hmm_embed, hmm_embed_norm,
+        hmm_embed_activation:         embedding config for the HMM head.
+        hmm_readout_type,
+        hmm_readout_conv_kernel:      readout config for the HMM head.
+        clamsa, softmasking,
+        zero_init_residual:           see other builders.
+    """
+    if d_model is None:
+        d_model = 2 * units
+    if n_loops < 1:
+        raise ValueError(f"n_loops must be >= 1, got {n_loops}")
+    if output_size % 2 != 0:
+        raise ValueError(
+            f"looped_hmm_residual_stream requires an even output_size "
+            f"(full 2*per_strand width); got {output_size}. Use "
+            f"--both_strands so train.py sets output_size=30."
+        )
+    per_strand = output_size // 2
+
+    inp_size = 6 if softmasking else 5
+    main_input = Input(shape=(None, inp_size))
+    if clamsa:
+        inp_clamsa = Input(shape=(None, 4), name='clamsa_input')
+        inp = [main_input, inp_clamsa]
+        x_in = keras.layers.Concatenate(axis=-1)([main_input, inp_clamsa])
+    else:
+        inp = main_input
+        x_in = main_input
+
+    zero_init = 'zeros' if zero_init_residual else 'glorot_uniform'
+    nuc = Cast()(inp)
+
+    # Force dual-strand HMM regardless of caller-supplied config.
+    hmm_cfg = dict(hmm_config or {})
+    hmm_cfg["use_reverse_strand"] = True
+
+    # ------------------------------------------------------------------
+    # Shared layers (built once, called n_loops times).
+    # ------------------------------------------------------------------
+    input_embed_layer = Dense(d_model, name='input_embed')
+    feedback_proj_layer = Dense(d_model, kernel_initializer=zero_init,
+                                 name='hmm_feedback_proj')
+
+    conv_layers = []
+    for i in range(numb_conv):
+        k = 3 if i == 0 else kernel_size
+        conv_layers.append({
+            'ln':   LayerNormalization(name=f'ln_conv_{i+1}'),
+            'conv': Conv1D(filter_size, k, padding='same',
+                            activation='relu', name=f'conv_{i+1}'),
+            'proj': Conv1D(d_model, 1, padding='same',
+                            kernel_initializer=zero_init,
+                            name=f'conv_proj_{i+1}'),
+            'add':  keras.layers.Add(name=f'add_conv_{i+1}'),
+        })
+
+    if pool_size > 1:
+        pool_reshape_layer = Reshape((-1, pool_size * d_model),
+                                      name='pool_reshape')
+        post_pool_proj_layer = Dense(d_model, name='post_pool_proj')
+        unpool_dense_layer = Dense(pool_size * d_model,
+                                    name='unpool_proj')
+        unpool_reshape_layer = Reshape((-1, d_model), name='unpool_reshape')
+    else:
+        pool_reshape_layer = None
+        post_pool_proj_layer = None
+        unpool_dense_layer = None
+        unpool_reshape_layer = None
+
+    lstm_layers = []
+    for i in range(numb_lstm):
+        lstm_layers.append({
+            'ln':      LayerNormalization(name=f'ln_rec_{i+1}'),
+            'biLSTM':  Bidirectional(LSTM(units, return_sequences=True),
+                                      name=f'biLSTM_{i+1}'),
+            'proj':    Dense(d_model, kernel_initializer=zero_init,
+                              name=f'rec_proj_{i+1}'),
+            'drop':    (Dropout(dropout_rate, name=f'dropout_{i+1}')
+                        if dropout_rate else None),
+            'add':     keras.layers.Add(name=f'add_rec_{i+1}'),
+        })
+
+    pre_hmm_ln = LayerNormalization(name='ln_hmm_in')
+    pre_hmm_dense = Dense(per_strand, name='hmm_in_dense')
+    pre_hmm_softmax = Activation('softmax', name='hmm_in_softmax')
+
+    hmm_layer = TrainableHMMHead(
+        hmm_config=hmm_cfg,
+        embed=hmm_embed,
+        embed_norm=hmm_embed_norm,
+        embed_activation=hmm_embed_activation,
+        readout_units=output_size,
+        readout_type=hmm_readout_type,
+        readout_conv_kernel=hmm_readout_conv_kernel,
+        parallel_factor=hmm_parallel,
+        residual_from_input=False,
+        name='hmm_loop_head',
+    )
+    # Fed back as per-strand softmax (softmax on each half of the 2C
+    # tensor independently). Applied via a small helper layer.
+    feedback_softmax = _DualStrandSoftmax(name='hmm_feedback_softmax')
+
+    # ------------------------------------------------------------------
+    # Forward function reusing the shared layers.
+    # ------------------------------------------------------------------
+    z_embed = input_embed_layer(x_in)
+
+    def _forward(h_prev):
+        fb = feedback_proj_layer(h_prev)
+        x = keras.layers.Add()([z_embed, fb])
+
+        for lyr in conv_layers:
+            h = lyr['ln'](x)
+            h = lyr['conv'](h)
+            h = lyr['proj'](h)
+            x = lyr['add']([x, h])
+
+        if pool_size > 1:
+            x = pool_reshape_layer(x)
+            x = post_pool_proj_layer(x)
+
+        for lyr in lstm_layers:
+            h = lyr['ln'](x)
+            h = lyr['biLSTM'](h)
+            h = lyr['proj'](h)
+            if lyr['drop'] is not None:
+                h = lyr['drop'](h)
+            x = lyr['add']([x, h])
+
+        if pool_size > 1:
+            x = unpool_dense_layer(x)
+            x = unpool_reshape_layer(x)
+
+        p = pre_hmm_softmax(pre_hmm_dense(pre_hmm_ln(x)))
+        logits = hmm_layer(p, nuc, training=True)
+        logits = Reshape((-1, output_size))(logits)
+        return logits
+
+    # ------------------------------------------------------------------
+    # Loop: seed with zeros, run n_loops times, apply per-strand softmax
+    # only on iterations that feed back. Final output is emitted as
+    # logits (linear activation) so training can use the dual-strand
+    # loss with from_logits=True.
+    # ------------------------------------------------------------------
+    h_prev = _ZerosLikeShape(output_size, name='hmm_feedback_init')(nuc)
+    logits = None
+    for i in range(n_loops):
+        logits = _forward(h_prev)
+        if i < n_loops - 1:
+            h_prev = feedback_softmax(logits)
+
+    y_out = Activation('linear', name='out')(logits)
+
+    return Model(inputs=inp, outputs=y_out)
+
+
 def multires_lstm_residual_stream_model(units=160, d_model=None,
                                          pool_schedule=None,
                                          numb_blocks_per_level=2,
@@ -1392,6 +1673,19 @@ BACKBONE_REGISTRY = {
             "hmm_embed", "hmm_embed_norm", "hmm_embed_activation",
             "hmm_readout_type", "hmm_readout_conv_kernel",
             "aux_hmm_loss",
+            "clamsa", "softmasking", "zero_init_residual",
+        ],
+    },
+    "looped_hmm_residual_stream": {
+        "builder": looped_hmm_residual_stream_model,
+        "keys": [
+            "units", "d_model", "pool_size",
+            "numb_lstm", "numb_conv", "filter_size", "kernel_size",
+            "dropout_rate", "output_size",
+            "n_loops",
+            "hmm_parallel", "hmm_config",
+            "hmm_embed", "hmm_embed_norm", "hmm_embed_activation",
+            "hmm_readout_type", "hmm_readout_conv_kernel",
             "clamsa", "softmasking", "zero_init_residual",
         ],
     },

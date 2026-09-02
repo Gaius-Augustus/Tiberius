@@ -909,7 +909,8 @@ def main():
             seq_len_for_hmm,
             name="hmm_new_parallel_factor",
         )
-    if config.get("arch") == "hmm_middle_residual_stream":
+    if config.get("arch") in ("hmm_middle_residual_stream",
+                                "looped_hmm_residual_stream"):
         config["hmm_parallel"] = sanitize_parallel_factor(
             config.get("hmm_parallel", 9),
             seq_len_for_hmm,

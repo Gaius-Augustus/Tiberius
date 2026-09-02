@@ -647,12 +647,26 @@ def train_model(
 
         # Multi-output: Keras requires y_true to mirror the output structure.
         # When loss is a list of N losses, duplicate y_true N times so every
-        # output head receives the same labels.  Sample weights stay as-is.
+        # output head receives the same labels.  The dataset can yield either
+        # (x, y) pairs (IndexedDataGenerator) or (x, y, w) triples (TFRecord
+        # DataGenerator); handle both.
         if n_out > 1:
-            dataset = dataset.map(
-                lambda x, y, w: (x, (y,) * n_out, w),
-                num_parallel_calls=tf.data.AUTOTUNE,
-            )
+            n_elems = len(dataset.element_spec)
+            if n_elems == 2:
+                dataset = dataset.map(
+                    lambda x, y: (x, (y,) * n_out),
+                    num_parallel_calls=tf.data.AUTOTUNE,
+                )
+            elif n_elems == 3:
+                dataset = dataset.map(
+                    lambda x, y, w: (x, (y,) * n_out, w),
+                    num_parallel_calls=tf.data.AUTOTUNE,
+                )
+            else:
+                raise ValueError(
+                    f"Unexpected dataset element structure with "
+                    f"{n_elems} elements; expected 2 (x, y) or 3 (x, y, w)."
+                )
             if val_data is not None:
                 x_v, y_v = val_data[0], val_data[1]
                 val_data = (x_v, (y_v,) * n_out)

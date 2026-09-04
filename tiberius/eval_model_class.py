@@ -227,6 +227,16 @@ class PredictionGTF:
 
             self.lstm_model.load_weights(weights_h5)
 
+            # looped_residual_stream: multi-output model (out_iter1, ...,
+            # out) trained with deep supervision. Inference only needs the
+            # final iteration's prediction, so narrow to the 'out' tensor
+            # before the both_strands fallback path runs.
+            if config.get("arch") == "looped_residual_stream":
+                self.lstm_model = Model(
+                    inputs=self.lstm_model.inputs,
+                    outputs=self.lstm_model.get_layer('out').output,
+                )
+
             # hmm_middle_residual_stream: the backbone already contains a
             # TrainableHMMHead at 'hmm_middle_head'. For inference we:
             #   1. Extract a sub-model that ends at 'hmm_in_softmax'

@@ -83,14 +83,26 @@ def load_model_config(
     dict
         Parsed YAML contents.
     """
-    repo_config = f"{SCRIPT_ROOT}/../model_cfg/{filepath.split('/')[-1]}"
-
-    if not repo_config.endswith(".yaml"):
-        repo_config += ".yaml"
-    if os.path.exists(repo_config):
-        filepath = repo_config
-    else:
-        raise FileNotFoundError(f"File not found: {filepath}")
+    if not os.path.exists(filepath):
+        basename = os.path.basename(filepath)
+        if not basename.endswith((".yaml", ".yml")):
+            basename += ".yaml"
+        candidates = [
+            f"{SCRIPT_ROOT}/../model_cfg/{basename}",
+            f"{SCRIPT_ROOT}/../model_cfg/superseded/{basename}",
+        ]
+        for candidate in candidates:
+            if os.path.exists(candidate):
+                if "superseded" in candidate:
+                    logging.warning(
+                        "The chosen model %s is superseded, "
+                        "there may be a newer model available",
+                        basename,
+                    )
+                filepath = candidate
+                break
+        else:
+            raise FileNotFoundError(f"File not found: {filepath}")
 
 
     logging.info(f'Model Config File: {os.path.abspath(filepath)}')
@@ -127,6 +139,39 @@ def check_seq_len(seq_len: int) -> bool:
         )
         sys.exit(1)
     return True
+
+
+def clamp_seq_len_to_genome(genome_path: str, seq_len: int, min_seq_len: int) -> int:
+    """Cap seq_len at the longest contig when every contig is shorter than seq_len.
+
+    Works around issue #115: bricks2marble's iterate_sequences pads short
+    contigs to T_max, so on fragmented / MAG-style assemblies the first
+    group is padded to seq_len and blows up host RAM. Clamping seq_len to
+    the longest contig (rounded down to a multiple of 18) keeps the padded
+    footprint proportional to the real data.
+    """
+    if genome_path.endswith((".gz", ".bgz")):
+        return seq_len
+    try:
+        idx = b2m.io.index(genome_path, min_sequence_size=min_seq_len)
+    except Exception as e:
+        logging.warning("Could not index genome to clamp seq_len (%s); "
+                        "keeping seq_len=%d", e, seq_len)
+        return seq_len
+    if not idx:
+        return seq_len
+    max_len = max(entry[3] for entry in idx)
+    if max_len >= seq_len:
+        return seq_len
+    clamped = (max_len // 18) * 18
+    if clamped < 18:
+        return seq_len
+    logging.warning(
+        "Longest contig (%d nt) is shorter than seq_len (%d); "
+        "clamping seq_len to %d to avoid over-padding short contigs (issue #115).",
+        max_len, seq_len, clamped,
+    )
+    return clamped
 
 
 def compute_parallel_factor(seq_len: int) -> int:
@@ -414,6 +459,10 @@ def run_tiberius(args):
     genome_path = os.path.abspath(args.genome)
     check_file_exists(genome_path)
 
+    clamped_seq_len = clamp_seq_len_to_genome(genome_path, seq_len, min_seq_len)
+    if clamped_seq_len != seq_len:
+        log_config.append(f"chunk length (clamped to longest contig): {clamped_seq_len}")
+        seq_len = clamped_seq_len
 
     if config:
         model_path = resolve_weight_download(config)

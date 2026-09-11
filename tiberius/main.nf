@@ -1,7 +1,7 @@
 nextflow.enable.dsl=2
 
 include { CONCAT_HINTS; EMPTY_FILE } from './modules/util.nf'
-include { MERGE_TIBERIUS_TRAIN; MERGE_TIBERIUS_TRAIN_PRIO } from './modules/tiberius.nf'
+include { MERGE_TIBERIUS_TRAIN; MERGE_TIBERIUS_TRAIN_PRIO; PROTEIN_FROM_GFF_FINAL } from './modules/tiberius.nf'
 include { HC_FORMAT_FILTER } from './modules/hc.nf'
 
 include { INPUTS } from './subworkflows/inputs.nf'
@@ -98,6 +98,7 @@ workflow {
 
       if( tiberiusRun ) {
         MERGE_TIBERIUS_TRAIN(pe.tiberius_gff, train_final)
+        PROTEIN_FROM_GFF_FINAL(MERGE_TIBERIUS_TRAIN.out.merged, inp.genome)
         // MERGE_TIBERIUS_TRAIN_PRIO(pe.tiberius_gff, train_final)
       }
 

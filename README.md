@@ -244,7 +244,18 @@ python tiberius.py --nf_config conf/base.config --genome input.fasta --model_cfg
 ```
 ![Workflow of the Tiberius Evidence Pipeline](figures/evi_wflow.png)
 
+#### Evidence Pipeline Outputs
 
+All files are written under the directory set by `--outdir` (default: `results/`).
+
+| File | Content |
+| ---- | ------- |
+| `tiberius_evidence.gff3` | **Final combined annotation.** Merge of the Tiberius *ab initio* prediction and the high-confidence evidence-supported gene set. Contains UTRs. This is the pipeline's primary output. |
+| `tiberius_evidence_proteins.fa` | Protein sequences translated from `tiberius_evidence.gff3` (all isoforms). |
+| `intermediate/tiberius_ab_initio.gff3` | Pure *ab initio* predictions from the Tiberius neural model on the full genome, without extrinsic evidence. |
+| `intermediate/hc.gff3` | High-confidence gene set built from extrinsic evidence: RNA-Seq/Iso-Seq assembly → TransDecoder ORFs → DIAMOND verification against the protein database → stop-codon check. Includes alternative isoforms and UTRs. |
+
+In *ab initio* Nextflow mode (no evidence) the only output is `tiberius_ab_initio.gff3` at the top level of `--outdir`.
 
 ### Running Tiberius with evolutionary information
 To run Tiberius in *de novo* mode, evolutionary information data has to be generated with ClaMSA. See [docs/clamsa_data.md](docs/clamsa_data.md) for instructions on how to generate the data. Afterwards, you should have a directory with files named `$clamsa/{prefix}{seq_name}.npz` for each sequence of your FASTA file. You can then run Tiberius with the `--clamsa` argument. Note that your genome has to be softmasked for this mode and that you have to use different training weights than in *ab initio* mode. You can download the model weights from [https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights_v2.tar.gz](https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights_v2.tar.gz). Or you can provide Tiberius with the model configuration file `model_cfg/mammalia_clamsa_v2.yaml`

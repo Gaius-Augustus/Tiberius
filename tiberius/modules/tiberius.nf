@@ -52,12 +52,29 @@ process MERGE_TIBERIUS {
       path gff_files, stageAs: "?/*"
 
     output:
-      path "tiberius.gff3"
+      path "tiberius_ab_initio.gff3"
 
     script:
     """
     merge_annotations.py --mode full \\
-        ${gff_files} > tiberius.gff3
+        ${gff_files} > tiberius_ab_initio.gff3
+    """
+}
+
+process MERGE_TIBERIUS_EVI {
+    label 'container'
+    publishDir "${params.outdir}/intermediate/", mode:'copy'
+
+    input:
+      path gff_files, stageAs: "?/*"
+
+    output:
+      path "tiberius_ab_initio.gff3"
+
+    script:
+    """
+    merge_annotations.py --mode full \\
+        ${gff_files} > tiberius_ab_initio.gff3
     """
 }
 
@@ -70,12 +87,12 @@ process MERGE_TIBERIUS_TRAIN {
       path traingenes
 
     output:
-      path "tiberius_train.gff3", emit: merged
+      path "tiberius_evidence.gff3", emit: merged
 
     script:
     """
     merge_annotations.py --mode full \\
-        ${tiberius} ${traingenes} > tiberius_train.gff3
+        ${tiberius} ${traingenes} > tiberius_evidence.gff3
     """
 }
 
@@ -97,8 +114,6 @@ process MERGE_TIBERIUS_TRAIN_PRIO {
     """
 }
 process PROTEIN_FROM_GFF {
-  publishDir "${params.outdir}/", mode:'copy'
-
   label 'container'
 
   input:
@@ -117,5 +132,25 @@ process PROTEIN_FROM_GFF {
     gffread tiberius.capped.gff3 \\
         -g ${genome} \\
         -y tiberius_proteins.fa
+    """
+}
+
+process PROTEIN_FROM_GFF_FINAL {
+  publishDir "${params.outdir}/", mode:'copy'
+
+  label 'container'
+
+  input:
+      path tiberius
+      path genome
+
+  output:
+      path "tiberius_evidence_proteins.fa"
+
+  script:
+    """
+    gffread ${tiberius} \\
+        -g ${genome} \\
+        -y tiberius_evidence_proteins.fa
     """
 }

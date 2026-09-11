@@ -35,20 +35,20 @@ process HC_SUPPORTED {
 }
 
 process HC_FORMAT_FILTER {
-  publishDir "${params.outdir}", pattern: "training.gff", mode: 'copy'
+  publishDir "${params.outdir}/intermediate", pattern: "hc.gff3", mode: 'copy'
   label 'container'
   input:
     path traingff,  stageAs: 'training_original.gff'
     path genome
 
   output:
-    path "training.gff"
+    path "hc.gff3"
 
   script:
   """
   extend_cds_with_stop_codon.py ${traingff} > training_extended.gff
   check_stop_codons.py \
     training_extended.gff ${genome} \
-    --write-passing-gff training.gff > filter.tsv
+    --write-passing-gff hc.gff3 > filter.tsv
   """
 }

@@ -57,11 +57,11 @@ ENV PATH=${PATH}:/opt/Augustus/bin/
 
 
 RUN cd        /opt      && \
-    git      clone        https://github.com/Gaius-Augustus/Tiberius && \
+    git      clone --recursive https://github.com/Gaius-Augustus/Tiberius && \
     cd Tiberius && \
     python3 -m pip install .[from_source] && \
     chmod +x tiberius.py && \
-    chmod +x tiberius/scripts/* && \
+    chmod +x paludamentum/bin/* && \
     chmod +x tiberius/*py
 
 RUN mkdir -p /opt/Tiberius/model_weights && chmod -R 777 /opt/Tiberius/model_weights
@@ -82,7 +82,9 @@ RUN mkdir -p /opt/Tiberius/model_weights && chmod -R 777 /opt/Tiberius/model_wei
 
 ENV PATH=${PATH}:/opt/Tiberius/tiberius/
 ENV PATH=${PATH}:/opt/Tiberius/
-ENV PATH=${PATH}:/opt/Tiberius/tiberius/scripts
+# Scripts of the Paludamentum evidence pipeline (git submodule). Nextflow also
+# mounts the host copy of bin/; this is the fallback inside the image.
+ENV PATH=${PATH}:/opt/Tiberius/paludamentum/bin
 
 RUN apt update && \
     apt install -yq bamtools && \

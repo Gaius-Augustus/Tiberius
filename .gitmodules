@@ -1,4 +1,3 @@
-[submodule "learnMSA"]
-	path = learnMSA
-	url = https://github.com/Gaius-Augustus/learnMSA
-	branch = parallel
+[submodule "paludamentum"]
+	path = paludamentum
+	url = https://github.com/Gaius-Augustus/Paludamentum

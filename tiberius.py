@@ -10,7 +10,7 @@ import urllib.request
 from copy import deepcopy
 from pathlib import Path
 from tiberius.tiberius_args import parseCmd
-from tiberius.evidence_pipeline_wrapper import run_nextflow_pipeline
+from tiberius.evidence_pipeline_wrapper import PALUDAMENTUM_ROOT, resolve_nf_config, run_nextflow_pipeline
 import importlib.metadata
 
 
@@ -47,7 +47,7 @@ DEFAULT_PARAMS = {
         "model_cfg": None,
     },
     "mode": None,
-    "scoring_matrix": str((SCRIPT_ROOT / "conf" / "blosum62.csv").resolve()),
+    "scoring_matrix": str((PALUDAMENTUM_ROOT / "conf" / "blosum62.csv").resolve()),
     "prothint_conflict_filter": False,
 }
 
@@ -479,7 +479,9 @@ def main():
         list_available_configs(cfg_dir)
     elif mode == "nextflow":
         if not args.nf_config:
-            args.nf_config = str((SCRIPT_ROOT / "conf" / "base.config").resolve())
+            args.nf_config = str((PALUDAMENTUM_ROOT / "conf" / "base.config").resolve())
+        # accepts a path or the name of a config shipped in paludamentum/conf
+        args.nf_config = str(resolve_nf_config(args.nf_config))
         args = ensure_params_yaml(args)
         run_nextflow_pipeline(args)
     else:

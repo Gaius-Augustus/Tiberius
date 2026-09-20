@@ -59,7 +59,7 @@ We are providing pre-trained models for the following clades (see [model_cfg/REA
 
 ```shell
 # 1. Clone and install the Tiberius launcher
-git clone https://github.com/Gaius-Augustus/Tiberius
+git clone --recursive https://github.com/Gaius-Augustus/Tiberius
 cd Tiberius
 pip install .
 
@@ -89,12 +89,14 @@ Tiberius outputs a **GTF file** or **GFF3 file** with predicted gene structures.
 
 This repository must always be cloned locally, as Tiberius relies on a local launcher script that manages execution and that can pull the Singularity image.
 ```
-git clone https://github.com/Gaius-Augustus/Tiberius
+git clone --recursive https://github.com/Gaius-Augustus/Tiberius
 cd Tiberius
 pip install .
 ```
 
 The command above installs the Tiberius Python package itself and is **required in all cases**, including when running Tiberius via Singularity.
+
+`--recursive` also fetches the [Paludamentum](https://github.com/Gaius-Augustus/Paludamentum) submodule, which holds the Nextflow evidence pipeline. In an existing clone, run `git submodule update --init --recursive` after `git pull`.
 
 Tiberius can be executed either using Singularity, Docker, or with a local installation with all dependencies.
 
@@ -215,7 +217,7 @@ python tiberius.py --genome input.fasta --model_cfg mammalia_softmasking_v2 \
 
 ### Running Tiberius with Nextflow
 
-Tiberius can also be parallelized across multiple GPU nodes on an HPC with Nextflow. For this, you have to set up a nextflow configuration for your specific cluster and extend [conf/base.config](conf/base.config). As an example, see [conf/slurm_generic.config](conf/slurm_generic.config) and see section *Adapting Tiberius to an HPC* in [conf/README.md](conf/README.md).
+Tiberius can also be parallelized across multiple GPU nodes on an HPC with Nextflow. For this, you have to set up a nextflow configuration for your specific cluster and extend [paludamentum/conf/base.config](paludamentum/conf/base.config). As an example, see [paludamentum/conf/slurm_generic.config](paludamentum/conf/slurm_generic.config) and see [paludamentum/docs/hpc.md](paludamentum/docs/hpc.md). The Nextflow pipeline lives in the [Paludamentum](https://github.com/Gaius-Augustus/Paludamentum) submodule.
 
 You can start Tiberius with Nextflow by providing it with your Nextflow config file:
 ```shell
@@ -228,7 +230,7 @@ python tiberius.py --nf_config conf/slurm_generic.config --genome input.fasta --
 
 You can also run the Tiberius Evidence Pipeline. A set of high confidence genes is generated and added to the Tiberius prediction that improves its accuracy, it adds some alternative splicing forms and it includes UTR regions for the evidence-only predictions.
 
-To provide Tiberius with the files and required parameters, it is recommended to generate a parameter file `params.yaml`. See [conf/README.md](conf/README.md) for details about the parameter file and [conf/parameters.yaml](conf/parameters.yaml) for a template.
+To provide Tiberius with the files and required parameters, it is recommended to generate a parameter file `params.yaml`. See [paludamentum/docs/parameters.md](paludamentum/docs/parameters.md) for details about the parameter file and [paludamentum/conf/parameters.yaml](paludamentum/conf/parameters.yaml) for a template.
 
 
 ```shell
@@ -242,11 +244,11 @@ Parameters in the params.yaml file can be overwritten with command line argument
 # Nextflow with params file and commandline overwrites
 python tiberius.py --nf_config conf/base.config --genome input.fasta --model_cfg diatoms --outdir results
 ```
-![Workflow of the Tiberius Evidence Pipeline](figures/evi_wflow.png)
+![Workflow of the Tiberius Evidence Pipeline](paludamentum/figures/evi_wflow.png)
 
 #### Evidence Pipeline Outputs
 
-All files are written under the directory set by `--outdir` (default: `results/`).
+All files are written under the directory set by `--outdir` (default: `tiberius_results/`).
 
 | File | Content |
 | ---- | ------- |

@@ -123,7 +123,7 @@ def parseCmd():
               '(--rnaseq_paired r1.fq r2.fq). A comma-separated list of pairs '
               'is NOT accepted on the CLI. To pass multiple explicit pairs, '
               'use a params.yaml with a list of [r1, r2] pairs; see '
-              'conf/README.md ("rnaseq_paired") for the exact YAML forms.'))
+              'paludamentum/docs/parameters.md ("rnaseq_paired") for the exact YAML forms.'))
     nf_params_grp.add_argument('--rnaseq_sra_single', nargs='*', default=[],
         help='RNA-Seq single-end SRA accession(s).')
     nf_params_grp.add_argument('--rnaseq_sra_paired', nargs='*', default=[],

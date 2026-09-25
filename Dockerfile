@@ -2,6 +2,13 @@ FROM nvcr.io/nvidia/tensorflow:25.02-tf2-py3
 
 USER root
 
+# Record the Python packages of the NGC base image. The NGC TensorFlow build
+# (2.17.0+nv25.2, CUDA 12.8, cuDNN 9, all SMs) is the only one in this image that
+# runs on Blackwell GPUs (sm_120, e.g. RTX PRO 6000). The check at the end of
+# this file fails the build if a later pip install replaced it or added PyPI
+# CUDA/cuDNN wheels next to it.
+RUN python3 -c "import importlib.metadata as m; print('\n'.join(sorted(d.metadata['Name'].lower().replace('_', '-') + '==' + d.version for d in m.distributions())))" > /opt/ngc-base-packages.txt
+
 ENV TF_USE_LEGACY_KERAS=0
 RUN python3 -m pip install --upgrade "keras>=3,<4"
 
@@ -56,12 +63,17 @@ RUN cd /opt && \
 ENV PATH=${PATH}:/opt/Augustus/bin/
 
 
+# Not `pip install .[from_source]`: hidten[tensorflow] requires
+# tensorflow[and-cuda], and the and-cuda extra of the NGC wheel pins PyPI
+# CUDA 12.3 / cuDNN 8.9 / ptxas 12.3. These get installed on top of the NGC
+# CUDA 12.8 stack and crash Tiberius on Blackwell GPUs. So the TF-dependent
+# packages are installed without dependencies and the rest explicitly.
 RUN cd        /opt      && \
-    git      clone --recursive https://github.com/Gaius-Augustus/Tiberius && \
+    git      clone https://github.com/Gaius-Augustus/Tiberius && \
     cd Tiberius && \
-    python3 -m pip install .[from_source] && \
+    python3 -m pip install --no-deps bricks2marble hidten && \
+    python3 -m pip install . numpy pydantic biopython requests "packaging>=23.0" pandas && \
     chmod +x tiberius.py && \
-    chmod +x paludamentum/bin/* && \
     chmod +x tiberius/*py
 
 RUN mkdir -p /opt/Tiberius/model_weights && chmod -R 777 /opt/Tiberius/model_weights
@@ -82,9 +94,8 @@ RUN mkdir -p /opt/Tiberius/model_weights && chmod -R 777 /opt/Tiberius/model_wei
 
 ENV PATH=${PATH}:/opt/Tiberius/tiberius/
 ENV PATH=${PATH}:/opt/Tiberius/
-# Scripts of the Paludamentum evidence pipeline (git submodule). Nextflow also
-# mounts the host copy of bin/; this is the fallback inside the image.
-ENV PATH=${PATH}:/opt/Tiberius/paludamentum/bin
+# This image also holds the evidence tools (miniprot, HISAT2, StringTie, ...)
+# that the Paludamentum pipeline runs; Paludamentum mounts its own scripts.
 
 RUN apt update && \
     apt install -yq bamtools && \
@@ -194,6 +205,15 @@ RUN python3 -m pip install plotly
 RUN cd /opt && \
     rm *tar.gz
 ENV PATH=/usr/local/bin/:$PATH
+
+# Fail the build if the NGC TensorFlow/CUDA stack was modified (see top of file)
+RUN python3 -c "import importlib.metadata as m, sys; \
+base = set(open('/opt/ngc-base-packages.txt').read().split()); \
+now = {d.metadata['Name'].lower().replace('_', '-') + '==' + d.version for d in m.distributions()}; \
+added = sorted(p for p in now - base if p.startswith(('nvidia-', 'tensorflow'))); \
+tf = m.version('tensorflow'); \
+sys.exit(f'NGC TensorFlow stack modified: tensorflow=={tf}, added/changed: {added}' if '+nv' not in tf or added else 0)" && \
+    python3 -c "import tensorflow as tf; b = tf.sysconfig.get_build_info(); print('TensorFlow', tf.__version__, 'CUDA', b['cuda_version'], 'cuDNN', b['cudnn_version'])"
 
 
 USER ${NB_UID}

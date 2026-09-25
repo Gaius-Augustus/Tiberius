@@ -15,13 +15,13 @@ For more information, see the Tiberius clade training [preprint](https://doi.org
 Tiberius is a deep learning-based *ab initio* gene structure prediction tool that end-to-end integrates convolutional
 and long short-term memory layers with a differentiable HMM layer. It can be used to predict gene structures from **genomic sequences only** (*ab initio*), while matching the accuracy of tools that use extrinsic evidence.
 
-Additionally, Tiberius provides an evidence mode that generates highly precise gene structures from extrinsic evidence, which are then combined with Tiberius *ab initio* predictions. Tiberius can also be parallelized on HPC systems using Nextflow.
+Additionally, [Paludamentum](https://github.com/Gaius-Augustus/Paludamentum) runs Tiberius in a Nextflow pipeline that parallelizes it over several GPUs and generates highly precise gene structures from extrinsic evidence, which are then combined with the Tiberius *ab initio* predictions.
 
 > **Core libraries.** Much of Tiberius's core: sequence and annotation data structures, FASTA/GTF I/O, pre- and postprocessing for the models and the differentiable HMM layer is implemented in two separat libraries:
 > - [**bricks2marble**](https://github.com/Gaius-Augustus/bricks2marble) — nucleotide/annotation structures, pre- and postprocessing for DL gene-prediction models.
 > - **hidten** — the differentiable HMM logic used by the HMM layer.
 >
-> Tiberius installs both as dependencies (`bricks2marble[tf]`, `hidten[tensorflow]`); this repository contains the model architecture, training, clade-specific models, evidence pipeline and the launcher.
+> Tiberius installs both as dependencies (`bricks2marble[tf]`, `hidten[tensorflow]`); this repository contains the model architecture, training, clade-specific models and the launcher. The Nextflow evidence pipeline lives in [Paludamentum](https://github.com/Gaius-Augustus/Paludamentum), which runs Tiberius as one of its gene finders.
 
 
 ![Accuracy comparison for Tiberius *ab initio* predictions](figures/tiberius_acc.png)
@@ -36,8 +36,7 @@ Additionally, Tiberius provides an evidence mode that generates highly precise g
 - [Running Tiberius](#running-tiberius)
   - [Choosing the Model Weights](#choosing-the-model-weights)
   - [Ab Initio Gene Prediction](#ab-initio-gene-prediction)
-  - [Running Tiberius with Nextflow](#running-tiberius-with-nextflow)
-  - [Running Tiberius with Extrinsic Evidence](#running-tiberius-with-extrinsic-evidence-nextflow-only)
+  - [Multi-GPU runs and extrinsic evidence (Paludamentum)](#multi-gpu-runs-and-extrinsic-evidence-paludamentum)
   - [Running Tiberius with evolutionary information](#running-tiberius-with-evolutionary-information)
   - [Running Tiberius on Different GPUs](#running-tiberius-on-different-gpus)
 - [Training Tiberius](#training-tiberius)
@@ -59,7 +58,7 @@ We are providing pre-trained models for the following clades (see [model_cfg/REA
 
 ```shell
 # 1. Clone and install the Tiberius launcher
-git clone --recursive https://github.com/Gaius-Augustus/Tiberius
+git clone https://github.com/Gaius-Augustus/Tiberius
 cd Tiberius
 pip install .
 
@@ -83,20 +82,18 @@ Tiberius outputs a **GTF file** or **GFF3 file** with predicted gene structures.
 - **Python >= 3.12**
 - **GPU** with at least 8 GB memory recommended (see [recommended batch sizes](#running-tiberius-on-different-gpus)); Tiberius can also run on CPU, but will be significantly slower
 - **Singularity** (recommended) — or a local installation of all dependencies (TensorFlow with GPU support, etc.)
-- **Nextflow** (only required for HPC parallelization or the evidence pipeline)
+- **Nextflow** (only for [Paludamentum](https://github.com/Gaius-Augustus/Paludamentum), the pipeline that parallelizes Tiberius over GPUs and integrates extrinsic evidence)
 
 ## Installation
 
 This repository must always be cloned locally, as Tiberius relies on a local launcher script that manages execution and that can pull the Singularity image.
 ```
-git clone --recursive https://github.com/Gaius-Augustus/Tiberius
+git clone https://github.com/Gaius-Augustus/Tiberius
 cd Tiberius
 pip install .
 ```
 
 The command above installs the Tiberius Python package itself and is **required in all cases**, including when running Tiberius via Singularity.
-
-`--recursive` also fetches the [Paludamentum](https://github.com/Gaius-Augustus/Paludamentum) submodule, which holds the Nextflow evidence pipeline. In an existing clone, run `git submodule update --init --recursive` after `git pull`.
 
 Tiberius can be executed either using Singularity, Docker, or with a local installation with all dependencies.
 
@@ -113,7 +110,7 @@ The image tag used by `--singularity` is pinned in the launcher and cached as `s
 
 ### Option B: Using Docker
 
-If you have root access (or are in the `docker` group), you can use the Docker image directly. The image includes TensorFlow with GPU support and all external tools needed for the evidence pipeline.
+If you have root access (or are in the `docker` group), you can use the Docker image directly. The image includes TensorFlow with GPU support and all external tools of the [Paludamentum](https://github.com/Gaius-Augustus/Paludamentum) evidence pipeline, which runs its tools in this image.
 
 ```shell
 # Pull the image
@@ -158,11 +155,9 @@ Tiberius supports several execution modes. The table below gives a quick overvie
 | Mode | What it does | Key arguments |
 | ---- | ------------ | ------------- |
 | ***Ab initio*** | Gene prediction from genomic sequence only | `--genome`, `--model_cfg` |
-| **Nextflow** | Parallelized *ab initio* prediction across multiple GPUs on an HPC | `--nf_config`, `--genome`, `--model_cfg` |
-| **Evidence pipeline** (Nextflow) | Combines *ab initio* predictions with extrinsic evidence (proteins, RNA-Seq, Iso-Seq) | `--nf_config`, `--params_yaml` |
 | **De novo with ClaMSA** | Uses evolutionary information from ClaMSA as additional input | `--genome`, `--clamsa`, `--model_cfg` |
 
-All modes are invoked through `tiberius.py`. Add `--singularity` to any direct (non-Nextflow) command to run inside the Singularity container.
+All modes are invoked through `tiberius.py`. Add `--singularity` to any command to run inside the Singularity container. Parallelization over several GPUs and integration of extrinsic evidence (proteins, RNA-Seq, Iso-Seq) are done by [Paludamentum](https://github.com/Gaius-Augustus/Paludamentum), see [below](#multi-gpu-runs-and-extrinsic-evidence-paludamentum).
 
 ### Choosing the Model Weights
 
@@ -215,49 +210,22 @@ python tiberius.py --genome input.fasta --model_cfg mammalia_softmasking_v2 \
 ```
 
 
-### Running Tiberius with Nextflow
+### Multi-GPU runs and extrinsic evidence (Paludamentum)
 
-Tiberius can also be parallelized across multiple GPU nodes on an HPC with Nextflow. For this, you have to set up a nextflow configuration for your specific cluster and extend [paludamentum/conf/base.config](paludamentum/conf/base.config). As an example, see [paludamentum/conf/slurm_generic.config](paludamentum/conf/slurm_generic.config) and see [paludamentum/docs/hpc.md](paludamentum/docs/hpc.md). The Nextflow pipeline lives in the [Paludamentum](https://github.com/Gaius-Augustus/Paludamentum) submodule.
-
-You can start Tiberius with Nextflow by providing it with your Nextflow config file:
-```shell
-# Nextflow for a Diatom genome
-python tiberius.py --nf_config conf/slurm_generic.config --genome input.fasta --model_cfg diatoms
-```
-
-
-### Running Tiberius with Extrinsic Evidence (Nextflow-only)
-
-You can also run the Tiberius Evidence Pipeline. A set of high confidence genes is generated and added to the Tiberius prediction that improves its accuracy, it adds some alternative splicing forms and it includes UTR regions for the evidence-only predictions.
-
-To provide Tiberius with the files and required parameters, it is recommended to generate a parameter file `params.yaml`. See [paludamentum/docs/parameters.md](paludamentum/docs/parameters.md) for details about the parameter file and [paludamentum/conf/parameters.yaml](paludamentum/conf/parameters.yaml) for a template.
-
+[Paludamentum](https://github.com/Gaius-Augustus/Paludamentum) is the Nextflow pipeline around the Gaius-Augustus gene finders. It splits the genome, runs Tiberius on several GPUs in parallel, and, if you give it proteins, RNA-Seq or Iso-Seq, derives a set of high-confidence genes from the evidence and merges it with the Tiberius prediction. Tiberius is a git submodule of Paludamentum; `tiberius.py` itself does not run the pipeline.
 
 ```shell
-# Evidence pipeline with an existing params file
-python tiberius.py --params_yaml params.yaml --nf_config conf/slurm_generic.config
+git clone --recursive https://github.com/Gaius-Augustus/Paludamentum
+cd Paludamentum && pip install .
+
+# ab initio, parallelized over GPUs on a SLURM cluster
+paludamentum --nf_config slurm_generic --genome input.fasta --model_cfg diatoms
+
+# with extrinsic evidence from a params file
+paludamentum --params_yaml params.yaml --nf_config slurm_generic
 ```
 
-Parameters in the params.yaml file can be overwritten with command line arguments
-
-```shell
-# Nextflow with params file and commandline overwrites
-python tiberius.py --nf_config conf/base.config --genome input.fasta --model_cfg diatoms --outdir results
-```
-![Workflow of the Tiberius Evidence Pipeline](paludamentum/figures/evi_wflow.png)
-
-#### Evidence Pipeline Outputs
-
-All files are written under the directory set by `--outdir` (default: `tiberius_results/`).
-
-| File | Content |
-| ---- | ------- |
-| `tiberius_evidence.gff3` | **Final combined annotation.** Merge of the Tiberius *ab initio* prediction and the high-confidence evidence-supported gene set. Contains UTRs. This is the pipeline's primary output. |
-| `tiberius_evidence_proteins.fa` | Protein sequences translated from `tiberius_evidence.gff3` (all isoforms). |
-| `intermediate/tiberius_ab_initio.gff3` | Pure *ab initio* predictions from the Tiberius neural model on the full genome, without extrinsic evidence. |
-| `intermediate/hc.gff3` | High-confidence gene set built from extrinsic evidence: RNA-Seq/Iso-Seq assembly → TransDecoder ORFs → DIAMOND verification against the protein database → stop-codon check. Includes alternative isoforms and UTRs. |
-
-In *ab initio* Nextflow mode (no evidence) the only output is `tiberius_ab_initio.gff3` at the top level of `--outdir`.
+The outputs (`tiberius_evidence.gff3`, `tiberius_evidence_proteins.fa`, `tiberius_ab_initio.gff3`), the parameters and the cluster configuration are documented in the Paludamentum repository. The Tiberius Docker image contains the tools of the pipeline, so no further installation is needed.
 
 ### Running Tiberius with evolutionary information
 To run Tiberius in *de novo* mode, evolutionary information data has to be generated with ClaMSA. See [docs/clamsa_data.md](docs/clamsa_data.md) for instructions on how to generate the data. Afterwards, you should have a directory with files named `$clamsa/{prefix}{seq_name}.npz` for each sequence of your FASTA file. You can then run Tiberius with the `--clamsa` argument. Note that your genome has to be softmasked for this mode and that you have to use different training weights than in *ab initio* mode. You can download the model weights from [https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights_v2.tar.gz](https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights_v2.tar.gz). Or you can provide Tiberius with the model configuration file `model_cfg/mammalia_clamsa_v2.yaml`

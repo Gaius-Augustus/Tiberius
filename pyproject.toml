@@ -41,7 +41,7 @@ from_source = [
 packages = ["tiberius"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["paludamentum", "test_data"]
+exclude = ["test_data"]
 
 [project.urls]
 Homepage = "https://github.com/Gaius-Augustus/Tiberius"

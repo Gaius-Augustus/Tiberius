@@ -7,26 +7,21 @@ def parseCmd():
         argparse.Namespace: Parsed command-line arguments.
     """
     parser = argparse.ArgumentParser(
-        description=(
-            "Tiberius predicts gene structures from nucleotide sequences.\n"
-            "Use direct Tiberius inference or launch the Nextflow pipeline."
-        ),
+        description="Tiberius predicts gene structures from nucleotide sequences.",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog=(
-            "Examples:\n"
-            "  Direct Tiberius:\n"
+            "Example:\n"
             "    tiberius.py --genome genome.fa --model_cfg eudicotyledons --out tiberius.gtf\n"
-            "  Nextflow pipeline (params file):\n"
-            "    tiberius.py --params_yaml params.yaml --nf_config conf/base.config\n"
-            "  Nextflow pipeline:\n"
-            "    tiberius.py --nf_config conf/base.config --genome genome.fa --model_cfg eudicotyledons\n"
+            "Evidence integration and multi-GPU runs with Nextflow are done by Paludamentum,\n"
+            "which runs Tiberius as a gene finder: https://github.com/Gaius-Augustus/Paludamentum\n"
         ),
     )
     # parser.add_argument('--model_lstm', type=str, default='',
     #     help='LSTM model file that can be used with --model_hmm to add a custom HMM layer, otherwise a default HMM layer is added.')
     general = parser.add_argument_group("General")
     general.add_argument('-p', '--params_yaml',
-        help='Path to parameters in a YAML file to specify input options and input files. See example at docs/params.yaml', default='')
+        help=('YAML file with "genome" and "tiberius: {model_cfg: ...}", e.g. the params file '
+              'of a Paludamentum run. Fills --genome and --model_cfg if they are not given.'), default='')
     general.add_argument('--genome', type=str,
         help='Genome sequence file in FASTA format.')
     general.add_argument('--model_cfg', type=str, default='',
@@ -36,7 +31,7 @@ def parseCmd():
     general.add_argument('--list_cfg', action='store_true',
         help='List every file in model_cfg/ with its target species.')
 
-    tiberius_grp = parser.add_argument_group("Direct Tiberius only")
+    tiberius_grp = parser.add_argument_group("Prediction")
     model_grp = tiberius_grp.add_mutually_exclusive_group(required=False)
     model_grp.add_argument('--model', type=str,
         help='Tiberius model with weight file (.h5) without the HMM layer.', default='')
@@ -86,55 +81,4 @@ def parseCmd():
     tiberius_grp.add_argument('--cleanup_old_singularity_images', action='store_true',
         help='Delete locally cached Singularity images that do not match the pinned version.')
 
-    nf_grp = parser.add_argument_group("Nextflow Pipeline")
-    nf_grp.add_argument('-c', '--nf_config',
-        help='Path to the Nextflow config file. See examples in conf/*.config', default='')
-    nf_grp.add_argument('--profile',
-        help='Nextflow profile(s) to activate (comma-separated).')
-    nf_grp.add_argument('--nextflow_bin', default='nextflow',
-        help='Path to the Nextflow executable to use.')
-    nf_grp.add_argument('--resume', action='store_true',
-        help='Pass -resume to Nextflow to continue a previous execution.')
-    nf_grp.add_argument('--work_dir',
-        help='Optional custom Nextflow work directory (passed to -work-dir).')
-    nf_grp.add_argument('--check_tools', action='store_true',
-        help='Validate native tool executables (useful when not relying on Singularity).')
-    nf_grp.add_argument('--skip_singularity_check', action='store_true',
-        help='Skip Singularity executable validation.')
-    nf_grp.add_argument('--dry_run', action='store_true',
-        help='Only run validation; do not start Nextflow.')
-    nf_grp.add_argument('nextflow_args', nargs=argparse.REMAINDER,
-        help='Additional arguments forwarded verbatim to Nextflow (prefix them with "--").')
-
-    nf_params_grp = parser.add_argument_group("Nextflow Params")
-    nf_params_grp.add_argument('--outdir', help='Output directory for Nextflow/Tiberius results.')
-    nf_params_grp.add_argument('--threads', type=int, help='Thread count for pipeline processes.')
-    nf_params_grp.add_argument('--proteins', nargs='*', default=[],
-        help='Protein FASTA input(s).')
-    nf_params_grp.add_argument('--odb12Partitions', nargs='*', default=[],
-        help='ODB12 partition name(s) to download and append to proteins.')
-    nf_params_grp.add_argument('--rnaseq_single', nargs='*', default=[],
-        help='RNA-Seq single-end FASTQ input(s).')
-    nf_params_grp.add_argument('--rnaseq_paired', nargs='*', default=[],
-        help=('Paired-end RNA-Seq FASTQ input(s). From the CLI pass either a '
-              'single quoted glob covering all libraries '
-              '(e.g. --rnaseq_paired "RNA/*_{1,2}.fastq.gz") or exactly two '
-              'FASTQ paths for a single library '
-              '(--rnaseq_paired r1.fq r2.fq). A comma-separated list of pairs '
-              'is NOT accepted on the CLI. To pass multiple explicit pairs, '
-              'use a params.yaml with a list of [r1, r2] pairs; see '
-              'conf/README.md ("rnaseq_paired") for the exact YAML forms.'))
-    nf_params_grp.add_argument('--rnaseq_sra_single', nargs='*', default=[],
-        help='RNA-Seq single-end SRA accession(s).')
-    nf_params_grp.add_argument('--rnaseq_sra_paired', nargs='*', default=[],
-        help='RNA-Seq paired-end SRA accession(s).')
-    nf_params_grp.add_argument('--isoseq', nargs='*', default=[],
-        help='Iso-Seq FASTQ input(s).')
-    nf_params_grp.add_argument('--isoseq_sra', nargs='*', default=[],
-        help='Iso-Seq SRA accession(s).')
-    nf_params_grp.add_argument('--mode', help='Pipeline mode (see Nextflow docs).')
-    nf_params_grp.add_argument('--scoring_matrix', help='Path to scoring matrix CSV.')
-    nf_params_grp.add_argument('--prothint_conflict_filter', action='store_true',
-        help='Enable prothint_conflict_filter in pipeline params.')
-    nf_params_grp.add_argument('--tiberius_result', help='Path for pipeline tiberius.result param.')
     return parser.parse_args()

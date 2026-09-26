@@ -7,10 +7,8 @@ import subprocess
 import shutil
 import urllib.error
 import urllib.request
-from copy import deepcopy
 from pathlib import Path
 from tiberius.tiberius_args import parseCmd
-from tiberius.evidence_pipeline_wrapper import run_nextflow_pipeline
 import importlib.metadata
 
 
@@ -30,26 +28,33 @@ DOCKER_HUB_TAGS_URL = (
     f"https://hub.docker.com/v2/repositories/{SINGULARITY_IMAGE_REPO}/tags"
     "?page_size=100"
 )
-DEFAULT_PARAMS = {
-    "threads": 48,
-    "outdir": "tiberius_results",
-    "genome": None,
-    "proteins": None,
-    "rnaseq_sra_single": [],
-    "rnaseq_sra_paired": [],
-    "isoseq_sra": [],
-    "rnaseq_single": [],
-    "rnaseq_paired": [],
-    "isoseq": [],
-    "tiberius": {
-        "run": True,
-        "result": None,
-        "model_cfg": None,
-    },
-    "mode": None,
-    "scoring_matrix": str((SCRIPT_ROOT / "conf" / "blosum62.csv").resolve()),
-    "prothint_conflict_filter": False,
-}
+# The Nextflow evidence pipeline moved to Paludamentum
+# (https://github.com/Gaius-Augustus/Paludamentum), which runs Tiberius as one
+# of its gene finders. These options of tiberius.py were removed with it.
+REMOVED_PIPELINE_FLAGS = (
+    "-c", "--nf_config", "--profile", "--nextflow_bin", "--resume", "--work_dir",
+    "--check_tools", "--skip_singularity_check", "--dry_run",
+    "--outdir", "--threads", "--proteins", "--odb12Partitions",
+    "--rnaseq_single", "--rnaseq_paired", "--rnaseq_sra_single", "--rnaseq_sra_paired",
+    "--isoseq", "--isoseq_sra", "--mode", "--scoring_matrix",
+    "--prothint_conflict_filter", "--tiberius_result",
+)
+PALUDAMENTUM_URL = "https://github.com/Gaius-Augustus/Paludamentum"
+
+
+def reject_removed_pipeline_flags(argv) -> None:
+    """Exit with a pointer to Paludamentum if an option of the removed pipeline is used."""
+    used = sorted({arg.split("=", 1)[0] for arg in argv if arg.split("=", 1)[0] in REMOVED_PIPELINE_FLAGS})
+    if not used:
+        return
+    console.print(
+        f"[bold red]{', '.join(used)}: the Nextflow evidence pipeline is no longer part of Tiberius.[/bold red]"
+    )
+    console.print(f"It moved to Paludamentum ({PALUDAMENTUM_URL}), which runs Tiberius as one of its gene finders:")
+    console.print(f"    git clone --recursive {PALUDAMENTUM_URL}")
+    console.print("    paludamentum --nf_config slurm_generic --genome genome.fa --model_cfg diatoms")
+    console.print("    paludamentum --params_yaml params.yaml --nf_config slurm_generic")
+    sys.exit(2)
 
 
 def has_nvidia_container_cli() -> bool:
@@ -101,10 +106,10 @@ def load_params_yaml(params_path: str) -> tuple[Path, dict]:
 
 def hydrate_args_from_params(args):
     """
-    If --params_yaml is provided (and not using --run_nextflow), populate
-    missing Tiberius args (genome, model_cfg) from that file.
+    If --params_yaml is provided, populate missing Tiberius args (genome,
+    model_cfg) from that file, e.g. from the params file of a Paludamentum run.
     """
-    if not args.params_yaml or args.nf_config:
+    if not args.params_yaml:
         return args
 
     params_path, params = load_params_yaml(args.params_yaml)
@@ -122,101 +127,8 @@ def hydrate_args_from_params(args):
             cfg_path = Path(tiberius_cfg["model_cfg"])
             if not cfg_path.is_absolute():
                 cfg_path = (base_dir / cfg_path).resolve()
-        args.model_cfg = str(cfg_path)
+            args.model_cfg = str(cfg_path)
 
-    return args
-
-def merge_dicts(base: dict, overlay: dict) -> dict:
-    """Recursively merge overlay into base (in-place) when overlay values are not None."""
-    for key, value in overlay.items():
-        if value is None:
-            continue
-        if isinstance(value, dict) and isinstance(base.get(key), dict):
-            merge_dicts(base[key], value)
-        else:
-            base[key] = value
-    return base
-
-def collect_cli_params(args) -> dict:
-    """Extract pipeline-relevant CLI args into a params override dict."""
-    overrides = {}
-    def maybe_set(key, val):
-        if val not in [None, [], ""]:
-            overrides[key] = val
-
-    maybe_set("threads", args.threads)
-    maybe_set("outdir", args.outdir)
-    maybe_set("genome", args.genome)
-    maybe_set("proteins", args.proteins if args.proteins else None)
-    maybe_set("rnaseq_single", args.rnaseq_single if args.rnaseq_single else None)
-    # A 1-element CLI list is a glob string; the pipeline's paired-end channel
-    # expects a CharSequence in glob mode, not a list.
-    rnaseq_paired_val = args.rnaseq_paired or None
-    if isinstance(rnaseq_paired_val, list) and len(rnaseq_paired_val) == 1:
-        rnaseq_paired_val = rnaseq_paired_val[0]
-    maybe_set("rnaseq_paired", rnaseq_paired_val)
-    maybe_set("rnaseq_sra_single", args.rnaseq_sra_single if args.rnaseq_sra_single else None)
-    maybe_set("rnaseq_sra_paired", args.rnaseq_sra_paired if args.rnaseq_sra_paired else None)
-    maybe_set("isoseq", args.isoseq if args.isoseq else None)
-    maybe_set("isoseq_sra", args.isoseq_sra if args.isoseq_sra else None)
-    maybe_set("mode", args.mode)
-    maybe_set("scoring_matrix", args.scoring_matrix)
-    maybe_set("prothint_conflict_filter", args.prothint_conflict_filter if args.prothint_conflict_filter else None)
-
-    tib = {}
-    if args.model_cfg:
-        tib["model_cfg"] = args.model_cfg
-    if args.tiberius_result:
-        tib["result"] = args.tiberius_result
-    if args.batch_size:
-        tib["batch_size"] = args.batch_size
-    if args.seq_len:
-        tib["seq_len"] = args.seq_len
-    if tib:
-        tib["run"] = True
-        overrides["tiberius"] = tib
-    return overrides
-
-def ensure_params_yaml(args):
-    """
-    Ensure args.params_yaml points to a file. If not supplied, build one from
-    defaults + optional params file + CLI overrides, then write to outdir/params.yaml.
-    """
-    # Start with defaults
-    params = deepcopy(DEFAULT_PARAMS)
-    base_dir = Path.cwd()
-
-    if args.params_yaml:
-        params_path, loaded = load_params_yaml(args.params_yaml)
-        base_dir = params_path.parent
-        merge_dicts(params, loaded)
-
-    cli_overrides = collect_cli_params(args)
-    merge_dicts(params, cli_overrides)
-
-    if not params.get("genome"):
-        console.print("[bold red]A genome file must be specified (via --genome or params).[/bold red]")
-        sys.exit(1)
-    tiberius_cfg = params.get("tiberius") or {}
-    if tiberius_cfg.get("run"):
-        if not tiberius_cfg.get("model_cfg"):
-            console.print("[bold red]A model config file must be specified (params.tiberius.model_cfg or --model_cfg).[/bold red]")
-            sys.exit(1)
-        # Resolve bare names (e.g. 'angiosperms') so the Nextflow process can stage the file.
-        tiberius_cfg["model_cfg"] = str(resolve_model_cfg(tiberius_cfg["model_cfg"]))
-        params["tiberius"] = tiberius_cfg
-
-    outdir = params.get("outdir") or DEFAULT_PARAMS["outdir"]
-    outdir_path = Path(outdir)
-    if not outdir_path.is_absolute():
-        outdir_path = (Path.cwd() / outdir_path).resolve()
-    outdir_path.mkdir(parents=True, exist_ok=True)
-
-    params_path = outdir_path / "params.yaml"
-    with params_path.open("w", encoding="utf-8") as fh:
-        yaml.safe_dump(params, fh, sort_keys=False)
-
-    args.params_yaml = str(params_path)
     return args
 
 def resolve_model_cfg(cfg_value: str) -> Path:
@@ -386,7 +298,7 @@ def run_tiberius_in_singularity(args):
 def validate_mode(args) -> str:
     """
     Determine which mode to run and enforce required argument combinations.
-    Returns one of: show_cfg, list_cfg, nextflow, tiberius.
+    Returns one of: show_cfg, list_cfg, tiberius.
     Exits with a helpful message if required args are missing.
     """
     if args.show_cfg:
@@ -397,9 +309,6 @@ def validate_mode(args) -> str:
 
     if args.list_cfg:
         return "list_cfg"
-
-    if args.nf_config or args.params_yaml:
-        return "nextflow"
 
     missing = []
     if not args.genome:
@@ -465,6 +374,7 @@ def list_available_configs(cfg_dir: Path) -> None:
     console.print(table)
 
 def main():
+    reject_removed_pipeline_flags(sys.argv[1:])
     args = parseCmd()
     args = hydrate_args_from_params(args)
     if args.model_cfg:
@@ -477,11 +387,6 @@ def main():
         project_root = Path(__file__).resolve().parent
         cfg_dir = project_root / "model_cfg"
         list_available_configs(cfg_dir)
-    elif mode == "nextflow":
-        if not args.nf_config:
-            args.nf_config = str((SCRIPT_ROOT / "conf" / "base.config").resolve())
-        args = ensure_params_yaml(args)
-        run_nextflow_pipeline(args)
     else:
         if args.singularity:
             run_tiberius_in_singularity(args)

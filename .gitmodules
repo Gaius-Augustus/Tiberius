@@ -1,4 +1,0 @@
-[submodule "learnMSA"]
-	path = learnMSA
-	url = https://github.com/Gaius-Augustus/learnMSA
-	branch = parallel

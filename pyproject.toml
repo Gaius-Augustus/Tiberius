@@ -37,6 +37,12 @@ from_source = [
   "packaging>=23.0",
   "pandas"
   ]
+[tool.hatch.build.targets.wheel]
+packages = ["tiberius"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["test_data"]
+
 [project.urls]
 Homepage = "https://github.com/Gaius-Augustus/Tiberius"
 Issues = "https://github.com/Gaius-Augustus/Tiberius/issues"

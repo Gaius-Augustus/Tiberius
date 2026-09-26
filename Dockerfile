@@ -69,12 +69,11 @@ ENV PATH=${PATH}:/opt/Augustus/bin/
 # CUDA 12.8 stack and crash Tiberius on Blackwell GPUs. So the TF-dependent
 # packages are installed without dependencies and the rest explicitly.
 RUN cd        /opt      && \
-    git      clone        https://github.com/Gaius-Augustus/Tiberius && \
+    git      clone https://github.com/Gaius-Augustus/Tiberius && \
     cd Tiberius && \
     python3 -m pip install --no-deps bricks2marble hidten && \
     python3 -m pip install . numpy pydantic biopython requests "packaging>=23.0" pandas && \
     chmod +x tiberius.py && \
-    chmod +x tiberius/scripts/* && \
     chmod +x tiberius/*py
 
 RUN mkdir -p /opt/Tiberius/model_weights && chmod -R 777 /opt/Tiberius/model_weights
@@ -95,7 +94,8 @@ RUN mkdir -p /opt/Tiberius/model_weights && chmod -R 777 /opt/Tiberius/model_wei
 
 ENV PATH=${PATH}:/opt/Tiberius/tiberius/
 ENV PATH=${PATH}:/opt/Tiberius/
-ENV PATH=${PATH}:/opt/Tiberius/tiberius/scripts
+# This image also holds the evidence tools (miniprot, HISAT2, StringTie, ...)
+# that the Paludamentum pipeline runs; Paludamentum mounts its own scripts.
 
 RUN apt update && \
     apt install -yq bamtools && \

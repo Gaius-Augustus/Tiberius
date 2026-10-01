@@ -64,7 +64,7 @@ comment: |
           Zootoca vivipara         | 0:49     | 64:03   | 6:06    | 0:52   |
           Average                  | 0:58     | 50:35   | 2:58    | 0:30   |
 training_species:
-  # 31 mammalian species, like in the original Tiberius paper
+  # 34 mammalian species
   - Aotus_nancymaae
   - Camelus_bactrianus
   - Canis_lupus_familiaris
@@ -92,11 +92,14 @@ training_species:
   - Octodon_degus
   - Odobenus_rosmarus
   - Otolemur_garnettii
+  - Panthera_pardus
   - Propithecus_coquereli
+  - Puma_concolor
+  - Rattus_norvegicus
   - Saimiri_boliviensis
   - Sorex_araneus
   - Trichechus_manatus
-  # 35 vertebrate, non-mammalian species
+  # 34 vertebrate, non-mammalian species
   - Acipenser_ruthenus           # GCF_902713425.1
   - Alligator_mississippiensis   # GCF_030867095.1
   - Alosa_sapidissima            # GCF_018492685.1

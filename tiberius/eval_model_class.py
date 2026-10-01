@@ -12,6 +12,12 @@ from tensorflow.keras.models import Model
 from tiberius.models import (custom_cce_f1_loss, lstm_model, Cast)
 from hidten import HMMMode
 from tiberius.hmm import HMMBlock
+from tiberius.spliced_stop import (
+    find_cross_window_spliced_stop_boundaries,
+    find_spliced_stop_windows,
+    remap_labels_24_to_15,
+)
+from bricks2marble.tools.annotate import _merge_replace_center
 import bricks2marble as b2m
 import math
 
@@ -97,6 +103,11 @@ class PredictionGTF:
         self.parallel_factor = parallel_factor
         self.lstm_model = None
         self.inp_size = 15
+        self.gene_pred_hmm_layer_nss = None
+        # Re-predict windows whose standard-HMM output contains a spliced
+        # stop, using the restrictive (no_spliced_stop=True) HMM instead of
+        # discarding them in the post-filter. Translation table 1 only.
+        self.spliced_stop_reprediction = True
 
 
     def load_model(self, summary=True):
@@ -200,6 +211,8 @@ class PredictionGTF:
             print(f"Running gene pred hmm layer with parallel factor {self.gene_pred_hmm_layer.parallel_factor}", file=sys.stderr)
             self.gene_pred_hmm_layer.cell.recurrent_init()
         self.inp_size = self.lstm_model.output_shape[-1]
+        if self.hmm and self.spliced_stop_reprediction:
+            self.build_nss_hmm(inp_size=self.inp_size)
         if summary:
             self.lstm_model.summary()
 
@@ -214,6 +227,8 @@ class PredictionGTF:
         if self.adapted_batch_size != old_adapted_batch_size:
             self.parallel_factor = compute_parallel_factor(adapted_chunksize)
             self.make_default_hmm(self.inp_size)
+            if self.spliced_stop_reprediction and self.gene_pred_hmm_layer_nss is not None:
+                self.build_nss_hmm(self.inp_size)
 
 
     def load_clamsa_data(self, clamsa_prefix, seq_names, strand='', chunk_len=None, pad=False):
@@ -241,6 +256,8 @@ class PredictionGTF:
             fasta: b2m.struct.Fasta
         ) -> tuple[np.ndarray, np.ndarray]:
 
+        nuc = fasta.nuc
+
         # fwd prediction
         x_one_hot_fwd = fasta.one_hot(
                 pad_index = 4,
@@ -253,6 +270,14 @@ class PredictionGTF:
         hmm_out_fwd = self.hmm_prediction(
             x_one_hot_fwd, lstm_out_fwd,
         )
+        if self.spliced_stop_reprediction and self.gene_pred_hmm_layer_nss is not None:
+            self._patch_spliced_stops(
+                hmm_out_fwd, nuc, x_one_hot_fwd, lstm_out_fwd, strand="+",
+            )
+            self._patch_cross_window_spliced_stops(
+                hmm_out_fwd, nuc, x_one_hot_fwd, lstm_out_fwd, strand="+",
+            )
+        del lstm_out_fwd, x_one_hot_fwd
 
         # bwd prediction
         fasta_bwd = fasta.complement()
@@ -270,12 +295,24 @@ class PredictionGTF:
         )
 
         hmm_out_bwd = hmm_out_bwd[:,::-1]
+        if self.spliced_stop_reprediction and self.gene_pred_hmm_layer_nss is not None:
+            self._patch_spliced_stops(
+                hmm_out_bwd, nuc, x_one_hot_bwd, lstm_out_bwd, strand="-",
+                hmm_frame_reversed=True,
+            )
+            self._patch_cross_window_spliced_stops(
+                hmm_out_bwd, nuc, x_one_hot_bwd, lstm_out_bwd, strand="-",
+                hmm_frame_reversed=True,
+            )
+        del lstm_out_bwd, x_one_hot_bwd
         return hmm_out_fwd, hmm_out_bwd
 
     def repredict_function(
             self,
             fasta: b2m.struct.Fasta
         ) -> tuple[np.ndarray, np.ndarray]:
+        nuc = fasta.nuc
+
         # fwd prediction
         indices_fwd = np.where(np.isin(fasta.evidence[:,0], [0, 2]))[0]
         hmm_out_fwd_expand = np.empty((fasta.N, fasta.T), dtype=np.int32)
@@ -292,6 +329,12 @@ class PredictionGTF:
             hmm_out_fwd = self.hmm_prediction(
                 x_one_hot_fwd, lstm_out_fwd,
             )
+            if self.spliced_stop_reprediction and self.gene_pred_hmm_layer_nss is not None:
+                self._patch_spliced_stops(
+                    hmm_out_fwd, nuc[indices_fwd],
+                    x_one_hot_fwd, lstm_out_fwd, strand="+",
+                )
+            del lstm_out_fwd, x_one_hot_fwd
             hmm_out_fwd_expand[indices_fwd] = hmm_out_fwd
 
 
@@ -314,6 +357,13 @@ class PredictionGTF:
             )
 
             hmm_out_bwd = hmm_out_bwd[:,::-1]
+            if self.spliced_stop_reprediction and self.gene_pred_hmm_layer_nss is not None:
+                self._patch_spliced_stops(
+                    hmm_out_bwd, nuc[indices_bwd],
+                    x_one_hot_bwd, lstm_out_bwd, strand="-",
+                    hmm_frame_reversed=True,
+                )
+            del lstm_out_bwd, x_one_hot_bwd
             hmm_out_bwd_expand[indices_bwd] = hmm_out_bwd
         return hmm_out_fwd_expand, hmm_out_bwd_expand
 
@@ -484,3 +534,145 @@ class PredictionGTF:
             initial_ir_len=self.hmm_initial_ir_len,
         )
         self.gene_pred_hmm_layer.build((self.adapted_batch_size, self.seq_len, inp_size))
+
+    def build_nss_hmm(self, inp_size=15):
+        """Build the restrictive HMM (no_spliced_stop=True) that is used to
+        re-predict windows whose standard-HMM output contains a spliced stop.
+        Only supported for translation table 1 (the Tiberius default).
+        """
+        self.gene_pred_hmm_layer_nss = HMMBlock(
+            parallel=self.parallel_factor,
+            mode=HMMMode.VITERBI,
+            training=False,
+            emitter_epsilon=self.hmm_emitter_epsilon,
+            initial_exon_len=self.hmm_initial_exon_len,
+            initial_intron_len=self.hmm_initial_intron_len,
+            initial_ir_len=self.hmm_initial_ir_len,
+            no_spliced_stop=True,
+        )
+        self.gene_pred_hmm_layer_nss.build(
+            (self.adapted_batch_size, self.seq_len, inp_size)
+        )
+
+    @tf.function
+    def predict_vit_nss(self, x, y_lstm):
+        if self.lstm_model and self.hmm:
+            nuc = Cast()(x)
+            if y_lstm.ndim == 2:
+                y_lstm = y_lstm[np.newaxis, :, :]
+            return self.gene_pred_hmm_layer_nss(y_lstm, nuc)
+        nuc = tf.cast(x[:, :, :5], tf.float32)
+        return self.gene_pred_hmm_layer_nss(y_lstm, nuc)
+
+    def hmm_prediction_nss(self, nuc_seq, lstm_predictions, batch_size=None):
+        """Viterbi decoding with the restrictive HMM. Returns 24-state labels
+        of shape (N, T).
+        """
+        if not batch_size:
+            batch_size = self.adapted_batch_size
+        num_batches = nuc_seq.shape[0] // batch_size
+        if nuc_seq.shape[0] % batch_size > 0:
+            num_batches += 1
+        out = []
+        for i in range(num_batches):
+            s, e = i * batch_size, (i + 1) * batch_size
+            y = self.predict_vit_nss(
+                nuc_seq[s:e], lstm_predictions[s:e],
+            ).numpy().squeeze()
+            if y.ndim == 1:
+                y = np.expand_dims(y, 0)
+            out.append(y)
+        return np.concatenate(out, axis=0)
+
+    def _patch_spliced_stops(
+        self, labels, nuc, x_one_hot, lstm_out, strand,
+        hmm_frame_reversed=False,
+    ):
+        """Detect windows with spliced stops in `labels` (forward-coord
+        frame, 15-state) and re-predict them in-place with the restrictive
+        HMM, reusing the LSTM emissions already in memory.
+
+        For the bwd strand the LSTM/HMM operate on complemented+reversed
+        inputs, so the restrictive-HMM output is reversed back to forward
+        coordinates before being written into `labels`. Set
+        `hmm_frame_reversed=True` in that case.
+
+        Returns the number of patched windows.
+        """
+        if labels is None or labels.size == 0:
+            return 0
+        bad = find_spliced_stop_windows(labels, nuc, strand=strand)
+        if bad.size == 0:
+            return 0
+        patched_24 = self.hmm_prediction_nss(
+            x_one_hot[bad], lstm_out[bad],
+        )
+        if hmm_frame_reversed:
+            patched_24 = patched_24[:, ::-1]
+        labels[bad] = remap_labels_24_to_15(patched_24)
+        return int(bad.size)
+
+    def _patch_cross_window_spliced_stops(
+        self, labels, nuc, x_one_hot, lstm_out, strand,
+        hmm_frame_reversed=False,
+    ):
+        """Catch spliced stops in transcripts that cross a window boundary.
+        For each boundary where such a transcript exists, re-decode a
+        center-shifted chunk (length T, bisecting the boundary) with the
+        restrictive HMM, reusing the LSTM emissions already in memory, and
+        stitch the result back via `_merge_replace_center`.
+
+        For the bwd strand the HMM-input arrays are complemented+reversed,
+        so the two halves of the center chunk must be drawn from the
+        matching bwd-frame positions and the chunk's HMM output must be
+        reversed before being merged into the forward-coord `labels`.
+        """
+        N, T = labels.shape
+        if N < 2:
+            return 0
+        boundaries = find_cross_window_spliced_stop_boundaries(
+            labels, nuc, strand=strand,
+        )
+        if boundaries.size == 0:
+            return 0
+        repred_t = T // 2
+        if not hmm_frame_reversed:
+            oh_chunks = np.stack([
+                np.concatenate(
+                    [x_one_hot[b, -repred_t:], x_one_hot[b+1, :repred_t]],
+                    axis=0,
+                ) for b in boundaries
+            ])
+            lstm_chunks = np.stack([
+                np.concatenate(
+                    [lstm_out[b, -repred_t:], lstm_out[b+1, :repred_t]],
+                    axis=0,
+                ) for b in boundaries
+            ])
+        else:
+            # In the bwd-frame arrays, forward window `b`'s start sits at
+            # bwd-frame positions `[0:repred_t]` of window `b`, and forward
+            # window `b+1`'s end sits at bwd-frame positions `[-repred_t:]`
+            # of window `b+1`. Concatenating them produces a bwd-frame
+            # center chunk covering the same genomic span as the fwd case.
+            oh_chunks = np.stack([
+                np.concatenate(
+                    [x_one_hot[b+1, -repred_t:], x_one_hot[b, :repred_t]],
+                    axis=0,
+                ) for b in boundaries
+            ])
+            lstm_chunks = np.stack([
+                np.concatenate(
+                    [lstm_out[b+1, -repred_t:], lstm_out[b, :repred_t]],
+                    axis=0,
+                ) for b in boundaries
+            ])
+        center_24 = self.hmm_prediction_nss(oh_chunks, lstm_chunks)
+        if hmm_frame_reversed:
+            center_24 = center_24[:, ::-1]
+        center_15 = remap_labels_24_to_15(center_24)
+        for k, b in enumerate(boundaries):
+            labels[b], labels[b+1], _ = _merge_replace_center(
+                labels[b], labels[b+1], center_15[k],
+            )
+        return int(boundaries.size)

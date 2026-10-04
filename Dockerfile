@@ -111,10 +111,6 @@ RUN python3 -m pip install --upgrade \
 
 
 RUN  cd /opt && \
-     git clone https://github.com/TransDecoder/TransDecoder
-ENV PATH=${PATH}:/opt/TransDecoder/util
-
-RUN  cd /opt && \
      git clone https://github.com/tomasbruna/miniprothint
 ENV PATH=${PATH}:/opt/miniprothint
 
@@ -162,7 +158,8 @@ RUN cd /opt && \
     cpanm --notest DB_File && \
     cpanm --notest URI
 
-# Download + unpack TransDecoder
+# Download + unpack TransDecoder, pinned to v5.7.1 (the only TransDecoder in
+# this image; the pipeline calls TransDecoder.LongOrfs/.Predict and util/*.pl)
 RUN cd /opt && \
     wget -q https://github.com/TransDecoder/TransDecoder/archive/refs/tags/TransDecoder-v5.7.1.tar.gz && \
     tar -xzf TransDecoder-v5.7.1.tar.gz && \

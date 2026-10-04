@@ -14,7 +14,7 @@ The image used by `--singularity` is identified by a single source-of-truth
 constant in [`tiberius.py`](../tiberius.py):
 
 ```python
-SINGULARITY_IMAGE_REPO    = "larsgabriel23/tiberius"
+SINGULARITY_IMAGE_REPO    = "gaiusaugustus/tiberius"
 SINGULARITY_IMAGE_VERSION = importlib.metadata.version("tiberius")  # pinned current version
 SINGULARITY_IMAGE_URI     = f"docker://{SINGULARITY_IMAGE_REPO}:{SINGULARITY_IMAGE_VERSION}"
 SINGULARITY_IMAGE_PATH    = SCRIPT_ROOT / "singularity" / f"tiberius_{SINGULARITY_IMAGE_VERSION}.sif"
@@ -60,7 +60,7 @@ When a user runs `python tiberius.py --singularity ...`, the launcher (in
 `_fetch_latest_image_tag()` issues a single GET to the Docker Hub API:
 
 ```
-https://hub.docker.com/v2/repositories/larsgabriel23/tiberius/tags?page_size=100
+https://hub.docker.com/v2/repositories/gaiusaugustus/tiberius/tags?page_size=100
 ```
 
 It filters tags through `_parse_semver()` (accepts `1.2.3` or `v1.2.3`,
@@ -112,8 +112,8 @@ every `--singularity` invocation, independent of the cache state.
 
 1. Build and tag the image with a semver tag (no leading `v`):
    ```shell
-   docker build -t larsgabriel23/tiberius:2.1.0 .
-   docker push larsgabriel23/tiberius:2.1.0
+   docker build -t gaiusaugustus/tiberius:2.1.0 .
+   docker push gaiusaugustus/tiberius:2.1.0
    ```
    Optionally also retag and push `:latest` for Docker users — the
    launcher does not consume `:latest`, but the README's Docker example
@@ -139,7 +139,7 @@ Quick check that the registry query works with the current network:
 python -c "
 import json, urllib.request
 with urllib.request.urlopen(
-    'https://hub.docker.com/v2/repositories/larsgabriel23/tiberius/tags?page_size=100',
+    'https://hub.docker.com/v2/repositories/gaiusaugustus/tiberius/tags?page_size=100',
     timeout=5,
 ) as r:
     print([t['name'] for t in json.load(r).get('results', [])])

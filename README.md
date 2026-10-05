@@ -1,4 +1,4 @@
-![Docker Pulls](https://img.shields.io/docker/pulls/larsgabriel23/tiberius)
+![Docker Pulls](https://img.shields.io/docker/pulls/gaiusaugustus/tiberius)
 
 ⚠️ **New Web server available:** [https://bioinf.uni-greifswald.de/tiberius](https://bioinf.uni-greifswald.de/tiberius)
 
@@ -110,14 +110,14 @@ The image tag used by `--singularity` is pinned in the launcher and cached as `s
 
 ### Option B: Using Docker
 
-If you have root access (or are in the `docker` group), you can use the Docker image directly. The image includes TensorFlow with GPU support and all external tools of the [Paludamentum](https://github.com/Gaius-Augustus/Paludamentum) evidence pipeline, which runs its tools in this image.
+If you have root access (or are in the `docker` group), you can use the Docker image directly. The image includes TensorFlow with GPU support and Tiberius. The tools of the [Paludamentum](https://github.com/Gaius-Augustus/Paludamentum) evidence pipeline are in Paludamentum's own image.
 
 ```shell
 # Pull the image
-docker pull larsgabriel23/tiberius:latest
+docker pull gaiusaugustus/tiberius:latest
 
 # Run Tiberius (with GPU access)
-docker run --gpus all -v $(pwd):/data larsgabriel23/tiberius:latest \
+docker run --gpus all -v $(pwd):/data gaiusaugustus/tiberius:latest \
     python /opt/Tiberius/tiberius.py --genome /data/genome.fasta \
     --model_cfg mammalia_softmasking_v2 --out /data/tiberius.gtf
 ```
@@ -225,7 +225,7 @@ paludamentum --nf_config slurm_generic --genome input.fasta --model_cfg diatoms
 paludamentum --params_yaml params.yaml --nf_config slurm_generic
 ```
 
-The outputs (`tiberius_evidence.gff3`, `tiberius_evidence_proteins.fa`, `tiberius_ab_initio.gff3`), the parameters and the cluster configuration are documented in the Paludamentum repository. The Tiberius Docker image contains the tools of the pipeline, so no further installation is needed.
+The outputs (`tiberius_evidence.gff3`, `tiberius_evidence_proteins.fa`, `tiberius_ab_initio.gff3`), the parameters and the cluster configuration are documented in the Paludamentum repository. Paludamentum runs Tiberius in the Tiberius image and its evidence tools in its own image, so no further installation is needed.
 
 ### Running Tiberius with evolutionary information
 To run Tiberius in *de novo* mode, evolutionary information data has to be generated with ClaMSA. See [docs/clamsa_data.md](docs/clamsa_data.md) for instructions on how to generate the data. Afterwards, you should have a directory with files named `$clamsa/{prefix}{seq_name}.npz` for each sequence of your FASTA file. You can then run Tiberius with the `--clamsa` argument. Note that your genome has to be softmasked for this mode and that you have to use different training weights than in *ab initio* mode. You can download the model weights from [https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights_v2.tar.gz](https://bioinf.uni-greifswald.de/bioinf/tiberius/models/tiberius_denovo_weights_v2.tar.gz). Or you can provide Tiberius with the model configuration file `model_cfg/mammalia_clamsa_v2.yaml`

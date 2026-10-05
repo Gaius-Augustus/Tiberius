@@ -19,7 +19,7 @@ from rich.table import Table
 console = Console()
 
 SCRIPT_ROOT = Path(__file__).resolve().parent
-SINGULARITY_IMAGE_REPO = "larsgabriel23/tiberius"
+SINGULARITY_IMAGE_REPO = "gaiusaugustus/tiberius"
 # Pinned, tested image tag. Bump when a new image is published.
 SINGULARITY_IMAGE_VERSION = importlib.metadata.version("tiberius")
 SINGULARITY_IMAGE_URI = f"docker://{SINGULARITY_IMAGE_REPO}:{SINGULARITY_IMAGE_VERSION}"

@@ -1,0 +1,17 @@
+# Build context of the Dockerfile: the image needs the package (tiberius/,
+# tiberius.py, pyproject.toml, README.md, LICENSE) and model_cfg/.
+.git
+.github
+.claude
+CLAUDE.md*
+.pytest_cache
+**/__pycache__
+singularity
+model_weights
+test_data
+tests
+figures
+docs
+logs
+results
+slurm

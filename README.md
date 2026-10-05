@@ -1,8 +1,10 @@
 ![Docker Pulls](https://img.shields.io/docker/pulls/gaiusaugustus/tiberius)
 
+⚠️ The evidence pipeline has been extended and migrated to [Paludamentum](https://github.com/Gaius-Augustus/Paludamentum)
+
 ⚠️ **New Web server available:** [https://bioinf.uni-greifswald.de/tiberius](https://bioinf.uni-greifswald.de/tiberius)
 
-### ⚠️ Important Update Tiberius 2.0.0 — April 2026
+⚠️ Important Update Tiberius 2.0.0 — April 2026
 - **Tiberius models for many new clades are now available.**
 - **Runtime has been reduced by 30%.**
 
@@ -15,7 +17,7 @@ For more information, see the Tiberius clade training [preprint](https://doi.org
 Tiberius is a deep learning-based *ab initio* gene structure prediction tool that end-to-end integrates convolutional
 and long short-term memory layers with a differentiable HMM layer. It can be used to predict gene structures from **genomic sequences only** (*ab initio*), while matching the accuracy of tools that use extrinsic evidence.
 
-⚠️ Coming soon: [Paludamentum](https://github.com/Gaius-Augustus/Paludamentum) runs Tiberius in a Nextflow pipeline that parallelizes it over several GPUs and generates highly precise gene structures from extrinsic evidence, which are then combined with the Tiberius *ab initio* predictions.
+[Paludamentum](https://github.com/Gaius-Augustus/Paludamentum) runs Tiberius in a Nextflow pipeline that parallelizes it over several GPUs and generates highly precise gene structures from extrinsic evidence, which are then combined with the Tiberius *ab initio* predictions.
 
 > **Core libraries.** Much of Tiberius's core: sequence and annotation data structures, FASTA/GTF I/O, pre- and postprocessing for the models and the differentiable HMM layer is implemented in two separat libraries:
 > - [**bricks2marble**](https://github.com/Gaius-Augustus/bricks2marble) — nucleotide/annotation structures, pre- and postprocessing for DL gene-prediction models.

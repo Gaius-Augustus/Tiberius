@@ -182,7 +182,7 @@ def compute_auto_batch_size(
         raise ValueError(f"safety_factor must be > 0, got {safety_factor}")
 
     if gpu_memory_gb >= 70:
-        ref_mem, ref_bs = 80.0, 18
+        ref_mem, ref_bs = 80.0, 16
     elif gpu_memory_gb >= 16:
         ref_mem, ref_bs = 25.0, 8
     else:

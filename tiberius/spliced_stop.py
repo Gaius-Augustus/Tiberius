@@ -102,8 +102,11 @@ def find_spliced_stop_windows(
     least one transcript with an inframe stop after splicing.
 
     Partial transcripts touching window edges are skipped by
-    _transcripts_from_regions; spliced stops that live in a cross-window
-    transcript are caught by `find_cross_window_spliced_stop_boundaries`.
+    _transcripts_from_regions. Spliced stops in transcripts that cross a
+    window boundary are left to the center-shifted reprediction pass in
+    bricks2marble `_annotate` (which calls `repredict_function` on
+    disagreeing boundaries), plus the terminal
+    `check_inframe_stop_codons(remove=True)` safety net in main.py.
 
     Args:
         labels: (N_windows, T) int, 15-state HMM output.
@@ -118,44 +121,3 @@ def find_spliced_stop_windows(
         if _window_has_spliced_stop(labels[i], nuc[i], strand)
     ]
     return np.array(bad, dtype=np.int64)
-
-
-def find_cross_window_spliced_stop_boundaries(
-    labels: np.ndarray,
-    nuc: np.ndarray,
-    strand: str,
-) -> np.ndarray:
-    """Scan a group's full labels for transcripts that span one or more
-    window boundaries and contain an inframe stop after splicing. Return
-    the sorted unique boundary indices to re-predict with the restrictive
-    HMM — boundary `b` means between `labels[b]` and `labels[b+1]`.
-
-    Complements `find_spliced_stop_windows`: that one only sees transcripts
-    bounded by IR on both sides within a single window; this one sees
-    transcripts that cross window edges and are therefore invisible to the
-    per-window scan.
-    """
-    N, T = labels.shape
-    if N < 2:
-        return np.array([], dtype=np.int64)
-    flat_labels = labels.reshape(-1)
-    flat_nuc = nuc.reshape(-1)
-    regions = _split_regions(flat_labels, strand=strand)
-    bad: set[int] = set()
-    for tx_regions in _transcripts_from_regions(regions):
-        cds_regions = [r for r in tx_regions if r.name == "CDS"]
-        if not cds_regions:
-            continue
-        start_win = cds_regions[0].start // T
-        end_win = (cds_regions[-1].end - 1) // T
-        if start_win == end_win:
-            continue
-        cds_nuc = np.concatenate([flat_nuc[r.start:r.end] for r in cds_regions])
-        if strand == "-":
-            cds_nuc = complement(cds_nuc.copy(), reverse=True)
-        if cds_nuc.size < 6:
-            continue
-        codons = nucleotides_to_kmers(cds_nuc.copy())[:-1]
-        if np.any(np.isin(codons, STOP_CODON_CODES)):
-            bad.update(range(start_win, end_win))
-    return np.array(sorted(bad), dtype=np.int64)

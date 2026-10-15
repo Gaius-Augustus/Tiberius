@@ -13,11 +13,9 @@ from tiberius.models import (custom_cce_f1_loss, lstm_model, Cast)
 from hidten import HMMMode
 from tiberius.hmm import HMMBlock
 from tiberius.spliced_stop import (
-    find_cross_window_spliced_stop_boundaries,
     find_spliced_stop_windows,
     remap_labels_24_to_15,
 )
-from bricks2marble.tools.annotate import _merge_replace_center
 import bricks2marble as b2m
 import math
 
@@ -274,9 +272,6 @@ class PredictionGTF:
             self._patch_spliced_stops(
                 hmm_out_fwd, nuc, x_one_hot_fwd, lstm_out_fwd, strand="+",
             )
-            self._patch_cross_window_spliced_stops(
-                hmm_out_fwd, nuc, x_one_hot_fwd, lstm_out_fwd, strand="+",
-            )
         del lstm_out_fwd, x_one_hot_fwd
 
         # bwd prediction
@@ -297,10 +292,6 @@ class PredictionGTF:
         hmm_out_bwd = hmm_out_bwd[:,::-1]
         if self.spliced_stop_reprediction and self.gene_pred_hmm_layer_nss is not None:
             self._patch_spliced_stops(
-                hmm_out_bwd, nuc, x_one_hot_bwd, lstm_out_bwd, strand="-",
-                hmm_frame_reversed=True,
-            )
-            self._patch_cross_window_spliced_stops(
                 hmm_out_bwd, nuc, x_one_hot_bwd, lstm_out_bwd, strand="-",
                 hmm_frame_reversed=True,
             )
@@ -611,68 +602,3 @@ class PredictionGTF:
             patched_24 = patched_24[:, ::-1]
         labels[bad] = remap_labels_24_to_15(patched_24)
         return int(bad.size)
-
-    def _patch_cross_window_spliced_stops(
-        self, labels, nuc, x_one_hot, lstm_out, strand,
-        hmm_frame_reversed=False,
-    ):
-        """Catch spliced stops in transcripts that cross a window boundary.
-        For each boundary where such a transcript exists, re-decode a
-        center-shifted chunk (length T, bisecting the boundary) with the
-        restrictive HMM, reusing the LSTM emissions already in memory, and
-        stitch the result back via `_merge_replace_center`.
-
-        For the bwd strand the HMM-input arrays are complemented+reversed,
-        so the two halves of the center chunk must be drawn from the
-        matching bwd-frame positions and the chunk's HMM output must be
-        reversed before being merged into the forward-coord `labels`.
-        """
-        N, T = labels.shape
-        if N < 2:
-            return 0
-        boundaries = find_cross_window_spliced_stop_boundaries(
-            labels, nuc, strand=strand,
-        )
-        if boundaries.size == 0:
-            return 0
-        repred_t = T // 2
-        if not hmm_frame_reversed:
-            oh_chunks = np.stack([
-                np.concatenate(
-                    [x_one_hot[b, -repred_t:], x_one_hot[b+1, :repred_t]],
-                    axis=0,
-                ) for b in boundaries
-            ])
-            lstm_chunks = np.stack([
-                np.concatenate(
-                    [lstm_out[b, -repred_t:], lstm_out[b+1, :repred_t]],
-                    axis=0,
-                ) for b in boundaries
-            ])
-        else:
-            # In the bwd-frame arrays, forward window `b`'s start sits at
-            # bwd-frame positions `[0:repred_t]` of window `b`, and forward
-            # window `b+1`'s end sits at bwd-frame positions `[-repred_t:]`
-            # of window `b+1`. Concatenating them produces a bwd-frame
-            # center chunk covering the same genomic span as the fwd case.
-            oh_chunks = np.stack([
-                np.concatenate(
-                    [x_one_hot[b+1, -repred_t:], x_one_hot[b, :repred_t]],
-                    axis=0,
-                ) for b in boundaries
-            ])
-            lstm_chunks = np.stack([
-                np.concatenate(
-                    [lstm_out[b+1, -repred_t:], lstm_out[b, :repred_t]],
-                    axis=0,
-                ) for b in boundaries
-            ])
-        center_24 = self.hmm_prediction_nss(oh_chunks, lstm_chunks)
-        if hmm_frame_reversed:
-            center_24 = center_24[:, ::-1]
-        center_15 = remap_labels_24_to_15(center_24)
-        for k, b in enumerate(boundaries):
-            labels[b], labels[b+1], _ = _merge_replace_center(
-                labels[b], labels[b+1], center_15[k],
-            )
-        return int(boundaries.size)

@@ -12,7 +12,6 @@ pytest.importorskip("bricks2marble")
 from tiberius.spliced_stop import (
     STATE_REMAP_24_TO_15,
     STOP_CODON_CODES,
-    find_cross_window_spliced_stop_boundaries,
     find_spliced_stop_windows,
     remap_labels_24_to_15,
 )
@@ -111,55 +110,6 @@ def test_detects_spliced_stop_on_minus_strand():
     )
     bad = find_spliced_stop_windows(labels, nuc_row[None, :], strand="-")
     assert bad.tolist() == [0]
-
-
-def test_cross_window_spliced_stop_detected():
-    # Two windows of T=20. Transcript crosses the boundary (its exon2
-    # touches the window-0 end AND continues as the first 6 bases of
-    # window 1), so per-window _transcripts_from_regions drops it in
-    # both windows. The cross-window scanner, operating on the flattened
-    # labels, catches the transcript.
-    #
-    # Flat regions: IR[0:5] CDS[5:11] intron[11:14] CDS[14:26] IR[26:40]
-    # Spliced CDS = ATG CGC + TAG CGC CGC CAG -> internal TAG at codon 3.
-    T = 20
-    labels = np.array([
-        [0]*5 + [4]*6 + [1]*3 + [4]*6,   # window 0
-        [4]*6 + [0]*14,                  # window 1
-    ], dtype=np.int32)
-    nuc = np.stack([
-        _row("NNNNN" + "ATGCGC" + "GTA" + "TAGCGC"),
-        _row("CGCCAG" + "N" * 14),
-    ])
-    assert labels.shape == (2, T) and nuc.shape == (2, T)
-    # Per-window scan sees nothing.
-    assert find_spliced_stop_windows(labels, nuc, strand="+").size == 0
-    # Cross-window scan catches boundary 0 (between windows 0 and 1).
-    bad = find_cross_window_spliced_stop_boundaries(labels, nuc, strand="+")
-    assert bad.tolist() == [0]
-
-
-def test_cross_window_without_spliced_stop_not_flagged():
-    T = 20
-    labels = np.array([
-        [0]*5 + [4]*6 + [1]*3 + [4]*6,
-        [4]*6 + [0]*14,
-    ], dtype=np.int32)
-    nuc = np.stack([
-        _row("NNNNN" + "ATGCGC" + "GTA" + "CGCCGC"),
-        _row("CGCCAG" + "N" * 14),
-    ])
-    # Spliced = ATG CGC CGC CGC CGC CAG — no internal stops.
-    bad = find_cross_window_spliced_stop_boundaries(labels, nuc, strand="+")
-    assert bad.size == 0
-
-
-def test_cross_window_single_window_group_short_circuits():
-    labels = np.array([[0]*5 + [4]*25], dtype=np.int32)
-    nuc = np.stack([_row("N" * 30)])
-    assert find_cross_window_spliced_stop_boundaries(
-        labels, nuc, strand="+",
-    ).size == 0
 
 
 def test_partial_transcript_at_edge_is_skipped():

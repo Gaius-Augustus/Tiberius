@@ -13,7 +13,7 @@ from tiberius.models import (custom_cce_f1_loss, lstm_model, Cast)
 from hidten import HMMMode
 from tiberius.hmm import HMMBlock
 from tiberius.spliced_stop import (
-    find_spliced_stop_windows,
+    find_spliced_stop_transcripts,
     remap_labels_24_to_15,
 )
 import bricks2marble as b2m
@@ -102,10 +102,17 @@ class PredictionGTF:
         self.lstm_model = None
         self.inp_size = 15
         self.gene_pred_hmm_layer_nss = None
-        # Re-predict windows whose standard-HMM output contains a spliced
-        # stop, using the restrictive (no_spliced_stop=True) HMM instead of
-        # discarding them in the post-filter. Translation table 1 only.
+        self.gene_pred_hmm_layer_nss_patch = None
+        self.nss_patch_parallel = None
+        # Re-predict transcripts whose standard-HMM output contains a
+        # spliced stop, using the restrictive (no_spliced_stop=True) HMM
+        # instead of discarding them in the post-filter. Translation
+        # table 1 only. `nss_patch_T` is the chunk length used for the
+        # per-transcript patch — small enough to be fast, large enough to
+        # fit a typical gene with flanking context. Transcripts longer
+        # than this fall back to the full-seq_len NSS HMM.
         self.spliced_stop_reprediction = True
+        self.nss_patch_T = None
 
 
     def load_model(self, summary=True):
@@ -527,10 +534,25 @@ class PredictionGTF:
         self.gene_pred_hmm_layer.build((self.adapted_batch_size, self.seq_len, inp_size))
 
     def build_nss_hmm(self, inp_size=15):
-        """Build the restrictive HMM (no_spliced_stop=True) that is used to
-        re-predict windows whose standard-HMM output contains a spliced stop.
-        Only supported for translation table 1 (the Tiberius default).
+        """Build the restrictive HMM(s) (no_spliced_stop=True) used to
+        re-predict transcripts whose standard-HMM output contains a spliced
+        stop. A patch-sized HMM at `nss_patch_T` handles most transcripts;
+        a full-seq_len HMM handles the rare transcripts whose span exceeds
+        `nss_patch_T`. Only supported for translation table 1.
         """
+        # Choose patch chunk length. Capped at seq_len. 10000 is a cheap
+        # size that fits a typical gene with flanking context — 10x
+        # faster than running at seq_len for species like chlorophyta
+        # (seq_len=100080).
+        patch_T = min(self.seq_len, 10000)
+        if patch_T == self.seq_len:
+            # Same length as seq_len — reuse the full-seq_len build only.
+            self.nss_patch_T = self.seq_len
+            self.nss_patch_parallel = self.parallel_factor
+        else:
+            self.nss_patch_T = patch_T
+            self.nss_patch_parallel = compute_parallel_factor(patch_T)
+        # Full-seq_len HMM: fallback for transcripts longer than patch_T.
         self.gene_pred_hmm_layer_nss = HMMBlock(
             parallel=self.parallel_factor,
             mode=HMMMode.VITERBI,
@@ -544,6 +566,23 @@ class PredictionGTF:
         self.gene_pred_hmm_layer_nss.build(
             (self.adapted_batch_size, self.seq_len, inp_size)
         )
+        if self.nss_patch_T == self.seq_len:
+            # Same shape as full — alias to avoid double build.
+            self.gene_pred_hmm_layer_nss_patch = self.gene_pred_hmm_layer_nss
+        else:
+            self.gene_pred_hmm_layer_nss_patch = HMMBlock(
+                parallel=self.nss_patch_parallel,
+                mode=HMMMode.VITERBI,
+                training=False,
+                emitter_epsilon=self.hmm_emitter_epsilon,
+                initial_exon_len=self.hmm_initial_exon_len,
+                initial_intron_len=self.hmm_initial_intron_len,
+                initial_ir_len=self.hmm_initial_ir_len,
+                no_spliced_stop=True,
+            )
+            self.gene_pred_hmm_layer_nss_patch.build(
+                (self.adapted_batch_size, self.nss_patch_T, inp_size)
+            )
 
     @tf.function
     def predict_vit_nss(self, x, y_lstm):
@@ -555,50 +594,159 @@ class PredictionGTF:
         nuc = tf.cast(x[:, :, :5], tf.float32)
         return self.gene_pred_hmm_layer_nss(y_lstm, nuc)
 
-    def hmm_prediction_nss(self, nuc_seq, lstm_predictions, batch_size=None):
-        """Viterbi decoding with the restrictive HMM. Returns 24-state labels
-        of shape (N, T).
+    @tf.function
+    def predict_vit_nss_patch(self, x, y_lstm):
+        if self.lstm_model and self.hmm:
+            nuc = Cast()(x)
+            if y_lstm.ndim == 2:
+                y_lstm = y_lstm[np.newaxis, :, :]
+            return self.gene_pred_hmm_layer_nss_patch(y_lstm, nuc)
+        nuc = tf.cast(x[:, :, :5], tf.float32)
+        return self.gene_pred_hmm_layer_nss_patch(y_lstm, nuc)
+
+    def _run_nss_batched(self, nuc_seq, lstm_predictions, predict_fn):
+        """Run `predict_fn` on (N, T, C)/(N, T, 15) inputs, padding each
+        batch to `adapted_batch_size`. Variable batch sizes previously
+        caused CUDA_ERROR_ILLEGAL_ADDRESS inside the TFHMM transpose.
         """
-        if not batch_size:
-            batch_size = self.adapted_batch_size
-        num_batches = nuc_seq.shape[0] // batch_size
-        if nuc_seq.shape[0] % batch_size > 0:
-            num_batches += 1
+        batch_size = self.adapted_batch_size
+        N = nuc_seq.shape[0]
+        num_batches = (N + batch_size - 1) // batch_size
         out = []
         for i in range(num_batches):
-            s, e = i * batch_size, (i + 1) * batch_size
-            y = self.predict_vit_nss(
-                nuc_seq[s:e], lstm_predictions[s:e],
-            ).numpy().squeeze()
+            s, e = i * batch_size, min((i + 1) * batch_size, N)
+            x_batch = nuc_seq[s:e]
+            y_batch = lstm_predictions[s:e]
+            n_real = e - s
+            if n_real < batch_size:
+                pad = batch_size - n_real
+                x_batch = np.concatenate(
+                    [x_batch, np.zeros((pad, *x_batch.shape[1:]), dtype=x_batch.dtype)],
+                    axis=0,
+                )
+                y_batch = np.concatenate(
+                    [y_batch, np.zeros((pad, *y_batch.shape[1:]), dtype=y_batch.dtype)],
+                    axis=0,
+                )
+            y = predict_fn(x_batch, y_batch).numpy().squeeze()
             if y.ndim == 1:
                 y = np.expand_dims(y, 0)
-            out.append(y)
+            out.append(y[:n_real])
         return np.concatenate(out, axis=0)
+
+    def _extract_tx_chunks(
+        self, spans, flat_x, flat_lstm, T, total_len, chunk_T,
+        hmm_frame_reversed,
+    ):
+        """Build per-transcript chunks of length `chunk_T` centered on each
+        span, in HMM-input order. For the bwd strand the chunk is reversed
+        (position 0 = highest forward coordinate) so the HMM sees the gene
+        in transcription order.
+
+        Returns:
+            chunk_x:    (K, chunk_T, C)
+            chunk_lstm: (K, chunk_T, 15)
+            bounds:     list of (chunk_cs, chunk_ce, tx_s, tx_e) in
+                        forward coords. chunk_ce - chunk_cs may be less than
+                        chunk_T at a genome edge; the chunk is zero-padded
+                        at the end in those cases.
+        """
+        xs, ys, bounds = [], [], []
+        for span in spans:
+            cs, ce = span.start, span.end
+            center = (cs + ce) // 2
+            chunk_cs = max(0, center - chunk_T // 2)
+            chunk_ce = min(total_len, chunk_cs + chunk_T)
+            chunk_cs = max(0, chunk_ce - chunk_T)
+            actual_len = chunk_ce - chunk_cs
+            if hmm_frame_reversed:
+                fp = np.arange(chunk_ce - 1, chunk_cs - 1, -1)
+                idx = (fp // T) * T + (T - 1 - fp % T)
+            else:
+                idx = np.arange(chunk_cs, chunk_ce)
+            cx = flat_x[idx]
+            cl = flat_lstm[idx]
+            if actual_len < chunk_T:
+                pad = chunk_T - actual_len
+                cx = np.concatenate(
+                    [cx, np.zeros((pad, *cx.shape[1:]), dtype=cx.dtype)],
+                    axis=0,
+                )
+                cl = np.concatenate(
+                    [cl, np.zeros((pad, *cl.shape[1:]), dtype=cl.dtype)],
+                    axis=0,
+                )
+            xs.append(cx)
+            ys.append(cl)
+            bounds.append((chunk_cs, chunk_ce, cs, ce))
+        return np.stack(xs), np.stack(ys), bounds
+
+    def _write_chunk_labels(
+        self, labels, labels_15, bounds, T, hmm_frame_reversed,
+    ):
+        """Overwrite `labels` with the NSS 15-state labels for the
+        transcript portion of each chunk. Flanks are discarded."""
+        for k, (chunk_cs, chunk_ce, tx_s, tx_e) in enumerate(bounds):
+            actual_len = chunk_ce - chunk_cs
+            chunk_lbl = labels_15[k, :actual_len]
+            if hmm_frame_reversed:
+                chunk_lbl = chunk_lbl[::-1]
+            tx_lbl = chunk_lbl[tx_s - chunk_cs:tx_e - chunk_cs]
+            fp = np.arange(tx_s, tx_e)
+            labels[fp // T, fp % T] = tx_lbl
 
     def _patch_spliced_stops(
         self, labels, nuc, x_one_hot, lstm_out, strand,
         hmm_frame_reversed=False,
     ):
-        """Detect windows with spliced stops in `labels` (forward-coord
-        frame, 15-state) and re-predict them in-place with the restrictive
-        HMM, reusing the LSTM emissions already in memory.
+        """Detect transcripts with spliced stops on the flattened labels
+        and re-decode a chunk of length `nss_patch_T` centered on each
+        transcript using the restrictive HMM. Transcripts whose span
+        exceeds `nss_patch_T` fall back to the full-seq_len NSS HMM.
+        Transcripts longer than `seq_len` are left to the end-of-pipeline
+        inframe-stop filter.
 
-        For the bwd strand the LSTM/HMM operate on complemented+reversed
-        inputs, so the restrictive-HMM output is reversed back to forward
-        coordinates before being written into `labels`. Set
-        `hmm_frame_reversed=True` in that case.
+        For the bwd strand `labels`/`nuc` are in forward coord but
+        `x_one_hot`/`lstm_out` are in bwd frame (complemented, per-window
+        reversed). Set `hmm_frame_reversed=True`.
 
-        Returns the number of patched windows.
+        Returns the number of patched transcripts.
         """
         if labels is None or labels.size == 0:
             return 0
-        bad = find_spliced_stop_windows(labels, nuc, strand=strand)
-        if bad.size == 0:
+        spans = find_spliced_stop_transcripts(labels, nuc, strand=strand)
+        if not spans:
             return 0
-        patched_24 = self.hmm_prediction_nss(
-            x_one_hot[bad], lstm_out[bad],
-        )
-        if hmm_frame_reversed:
-            patched_24 = patched_24[:, ::-1]
-        labels[bad] = remap_labels_24_to_15(patched_24)
-        return int(bad.size)
+        N, T = labels.shape
+        total_len = N * T
+        patch_T = self.nss_patch_T
+        seq_T = self.seq_len
+        small = [s for s in spans if (s.end - s.start) <= patch_T]
+        big = [s for s in spans if patch_T < (s.end - s.start) <= seq_T]
+        # Oversized > seq_T: skip, end-filter will catch.
+        flat_x = x_one_hot.reshape(-1, x_one_hot.shape[-1])
+        flat_lstm = lstm_out.reshape(-1, lstm_out.shape[-1])
+        patched = 0
+        if small:
+            cx, cl, bounds = self._extract_tx_chunks(
+                small, flat_x, flat_lstm, T, total_len, patch_T,
+                hmm_frame_reversed,
+            )
+            labels_24 = self._run_nss_batched(cx, cl, self.predict_vit_nss_patch)
+            labels_15 = remap_labels_24_to_15(labels_24)
+            self._write_chunk_labels(
+                labels, labels_15, bounds, T, hmm_frame_reversed,
+            )
+            patched += len(small)
+        if big:
+            cx, cl, bounds = self._extract_tx_chunks(
+                big, flat_x, flat_lstm, T, total_len, seq_T,
+                hmm_frame_reversed,
+            )
+            labels_24 = self._run_nss_batched(cx, cl, self.predict_vit_nss)
+            labels_15 = remap_labels_24_to_15(labels_24)
+            self._write_chunk_labels(
+                labels, labels_15, bounds, T, hmm_frame_reversed,
+            )
+            patched += len(big)
+        return patched

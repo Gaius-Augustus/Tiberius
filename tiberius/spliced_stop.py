@@ -4,9 +4,15 @@
 # Standard Tiberius HMM has 15 states (bricks2marble no_spliced_stop=False).
 # The restrictive HMM (no_spliced_stop=True) has 24 states and structurally
 # forbids any path that would splice across a stop codon. We use the
-# restrictive HMM to re-predict windows whose standard prediction contained
-# a spliced stop, instead of discarding those transcripts.
+# restrictive HMM to re-predict transcripts whose standard prediction
+# contained a spliced stop, instead of discarding those transcripts.
+#
+# Detection is transcript-centric and operates on the group's flattened
+# labels (concatenation of all windows), so it catches transcripts that
+# straddle a window boundary as naturally as single-window ones.
 # ==============================================================
+
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -71,42 +77,46 @@ def remap_labels_24_to_15(labels_24: np.ndarray) -> np.ndarray:
     return STATE_REMAP_24_TO_15[labels_24]
 
 
-def _window_has_spliced_stop(
-    labels_row: np.ndarray,
-    nuc_row: np.ndarray,
+@dataclass(frozen=True)
+class TranscriptSpan:
+    """A transcript flagged as containing a spliced stop. Coordinates are
+    on the flattened labels array (concatenation of all windows per group).
+    `start` and `end` cover the full transcript span including surrounding
+    non-CDS regions; the restrictive HMM will re-decode a chunk containing
+    this range and we overwrite labels only within [start, end)."""
+    start: int
+    end: int
+
+
+def _transcript_has_spliced_stop(
+    cds_regions,
+    flat_nuc: np.ndarray,
     strand: str,
 ) -> bool:
-    regions = _split_regions(labels_row, strand=strand)
-    for tx_regions in _transcripts_from_regions(regions):
-        cds_regions = [r for r in tx_regions if r.name == "CDS"]
-        if not cds_regions:
-            continue
-        cds_nuc = np.concatenate([nuc_row[r.start:r.end] for r in cds_regions])
-        if strand == "-":
-            cds_nuc = complement(cds_nuc.copy(), reverse=True)
-        if cds_nuc.size < 6:
-            continue
-        # Exclude the terminal codon which is the legitimate stop.
-        codons = nucleotides_to_kmers(cds_nuc.copy())[:-1]
-        if np.any(np.isin(codons, STOP_CODON_CODES)):
-            return True
-    return False
+    if not cds_regions:
+        return False
+    cds_nuc = np.concatenate([flat_nuc[r.start:r.end] for r in cds_regions])
+    if strand == "-":
+        cds_nuc = complement(cds_nuc.copy(), reverse=True)
+    if cds_nuc.size < 6:
+        return False
+    # Exclude the terminal codon which is the legitimate stop.
+    codons = nucleotides_to_kmers(cds_nuc.copy())[:-1]
+    return bool(np.any(np.isin(codons, STOP_CODON_CODES)))
 
 
-def find_spliced_stop_windows(
+def find_spliced_stop_transcripts(
     labels: np.ndarray,
     nuc: np.ndarray,
     strand: str,
-) -> np.ndarray:
-    """Return window indices whose decoded standard-HMM labels contain at
-    least one transcript with an inframe stop after splicing.
+) -> list[TranscriptSpan]:
+    """Scan a group's full labels for every transcript whose CDS contains
+    an inframe stop after splicing. Operates on the flattened labels so
+    cross-window transcripts are caught as naturally as single-window ones.
 
-    Partial transcripts touching window edges are skipped by
-    _transcripts_from_regions. Spliced stops in transcripts that cross a
-    window boundary are left to the center-shifted reprediction pass in
-    bricks2marble `_annotate` (which calls `repredict_function` on
-    disagreeing boundaries), plus the terminal
-    `check_inframe_stop_codons(remove=True)` safety net in main.py.
+    Returns a list of (start, end) spans (half-open) in flattened
+    coordinates. The caller re-decodes a chunk around each span with the
+    restrictive HMM and overwrites labels in [start, end).
 
     Args:
         labels: (N_windows, T) int, 15-state HMM output.
@@ -116,8 +126,18 @@ def find_spliced_stop_windows(
                 forward coordinates but encodes a reverse-strand gene, so
                 CDS bases are reverse-complemented before translation.
     """
-    bad = [
-        i for i in range(labels.shape[0])
-        if _window_has_spliced_stop(labels[i], nuc[i], strand)
-    ]
-    return np.array(bad, dtype=np.int64)
+    if labels.size == 0:
+        return []
+    flat_labels = labels.reshape(-1)
+    flat_nuc = nuc.reshape(-1)
+    regions = _split_regions(flat_labels, strand=strand)
+    spans: list[TranscriptSpan] = []
+    for tx_regions in _transcripts_from_regions(regions):
+        cds_regions = [r for r in tx_regions if r.name == "CDS"]
+        if not _transcript_has_spliced_stop(cds_regions, flat_nuc, strand):
+            continue
+        spans.append(TranscriptSpan(
+            start=int(tx_regions[0].start),
+            end=int(tx_regions[-1].end),
+        ))
+    return spans

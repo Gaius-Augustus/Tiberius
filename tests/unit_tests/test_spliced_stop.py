@@ -1,7 +1,8 @@
-"""Tests for the spliced-stop detector and the 24->15 state remap.
+"""Tests for the transcript-centric spliced-stop detector and 24->15 remap.
 
-The detector operates on 15-state Tiberius HMM output; the remap folds the
-24-state restrictive-HMM output back to 15 states for downstream code.
+The detector operates on 15-state Tiberius HMM output (flattened across
+windows); the remap folds the 24-state restrictive-HMM output back to 15
+states for downstream code.
 """
 
 import numpy as np
@@ -12,7 +13,8 @@ pytest.importorskip("bricks2marble")
 from tiberius.spliced_stop import (
     STATE_REMAP_24_TO_15,
     STOP_CODON_CODES,
-    find_spliced_stop_windows,
+    TranscriptSpan,
+    find_spliced_stop_transcripts,
     remap_labels_24_to_15,
 )
 
@@ -72,57 +74,87 @@ def test_detects_spliced_stop_on_plus_strand():
         "NNNNN" + "ATGCGCT" + "GTA" + "AGCGCCGCTAG" + "NNNN"
     )
     assert labels.shape == (1, 30) and nuc_row.shape == (30,)
-    bad = find_spliced_stop_windows(labels, nuc_row[None, :], strand="+")
-    assert bad.tolist() == [0]
+    spans = find_spliced_stop_transcripts(labels, nuc_row[None, :], strand="+")
+    assert len(spans) == 1
+    assert spans[0] == TranscriptSpan(start=5, end=26)
 
 
 def test_terminal_stop_is_not_flagged():
-    # Same layout, but the only stop codon lands as the terminal codon
-    # (TAG at the final 3 bases of the spliced CDS). The detector drops
-    # the terminal codon before scanning, so no false positive.
-    # Spliced CDS = ATGCGCT + AGCCGCTAG -> ATG CGC TAG CGC... wait, 9 ->
-    # use 7+8=15, codons = ATG CGC TAC AGC CTAG... careful.
-    # Use 6+9 = 15 nt, codons = ATGCGC + TACAGCTAG = ATG CGC TAC AGC TAG,
-    # terminal TAG only.
+    # Spliced CDS = ATGCGC + TACAGCTAG = ATG CGC TAC AGC TAG, terminal
+    # TAG only.
     labels = np.array(
         [0]*5 + [4]*6 + [1]*3 + [4]*9 + [0]*7, dtype=np.int32,
     )[None, :]
     nuc_row = _row(
         "NNNNN" + "ATGCGC" + "GTA" + "TACAGCTAG" + "NNNNNNN"
     )
-    bad = find_spliced_stop_windows(labels, nuc_row[None, :], strand="+")
-    assert bad.tolist() == []
+    spans = find_spliced_stop_transcripts(labels, nuc_row[None, :], strand="+")
+    assert spans == []
 
 
 def test_detects_spliced_stop_on_minus_strand():
-    # Build a window whose forward-strand bases, when reverse-complemented,
-    # yield a transcript ATG CGC TAG CGC CGC TAG with an internal stop.
     # Reverse-complement of "ATGCGCTAGCGCCGCTAG" is "CTAGCGGCGCTAGCGCAT".
-    # Split that 18 bp back into exon1 (7 bp) + intron (3 bp) + exon2 (11 bp):
-    #   forward bases 5..12  = first 7 of RC   = "CTAGCGG"
-    #   forward bases 12..15 = intron (any)    = "GTA"
-    #   forward bases 15..26 = last 11 of RC   = "CGCTAGCGCAT"
     labels = np.array(
         [0]*5 + [4]*7 + [1]*3 + [4]*11 + [0]*4, dtype=np.int32,
     )[None, :]
     nuc_row = _row(
         "NNNNN" + "CTAGCGG" + "GTA" + "CGCTAGCGCAT" + "NNNN"
     )
-    bad = find_spliced_stop_windows(labels, nuc_row[None, :], strand="-")
-    assert bad.tolist() == [0]
+    spans = find_spliced_stop_transcripts(labels, nuc_row[None, :], strand="-")
+    assert len(spans) == 1
+    assert spans[0] == TranscriptSpan(start=5, end=26)
+
+
+def test_cross_window_spliced_stop_is_detected():
+    # Two windows of T=20. Transcript crosses the boundary: its exon2
+    # touches the window-0 end AND continues as the first 6 bases of
+    # window 1. The transcript-centric detector sees it on the flattened
+    # labels.
+    #
+    # Flat regions: IR[0:5] CDS[5:11] intron[11:14] CDS[14:26] IR[26:40]
+    # Spliced CDS = ATG CGC + TAG CGC CGC CAG -> internal TAG at codon 3.
+    T = 20
+    labels = np.array([
+        [0]*5 + [4]*6 + [1]*3 + [4]*6,   # window 0
+        [4]*6 + [0]*14,                  # window 1
+    ], dtype=np.int32)
+    nuc = np.stack([
+        _row("NNNNN" + "ATGCGC" + "GTA" + "TAGCGC"),
+        _row("CGCCAG" + "N" * 14),
+    ])
+    spans = find_spliced_stop_transcripts(labels, nuc, strand="+")
+    assert len(spans) == 1
+    # Transcript span runs from forward coord 5 (CDS start) through 26
+    # (CDS end), covering the window-0/1 boundary at 20.
+    assert spans[0] == TranscriptSpan(start=5, end=26)
+
+
+def test_cross_window_without_spliced_stop_not_flagged():
+    T = 20
+    labels = np.array([
+        [0]*5 + [4]*6 + [1]*3 + [4]*6,
+        [4]*6 + [0]*14,
+    ], dtype=np.int32)
+    nuc = np.stack([
+        _row("NNNNN" + "ATGCGC" + "GTA" + "CGCCGC"),
+        _row("CGCCAG" + "N" * 14),
+    ])
+    # Spliced = ATG CGC CGC CGC CGC CAG — no internal stops.
+    spans = find_spliced_stop_transcripts(labels, nuc, strand="+")
+    assert spans == []
 
 
 def test_partial_transcript_at_edge_is_skipped():
-    # Transcript starts at position 0 (no IR before it). The decoder treats
-    # it as a partial transcript and _transcripts_from_regions drops it.
+    # Transcript starts at position 0 (no IR before it) and no IR after
+    # the final CDS either. _transcripts_from_regions treats it as
+    # partial and drops it.
     labels = np.array(
         [4]*7 + [1]*3 + [4]*11 + [0]*9, dtype=np.int32,
     )[None, :]
     nuc_row = _row(
         "ATGCGCT" + "GTA" + "AGCGCCGCTAG" + "NNNNNNNNN"
     )
-    bad = find_spliced_stop_windows(labels, nuc_row[None, :], strand="+")
-    # Partial transcript at the window edge is intentionally skipped by
-    # the per-window detector; the full-annotation post-filter catches
-    # these cross-boundary cases.
-    assert bad.tolist() == []
+    spans = find_spliced_stop_transcripts(labels, nuc_row[None, :], strand="+")
+    # The flattened scan still only reports complete IR-bounded transcripts.
+    # The input lacks a leading IR, so the transcript is partial and skipped.
+    assert spans == []

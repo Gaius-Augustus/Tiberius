@@ -10,6 +10,16 @@ from tensorflow.keras import backend as K
 from tiberius.hmm import HMMBlock
 from hidten import HMMMode
 
+# On ROCm (AMD GPUs), the fused CudnnRNNV3/MIOpen LSTM kernel crashes on
+# MI250X during inference. Passing any non-zero recurrent_dropout forces
+# Keras off the fused path onto the generic implementation. The flag is a
+# no-op at inference, so loaded weights and predictions are unchanged.
+_LSTM_ROCM_KWARGS = (
+    {'recurrent_dropout': 0.1}
+    if tf.sysconfig.get_build_info().get('is_rocm_build', False)
+    else {}
+)
+
 
 class Cast(tf.keras.layers.Layer):
     def call(self, x):
@@ -226,7 +236,8 @@ def lstm_model(units=372, filter_size=128,
             # lru_block.build(input_shape=x.shape)
             x_next = lru_block(x)
         else:
-            x_next = Bidirectional(LSTM(units, return_sequences=True),
+            x_next = Bidirectional(
+                    LSTM(units, return_sequences=True, **_LSTM_ROCM_KWARGS),
                     name=f'biLSTM_{i+1}')(x)
         if dropout_rate:
             x_next = Dropout(dropout_rate, name=f'dropout_{i+1}')(x_next)
@@ -244,7 +255,8 @@ def lstm_model(units=372, filter_size=128,
         mask = Dense(1, activation='sigmoid', name='mask')(x)
         mask = tf.greater(mask[:, :, 0], 0.5)
         for i in range(2):
-            x = Bidirectional(LSTM(units, return_sequences=True),
+            x = Bidirectional(
+                LSTM(units, return_sequences=True, **_LSTM_ROCM_KWARGS),
                 name=f'biLSTM_mask_{i+1}')(inputs=x, mask=mask)
 
     if residual_conv:

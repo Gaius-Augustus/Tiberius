@@ -136,6 +136,33 @@ pip install .[from_source]
 **Note:**
 If TensorFlow is *not* installed beforehand, `pip install .[from_source]` installs the latest available TensorFlow version.
 
+### Option D: AMD GPUs (ROCm)
+
+A separate ROCm image is published for AMD GPUs:
+`gaiusaugustus/tiberius:amd`. The `--singularity` launcher is
+NVIDIA-only, so AMD users invoke the container directly.
+
+With Apptainer / Singularity:
+```shell
+singularity run --rocm docker://gaiusaugustus/tiberius:amd \
+    tiberius.py --genome input.fasta \
+    --model_cfg insecta --out tiberius.gff3
+```
+
+With Docker:
+```shell
+docker run --device=/dev/kfd --device=/dev/dri \
+    -v $(pwd):/data gaiusaugustus/tiberius:latest-rocm \
+    tiberius.py --genome /data/input.fasta \
+    --model_cfg mammalia_softmasking_v2 --out /data/tiberius.gtf
+```
+
+The image is built from [Dockerfile.rocm](Dockerfile.rocm) (defaults: ROCm
+6.4 + tensorflow-rocm 2.18.1 on cp312). If your cluster's host driver
+requires a different ROCm line, rebuild with `--build-arg BASE_IMAGE=...`,
+`--build-arg TF_ROCM_WHEEL=...`, `--build-arg TF_ROCM_INDEX=...` — see the
+comments at the top of that file.
+
 #### Python Libraries
 
 The following Python libraries are required and installed with `pip install .[from_source]`:

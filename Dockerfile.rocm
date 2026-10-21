@@ -1,0 +1,72 @@
+# ROCm variant of the Tiberius image for AMD GPUs. Analogous to Dockerfile
+# (NVIDIA NGC): TensorFlow, Tiberius and its Python packages only. Evidence
+# tools (miniprot, HISAT2, StringTie, TransDecoder, ...) are in Paludamentum.
+#
+# Build from the root of a Tiberius checkout (same layout as Dockerfile):
+#   docker build -f Dockerfile.rocm -t gaiusaugustus/tiberius:<version>-rocm .
+#
+# Image targets ROCm 6.4 + tensorflow-rocm 2.18.1 (cp312). If the host driver
+# on your cluster is older, override the base and wheel at build time:
+#   --build-arg BASE_IMAGE=rocm/dev-ubuntu-24.04:6.4.4
+#   --build-arg TF_ROCM_WHEEL="tensorflow-rocm==2.17.0"
+#   --build-arg TF_ROCM_INDEX=https://repo.radeon.com/rocm/manylinux/rocm-rel-6.3/
+#
+# The build-time smoke test only verifies tiberius imports and that the TF
+# wheel is a ROCm build. The MIOpen LSTM crash workaround (recurrent_dropout
+# path in tiberius/models.py) can only be validated on an AMD GPU.
+
+ARG BASE_IMAGE=rocm/dev-ubuntu-24.04:6.4.4-complete
+FROM ${BASE_IMAGE}
+
+ARG TF_ROCM_WHEEL="tensorflow-rocm==2.18.1"
+ARG TF_ROCM_INDEX=https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4/
+
+USER root
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+ENV PIP_ROOT_USER_ACTION=ignore
+ENV PIP_NO_CACHE_DIR=1
+ENV TF_USE_LEGACY_KERAS=0
+
+RUN apt-get update --quiet && \
+    apt-get install --no-install-recommends --yes --quiet \
+        python3 python3-pip python3-venv ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get autoremove -y && apt-get clean
+
+# Install TF-ROCm first. bricks2marble/hidten declare tensorflow[and-cuda]
+# as an extra, so they are installed --no-deps below to keep the CUDA wheels
+# off the ROCm image.
+RUN python3 -m pip install ${TF_ROCM_WHEEL} -f ${TF_ROCM_INDEX}
+
+RUN python3 -m pip install "keras==3.15.1"
+
+RUN python3 -m pip install --no-deps \
+        "bricks2marble==0.1.1" \
+        "hidten==1.0.0" && \
+    python3 -m pip install \
+        "numpy==1.26.4" \
+        "pandas==2.2.3" \
+        "requests==2.32.3" \
+        "rich==13.9.4" \
+        "pyyaml==6.0.2" \
+        "pydantic==2.13.5" \
+        "biopython==1.88" \
+        "packaging==26.3"
+
+COPY . /opt/Tiberius
+RUN cd /opt/Tiberius && \
+    python3 -m pip install --no-deps . && \
+    chmod +x tiberius.py tiberius/*.py && \
+    mkdir -p model_weights && chmod -R 777 model_weights
+
+ENV PATH=${PATH}:/opt/Tiberius/tiberius/
+ENV PATH=${PATH}:/opt/Tiberius/
+
+RUN python3 -c "import bricks2marble, hidten, Bio, yaml, rich, requests, packaging" && \
+    tiberius.py --help > /dev/null && \
+    python3 -c "import importlib.metadata as m, tensorflow as tf; \
+b = tf.sysconfig.get_build_info(); \
+assert b.get('is_rocm_build'), f'expected ROCm build, got {b}'; \
+print('tiberius', m.version('tiberius'), 'bricks2marble', m.version('bricks2marble'), 'hidten', m.version('hidten'), 'keras', m.version('keras'), 'TensorFlow', tf.__version__, 'is_rocm_build', b['is_rocm_build'])"

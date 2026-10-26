@@ -102,15 +102,14 @@ class PredictionGTF:
         self.lstm_model = None
         self.inp_size = 15
         self.gene_pred_hmm_layer_nss = None
-        self.gene_pred_hmm_layer_nss_patch = None
         self.nss_patch_parallel = None
         # Re-predict transcripts whose standard-HMM output contains a
         # spliced stop, using the restrictive (no_spliced_stop=True) HMM
         # instead of discarding them in the post-filter. Translation
-        # table 1 only. `nss_patch_T` is the chunk length used for the
-        # per-transcript patch — small enough to be fast, large enough to
-        # fit a typical gene with flanking context. Transcripts longer
-        # than this fall back to the full-seq_len NSS HMM.
+        # table 1 only. The patch HMM runs at `nss_patch_T = 2 * seq_len`;
+        # every span up to that length is repredicted through it. Spans
+        # longer than `nss_patch_T` are left for the end-of-pipeline
+        # inframe-stop filter.
         self.spliced_stop_reprediction = True
         self.nss_patch_T = None
 
@@ -534,27 +533,25 @@ class PredictionGTF:
         self.gene_pred_hmm_layer.build((self.adapted_batch_size, self.seq_len, inp_size))
 
     def build_nss_hmm(self, inp_size=15):
-        """Build the restrictive HMM(s) (no_spliced_stop=True) used to
-        re-predict transcripts whose standard-HMM output contains a spliced
-        stop. A patch-sized HMM at `nss_patch_T` handles most transcripts;
-        a full-seq_len HMM handles the rare transcripts whose span exceeds
-        `nss_patch_T`. Only supported for translation table 1.
+        """Build the restrictive HMM (no_spliced_stop=True) used to
+        re-predict transcripts whose standard-HMM output contains a
+        spliced stop. One HMM at `nss_patch_T = 2 * seq_len` handles
+        every transcript whose span fits in that chunk; longer spans
+        are left for the end-of-pipeline inframe-stop filter.
+
+        Only supported for translation table 1.
+
+        The previous implementation also built a second HMM at
+        `seq_len` as a fallback for spans > 10000. That path produced
+        garbage output (a periodic ``[intron, 907] [IR, 19]`` pattern
+        consistent with a parallel-Viterbi stitching artifact in the
+        24-state transition structure at full seq_len), so we scale
+        the patch chunk to cover every realistic transcript instead.
         """
-        # Choose patch chunk length. Capped at seq_len. 10000 is a cheap
-        # size that fits a typical gene with flanking context — 10x
-        # faster than running at seq_len for species like chlorophyta
-        # (seq_len=100080).
-        patch_T = min(self.seq_len, 10000)
-        if patch_T == self.seq_len:
-            # Same length as seq_len — reuse the full-seq_len build only.
-            self.nss_patch_T = self.seq_len
-            self.nss_patch_parallel = self.parallel_factor
-        else:
-            self.nss_patch_T = patch_T
-            self.nss_patch_parallel = compute_parallel_factor(patch_T)
-        # Full-seq_len HMM: fallback for transcripts longer than patch_T.
+        self.nss_patch_T = 2 * self.seq_len
+        self.nss_patch_parallel = compute_parallel_factor(self.nss_patch_T)
         self.gene_pred_hmm_layer_nss = HMMBlock(
-            parallel=self.parallel_factor,
+            parallel=self.nss_patch_parallel,
             mode=HMMMode.VITERBI,
             training=False,
             emitter_epsilon=self.hmm_emitter_epsilon,
@@ -564,25 +561,8 @@ class PredictionGTF:
             no_spliced_stop=True,
         )
         self.gene_pred_hmm_layer_nss.build(
-            (self.adapted_batch_size, self.seq_len, inp_size)
+            (self.adapted_batch_size, self.nss_patch_T, inp_size)
         )
-        if self.nss_patch_T == self.seq_len:
-            # Same shape as full — alias to avoid double build.
-            self.gene_pred_hmm_layer_nss_patch = self.gene_pred_hmm_layer_nss
-        else:
-            self.gene_pred_hmm_layer_nss_patch = HMMBlock(
-                parallel=self.nss_patch_parallel,
-                mode=HMMMode.VITERBI,
-                training=False,
-                emitter_epsilon=self.hmm_emitter_epsilon,
-                initial_exon_len=self.hmm_initial_exon_len,
-                initial_intron_len=self.hmm_initial_intron_len,
-                initial_ir_len=self.hmm_initial_ir_len,
-                no_spliced_stop=True,
-            )
-            self.gene_pred_hmm_layer_nss_patch.build(
-                (self.adapted_batch_size, self.nss_patch_T, inp_size)
-            )
 
     @tf.function
     def predict_vit_nss(self, x, y_lstm):
@@ -593,16 +573,6 @@ class PredictionGTF:
             return self.gene_pred_hmm_layer_nss(y_lstm, nuc)
         nuc = tf.cast(x[:, :, :5], tf.float32)
         return self.gene_pred_hmm_layer_nss(y_lstm, nuc)
-
-    @tf.function
-    def predict_vit_nss_patch(self, x, y_lstm):
-        if self.lstm_model and self.hmm:
-            nuc = Cast()(x)
-            if y_lstm.ndim == 2:
-                y_lstm = y_lstm[np.newaxis, :, :]
-            return self.gene_pred_hmm_layer_nss_patch(y_lstm, nuc)
-        nuc = tf.cast(x[:, :, :5], tf.float32)
-        return self.gene_pred_hmm_layer_nss_patch(y_lstm, nuc)
 
     def _run_nss_batched(self, nuc_seq, lstm_predictions, predict_fn):
         """Run `predict_fn` on (N, T, C)/(N, T, 15) inputs, padding each
@@ -702,8 +672,7 @@ class PredictionGTF:
         """Detect transcripts with spliced stops on the flattened labels
         and re-decode a chunk of length `nss_patch_T` centered on each
         transcript using the restrictive HMM. Transcripts whose span
-        exceeds `nss_patch_T` fall back to the full-seq_len NSS HMM.
-        Transcripts longer than `seq_len` are left to the end-of-pipeline
+        exceeds `nss_patch_T` are left for the end-of-pipeline
         inframe-stop filter.
 
         For the bwd strand `labels`/`nuc` are in forward coord but
@@ -720,33 +689,18 @@ class PredictionGTF:
         N, T = labels.shape
         total_len = N * T
         patch_T = self.nss_patch_T
-        seq_T = self.seq_len
-        small = [s for s in spans if (s.end - s.start) <= patch_T]
-        big = [s for s in spans if patch_T < (s.end - s.start) <= seq_T]
-        # Oversized > seq_T: skip, end-filter will catch.
+        in_patch = [s for s in spans if (s.end - s.start) <= patch_T]
+        if not in_patch:
+            return 0
         flat_x = x_one_hot.reshape(-1, x_one_hot.shape[-1])
         flat_lstm = lstm_out.reshape(-1, lstm_out.shape[-1])
-        patched = 0
-        if small:
-            cx, cl, bounds = self._extract_tx_chunks(
-                small, flat_x, flat_lstm, T, total_len, patch_T,
-                hmm_frame_reversed,
-            )
-            labels_24 = self._run_nss_batched(cx, cl, self.predict_vit_nss_patch)
-            labels_15 = remap_labels_24_to_15(labels_24)
-            self._write_chunk_labels(
-                labels, labels_15, bounds, T, hmm_frame_reversed,
-            )
-            patched += len(small)
-        if big:
-            cx, cl, bounds = self._extract_tx_chunks(
-                big, flat_x, flat_lstm, T, total_len, seq_T,
-                hmm_frame_reversed,
-            )
-            labels_24 = self._run_nss_batched(cx, cl, self.predict_vit_nss)
-            labels_15 = remap_labels_24_to_15(labels_24)
-            self._write_chunk_labels(
-                labels, labels_15, bounds, T, hmm_frame_reversed,
-            )
-            patched += len(big)
-        return patched
+        cx, cl, bounds = self._extract_tx_chunks(
+            in_patch, flat_x, flat_lstm, T, total_len, patch_T,
+            hmm_frame_reversed,
+        )
+        labels_24 = self._run_nss_batched(cx, cl, self.predict_vit_nss)
+        labels_15 = remap_labels_24_to_15(labels_24)
+        self._write_chunk_labels(
+            labels, labels_15, bounds, T, hmm_frame_reversed,
+        )
+        return len(in_patch)

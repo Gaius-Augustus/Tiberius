@@ -100,7 +100,9 @@ def _transcript_has_spliced_stop(
         cds_nuc = complement(cds_nuc.copy(), reverse=True)
     if cds_nuc.size < 6:
         return False
-    # Exclude the terminal codon which is the legitimate stop.
+    # `nucleotides_to_kmers` reshapes to (L//3, 3), i.e. non-overlapping
+    # step-3 codons; `[:-1]` drops the terminal (legitimate) stop. Mirrors
+    # `b2m.tools.check_inframe_stop_codons` so detection matches the eval.
     codons = nucleotides_to_kmers(cds_nuc.copy())[:-1]
     return bool(np.any(np.isin(codons, STOP_CODON_CODES)))
 

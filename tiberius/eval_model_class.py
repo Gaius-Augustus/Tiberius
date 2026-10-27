@@ -262,27 +262,36 @@ class PredictionGTF:
             fasta: b2m.struct.Fasta
         ) -> tuple[np.ndarray, np.ndarray]:
 
+        timing = os.environ.get("TIBERIUS_SPLICED_STOP_TIMING")
+        t_start = time.perf_counter() if timing else 0.0
+
         nuc = fasta.nuc
 
         # fwd prediction
+        t0 = time.perf_counter() if timing else 0.0
         x_one_hot_fwd = fasta.one_hot(
                 pad_index = 4,
                 repeats = "track" if self.softmask else "omit",
                 N = "track",
                 dtype = np.float32,
             )
+        t1 = time.perf_counter() if timing else 0.0
         lstm_out_fwd = self.lstm_prediction(x_one_hot_fwd)
+        t2 = time.perf_counter() if timing else 0.0
 
         hmm_out_fwd = self.hmm_prediction(
             x_one_hot_fwd, lstm_out_fwd,
         )
+        t3 = time.perf_counter() if timing else 0.0
         if self.spliced_stop_reprediction and self.gene_pred_hmm_layer_nss is not None:
             self._patch_spliced_stops(
                 hmm_out_fwd, nuc, x_one_hot_fwd, lstm_out_fwd, strand="+",
             )
+        t4 = time.perf_counter() if timing else 0.0
         del lstm_out_fwd, x_one_hot_fwd
 
         # bwd prediction
+        t5 = time.perf_counter() if timing else 0.0
         fasta_bwd = fasta.complement()
         x_one_hot_bwd = fasta_bwd.one_hot(
             pad_index = 4,
@@ -291,11 +300,14 @@ class PredictionGTF:
             dtype = np.float32,
         )
         x_one_hot_bwd = x_one_hot_bwd[:, ::-1, :]
+        t6 = time.perf_counter() if timing else 0.0
         lstm_out_bwd = self.lstm_prediction(x_one_hot_bwd)
+        t7 = time.perf_counter() if timing else 0.0
 
         hmm_out_bwd = self.hmm_prediction(
             x_one_hot_bwd, lstm_out_bwd,
         )
+        t8 = time.perf_counter() if timing else 0.0
 
         hmm_out_bwd = hmm_out_bwd[:,::-1]
         if self.spliced_stop_reprediction and self.gene_pred_hmm_layer_nss is not None:
@@ -303,13 +315,26 @@ class PredictionGTF:
                 hmm_out_bwd, nuc, x_one_hot_bwd, lstm_out_bwd, strand="-",
                 hmm_frame_reversed=True,
             )
+        t9 = time.perf_counter() if timing else 0.0
         del lstm_out_bwd, x_one_hot_bwd
+        if timing:
+            print(
+                f"[predict-timing] fasta_N={fasta.N} T={fasta.T} "
+                f"| fwd: oh={(t1-t0):.2f}s lstm={(t2-t1):.2f}s "
+                f"hmm={(t3-t2):.2f}s nss={(t4-t3):.2f}s "
+                f"| bwd: oh={(t6-t5):.2f}s lstm={(t7-t6):.2f}s "
+                f"hmm={(t8-t7):.2f}s nss={(t9-t8):.2f}s "
+                f"| total={(t9-t_start):.2f}s",
+                file=sys.stderr,
+            )
         return hmm_out_fwd, hmm_out_bwd
 
     def repredict_function(
             self,
             fasta: b2m.struct.Fasta
         ) -> tuple[np.ndarray, np.ndarray]:
+        timing = os.environ.get("TIBERIUS_SPLICED_STOP_TIMING")
+        t_start = time.perf_counter() if timing else 0.0
         nuc = fasta.nuc
 
         # fwd prediction
@@ -364,6 +389,13 @@ class PredictionGTF:
                 )
             del lstm_out_bwd, x_one_hot_bwd
             hmm_out_bwd_expand[indices_bwd] = hmm_out_bwd
+        if timing:
+            print(
+                f"[repredict-timing] fasta_N={fasta.N} T={fasta.T} "
+                f"n_fwd={indices_fwd.size} n_bwd={indices_bwd.size} "
+                f"total={(time.perf_counter()-t_start):.2f}s",
+                file=sys.stderr,
+            )
         return hmm_out_fwd_expand, hmm_out_bwd_expand
 
     def get_predictions(

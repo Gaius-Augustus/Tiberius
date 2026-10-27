@@ -66,6 +66,10 @@ def main() -> int:
     debug_path = Path(debug_dir).expanduser().resolve()
     debug_path.mkdir(parents=True, exist_ok=True)
     os.environ["TIBERIUS_SPLICED_STOP_DEBUG_DIR"] = str(debug_path)
+    # Also enable the stderr timing probes in PredictionGTF._patch_spliced_stops
+    # so a single invocation of this wrapper gives both the per-span jsonl and
+    # the per-call timing breakdown.
+    os.environ.setdefault("TIBERIUS_SPLICED_STOP_TIMING", "1")
 
     # Replace argv so Tiberius' arg parser sees only its known flags.
     sys.argv = [sys.argv[0]] + rest

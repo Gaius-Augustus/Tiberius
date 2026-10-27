@@ -605,11 +605,10 @@ class PredictionGTF:
 
         lstm_present = bool(self.lstm_model and self.hmm)
 
-        # No @tf.function: the HMM layer is already compiled C++; the Python
-        # graph-compilation step added by @tf.function takes 15-30 s per unique
-        # tile size, which dominates runtime for small genomes (Dmel: 3 tile
-        # sizes × ~20 s = 60 s overhead on a 1-2 min run). Eager dispatch is
-        # identical in output and fast enough for the small batches we process.
+        # Compiled graph is MUCH faster than eager per-call dispatch here
+        # (measured: eager made Dmel 2x slower than the compiled version).
+        # Compilation cost is paid once per tile_T on the first call.
+        @tf.function
         def predict(x, y_lstm):
             if lstm_present:
                 nuc = Cast()(x)

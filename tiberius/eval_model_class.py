@@ -534,7 +534,10 @@ class PredictionGTF:
         )
         self.gene_pred_hmm_layer.build((self.adapted_batch_size, self.seq_len, inp_size))
 
-    _NSS_MIN_TILE = 1 << 14  # 16384; smallest tile we ever build
+    _NSS_MIN_TILE = 1 << 14   # 16384; smallest tile we ever build
+    _NSS_BATCH_SIZE = 1       # NSS spans are rare; process one at a time to
+                              # avoid allocating adapted_batch_size (200+) HMM
+                              # slots when typically 1-5 spans exist per call.
 
     def build_nss_hmm(self, inp_size=15):
         """Set up on-demand build infrastructure for the restrictive
@@ -571,7 +574,7 @@ class PredictionGTF:
         """Smallest power-of-two tile that fits `span_len` plus some
         flank, capped at `self.nss_patch_T_max`. Returns None if the
         span is too long to repredict."""
-        target = max(self._NSS_MIN_TILE, int(span_len * 1.5))
+        target = max(self._NSS_MIN_TILE, int(span_len * 1.1))
         tile = 1 << max(target - 1, 0).bit_length()
         if tile > self.nss_patch_T_max:
             # Cap at the exact max rather than falling to the next
@@ -598,7 +601,7 @@ class PredictionGTF:
             initial_ir_len=self.hmm_initial_ir_len,
             no_spliced_stop=True,
         )
-        hmm.build((self.adapted_batch_size, tile_T, self._nss_inp_size))
+        hmm.build((self._NSS_BATCH_SIZE, tile_T, self._nss_inp_size))
         self._nss_hmm_cache[tile_T] = hmm
 
         lstm_present = bool(self.lstm_model and self.hmm)
@@ -618,10 +621,10 @@ class PredictionGTF:
 
     def _run_nss_batched(self, nuc_seq, lstm_predictions, predict_fn):
         """Run `predict_fn` on (N, T, C)/(N, T, 15) inputs, padding each
-        batch to `adapted_batch_size`. Variable batch sizes previously
-        caused CUDA_ERROR_ILLEGAL_ADDRESS inside the TFHMM transpose.
+        batch to `_NSS_BATCH_SIZE`. The HMM is built for that fixed size,
+        so we must never call predict_fn with a different batch dimension.
         """
-        batch_size = self.adapted_batch_size
+        batch_size = self._NSS_BATCH_SIZE
         N = nuc_seq.shape[0]
         num_batches = (N + batch_size - 1) // batch_size
         out = []

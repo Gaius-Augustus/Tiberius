@@ -548,9 +548,9 @@ class PredictionGTF:
         each span routes to the smallest power-of-two tile that leaves
         room for flank, and the matching HMM is built on first use (see
         `_get_nss_hmm`). This keeps memory proportional to the longest
-        span actually seen rather than a worst-case `2 * seq_len`.
+        span actually seen rather than a worst-case `seq_len`.
 
-        Spans > `nss_patch_T_max = 2 * seq_len` are left for the
+        Spans > `nss_patch_T_max = seq_len` are left for the
         end-of-pipeline inframe-stop filter.
 
         The earlier implementation built a second HMM at full `seq_len`
@@ -562,7 +562,7 @@ class PredictionGTF:
 
         Only supported for translation table 1.
         """
-        self.nss_patch_T_max = 2 * self.seq_len
+        self.nss_patch_T_max = self.seq_len
         self._nss_inp_size = inp_size
         self._nss_hmm_cache = {}
         self._nss_predict_cache = {}
@@ -579,7 +579,7 @@ class PredictionGTF:
         if tile > self.nss_patch_T_max:
             # Cap at the exact max rather than falling to the next
             # power of two above seq_len, so we don't skip spans that
-            # fit inside `2 * seq_len` just because they'd round up.
+            # fit inside `seq_len` just because they'd round up.
             tile = self.nss_patch_T_max
         if span_len > tile:
             return None

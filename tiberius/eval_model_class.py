@@ -4,7 +4,7 @@
 # Class handling the prediction and evaluation for a single species
 # ==============================================================
 
-import sys, json, os, sys
+import sys, json, os, sys, time
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras as keras
@@ -633,9 +633,11 @@ class PredictionGTF:
         """
         out = []
         for i in range(nuc_seq.shape[0]):
-            x_i = nuc_seq[i : i + 1]      # (1, T, C)
+            x_i = nuc_seq[i : i + 1]           # (1, T, C)
             y_i = lstm_predictions[i : i + 1]  # (1, T, 15)
             yi = predict_fn(x_i, y_i).numpy()
+            # HMM may return (1, T), (1, T, 1), or (T,); normalize to (1, T).
+            yi = np.squeeze(yi)
             if yi.ndim == 1:
                 yi = yi[np.newaxis, :]
             out.append(yi)
@@ -722,8 +724,17 @@ class PredictionGTF:
         """
         if labels is None or labels.size == 0:
             return 0
+        timing = os.environ.get("TIBERIUS_SPLICED_STOP_TIMING")
+        t_scan0 = time.perf_counter() if timing else 0.0
         spans = find_spliced_stop_transcripts(labels, nuc, strand=strand)
+        t_scan = time.perf_counter() - t_scan0 if timing else 0.0
         if not spans:
+            if timing:
+                print(
+                    f"[nss-timing] strand={strand} scan={t_scan*1000:.1f}ms "
+                    f"spans=0 (no work)",
+                    file=sys.stderr,
+                )
             return 0
         N, T = labels.shape
         total_len = N * T
@@ -736,20 +747,53 @@ class PredictionGTF:
                 continue
             bucketed.setdefault(tile_T, []).append(span)
         if not bucketed:
+            if timing:
+                print(
+                    f"[nss-timing] strand={strand} scan={t_scan*1000:.1f}ms "
+                    f"spans={len(spans)} all-too-long",
+                    file=sys.stderr,
+                )
             return 0
         flat_x = x_one_hot.reshape(-1, x_one_hot.shape[-1])
         flat_lstm = lstm_out.reshape(-1, lstm_out.shape[-1])
         patched = 0
+        t_extract_tot = 0.0
+        t_run_tot = 0.0
+        t_write_tot = 0.0
+        per_tile_log: list[str] = []
         for tile_T, bucket_spans in bucketed.items():
             predict_fn = self._get_nss_hmm(tile_T)
+            t0 = time.perf_counter() if timing else 0.0
             cx, cl, bounds = self._extract_tx_chunks(
                 bucket_spans, flat_x, flat_lstm, T, total_len, tile_T,
                 hmm_frame_reversed,
             )
+            t1 = time.perf_counter() if timing else 0.0
             labels_24 = self._run_nss_batched(cx, cl, predict_fn)
             labels_15 = remap_labels_24_to_15(labels_24)
+            t2 = time.perf_counter() if timing else 0.0
             self._write_chunk_labels(
                 labels, labels_15, bounds, T, hmm_frame_reversed,
             )
+            t3 = time.perf_counter() if timing else 0.0
             patched += len(bucket_spans)
+            if timing:
+                t_extract_tot += t1 - t0
+                t_run_tot += t2 - t1
+                t_write_tot += t3 - t2
+                per_tile_log.append(
+                    f"tile={tile_T} n={len(bucket_spans)} "
+                    f"extract={(t1-t0)*1000:.1f}ms run={(t2-t1)*1000:.1f}ms "
+                    f"write={(t3-t2)*1000:.1f}ms"
+                )
+        if timing:
+            print(
+                f"[nss-timing] strand={strand} scan={t_scan*1000:.1f}ms "
+                f"spans={len(spans)} patched={patched} "
+                f"extract={t_extract_tot*1000:.1f}ms "
+                f"run={t_run_tot*1000:.1f}ms "
+                f"write={t_write_tot*1000:.1f}ms "
+                f"| {'; '.join(per_tile_log)}",
+                file=sys.stderr,
+            )
         return patched

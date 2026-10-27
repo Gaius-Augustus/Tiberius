@@ -622,6 +622,8 @@ class PredictionGTF:
         cached = self._nss_predict_cache.get(tile_T)
         if cached is not None:
             return cached
+        timing = os.environ.get("TIBERIUS_SPLICED_STOP_TIMING")
+        t0 = time.perf_counter() if timing else 0.0
         hmm = HMMBlock(
             parallel=compute_parallel_factor(tile_T),
             mode=HMMMode.VITERBI,
@@ -632,10 +634,18 @@ class PredictionGTF:
             initial_ir_len=self.hmm_initial_ir_len,
             no_spliced_stop=True,
         )
+        t1 = time.perf_counter() if timing else 0.0
         hmm.build((self._NSS_BATCH_SIZE, tile_T, self._nss_inp_size))
+        t2 = time.perf_counter() if timing else 0.0
         self._nss_hmm_cache[tile_T] = hmm
 
         lstm_present = bool(self.lstm_model and self.hmm)
+        if timing:
+            print(
+                f"[nss-build] tile={tile_T} ctor={(t1-t0)*1000:.1f}ms "
+                f"build={(t2-t1)*1000:.1f}ms (compile happens on first run)",
+                file=sys.stderr,
+            )
 
         # Compiled graph is MUCH faster than eager per-call dispatch here
         # (measured: eager made Dmel 2x slower than the compiled version).
@@ -756,6 +766,7 @@ class PredictionGTF:
         if labels is None or labels.size == 0:
             return 0
         timing = os.environ.get("TIBERIUS_SPLICED_STOP_TIMING")
+        t_entry = time.perf_counter() if timing else 0.0
         t_scan0 = time.perf_counter() if timing else 0.0
         spans = find_spliced_stop_transcripts(labels, nuc, strand=strand)
         t_scan = time.perf_counter() - t_scan0 if timing else 0.0
@@ -788,11 +799,13 @@ class PredictionGTF:
         flat_x = x_one_hot.reshape(-1, x_one_hot.shape[-1])
         flat_lstm = lstm_out.reshape(-1, lstm_out.shape[-1])
         patched = 0
+        t_hmm_get_tot = 0.0
         t_extract_tot = 0.0
         t_run_tot = 0.0
         t_write_tot = 0.0
         per_tile_log: list[str] = []
         for tile_T, bucket_spans in bucketed.items():
+            tg0 = time.perf_counter() if timing else 0.0
             predict_fn = self._get_nss_hmm(tile_T)
             t0 = time.perf_counter() if timing else 0.0
             cx, cl, bounds = self._extract_tx_chunks(
@@ -809,21 +822,28 @@ class PredictionGTF:
             t3 = time.perf_counter() if timing else 0.0
             patched += len(bucket_spans)
             if timing:
+                t_hmm_get_tot += t0 - tg0
                 t_extract_tot += t1 - t0
                 t_run_tot += t2 - t1
                 t_write_tot += t3 - t2
                 per_tile_log.append(
                     f"tile={tile_T} n={len(bucket_spans)} "
+                    f"get_hmm={(t0-tg0)*1000:.1f}ms "
                     f"extract={(t1-t0)*1000:.1f}ms run={(t2-t1)*1000:.1f}ms "
                     f"write={(t3-t2)*1000:.1f}ms"
                 )
         if timing:
+            total_patch = time.perf_counter() - t_entry
+            accounted = t_scan + t_hmm_get_tot + t_extract_tot + t_run_tot + t_write_tot
             print(
                 f"[nss-timing] strand={strand} scan={t_scan*1000:.1f}ms "
                 f"spans={len(spans)} patched={patched} "
+                f"get_hmm={t_hmm_get_tot*1000:.1f}ms "
                 f"extract={t_extract_tot*1000:.1f}ms "
                 f"run={t_run_tot*1000:.1f}ms "
                 f"write={t_write_tot*1000:.1f}ms "
+                f"total={total_patch*1000:.1f}ms "
+                f"unaccounted={(total_patch-accounted)*1000:.1f}ms "
                 f"| {'; '.join(per_tile_log)}",
                 file=sys.stderr,
             )

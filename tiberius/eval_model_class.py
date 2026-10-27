@@ -535,9 +535,8 @@ class PredictionGTF:
         self.gene_pred_hmm_layer.build((self.adapted_batch_size, self.seq_len, inp_size))
 
     _NSS_MIN_TILE = 1 << 14   # 16384; smallest tile we ever build
-    _NSS_BATCH_SIZE = 1       # NSS spans are rare; process one at a time to
-                              # avoid allocating adapted_batch_size (200+) HMM
-                              # slots when typically 1-5 spans exist per call.
+    _NSS_BATCH_SIZE = 1       # HMM build shape; actual call batch is dynamic
+                              # (eager mode — no shape-lock).
 
     def build_nss_hmm(self, inp_size=15):
         """Set up on-demand build infrastructure for the restrictive
@@ -606,7 +605,11 @@ class PredictionGTF:
 
         lstm_present = bool(self.lstm_model and self.hmm)
 
-        @tf.function
+        # No @tf.function: the HMM layer is already compiled C++; the Python
+        # graph-compilation step added by @tf.function takes 15-30 s per unique
+        # tile size, which dominates runtime for small genomes (Dmel: 3 tile
+        # sizes × ~20 s = 60 s overhead on a 1-2 min run). Eager dispatch is
+        # identical in output and fast enough for the small batches we process.
         def predict(x, y_lstm):
             if lstm_present:
                 nuc = Cast()(x)
@@ -620,33 +623,22 @@ class PredictionGTF:
         return predict
 
     def _run_nss_batched(self, nuc_seq, lstm_predictions, predict_fn):
-        """Run `predict_fn` on (N, T, C)/(N, T, 15) inputs, padding each
-        batch to `_NSS_BATCH_SIZE`. The HMM is built for that fixed size,
-        so we must never call predict_fn with a different batch dimension.
+        """Run `predict_fn` span-by-span (batch=1 each call).
+
+        The HMM is built for `_NSS_BATCH_SIZE=1`; running one span at a time
+        keeps the call shape consistent with the build shape and avoids any
+        per-batch-size buffer issues inside HMMBlock. In eager mode there is
+        no @tf.function retracing, so the per-span dispatch cost is just
+        Python + C++ kernel launch overhead (microseconds), not compilation.
         """
-        batch_size = self._NSS_BATCH_SIZE
-        N = nuc_seq.shape[0]
-        num_batches = (N + batch_size - 1) // batch_size
         out = []
-        for i in range(num_batches):
-            s, e = i * batch_size, min((i + 1) * batch_size, N)
-            x_batch = nuc_seq[s:e]
-            y_batch = lstm_predictions[s:e]
-            n_real = e - s
-            if n_real < batch_size:
-                pad = batch_size - n_real
-                x_batch = np.concatenate(
-                    [x_batch, np.zeros((pad, *x_batch.shape[1:]), dtype=x_batch.dtype)],
-                    axis=0,
-                )
-                y_batch = np.concatenate(
-                    [y_batch, np.zeros((pad, *y_batch.shape[1:]), dtype=y_batch.dtype)],
-                    axis=0,
-                )
-            y = predict_fn(x_batch, y_batch).numpy().squeeze()
-            if y.ndim == 1:
-                y = np.expand_dims(y, 0)
-            out.append(y[:n_real])
+        for i in range(nuc_seq.shape[0]):
+            x_i = nuc_seq[i : i + 1]      # (1, T, C)
+            y_i = lstm_predictions[i : i + 1]  # (1, T, 15)
+            yi = predict_fn(x_i, y_i).numpy()
+            if yi.ndim == 1:
+                yi = yi[np.newaxis, :]
+            out.append(yi)
         return np.concatenate(out, axis=0)
 
     def _extract_tx_chunks(

@@ -102,16 +102,18 @@ class PredictionGTF:
         self.lstm_model = None
         self.inp_size = 15
         self.gene_pred_hmm_layer_nss = None
-        self.nss_patch_parallel = None
         # Re-predict transcripts whose standard-HMM output contains a
         # spliced stop, using the restrictive (no_spliced_stop=True) HMM
         # instead of discarding them in the post-filter. Translation
-        # table 1 only. The patch HMM runs at `nss_patch_T = 2 * seq_len`;
-        # every span up to that length is repredicted through it. Spans
-        # longer than `nss_patch_T` are left for the end-of-pipeline
-        # inframe-stop filter.
+        # table 1 only. We build one HMM per distinct tile length (a
+        # power of two) on demand, so memory tracks the longest span
+        # actually seen, not a worst-case `2 * seq_len`. Spans longer
+        # than `nss_patch_T_max` are left for the end-of-pipeline filter.
         self.spliced_stop_reprediction = True
-        self.nss_patch_T = None
+        self.nss_patch_T_max = None
+        self._nss_inp_size = 15
+        self._nss_hmm_cache: dict = {}
+        self._nss_predict_cache: dict = {}
 
 
     def load_model(self, summary=True):
@@ -532,26 +534,62 @@ class PredictionGTF:
         )
         self.gene_pred_hmm_layer.build((self.adapted_batch_size, self.seq_len, inp_size))
 
+    _NSS_MIN_TILE = 1 << 14  # 16384; smallest tile we ever build
+
     def build_nss_hmm(self, inp_size=15):
-        """Build the restrictive HMM (no_spliced_stop=True) used to
-        re-predict transcripts whose standard-HMM output contains a
-        spliced stop. One HMM at `nss_patch_T = 2 * seq_len` handles
-        every transcript whose span fits in that chunk; longer spans
-        are left for the end-of-pipeline inframe-stop filter.
+        """Set up on-demand build infrastructure for the restrictive
+        (no_spliced_stop=True) HMM used to re-predict transcripts whose
+        standard-HMM output contains a spliced stop.
+
+        We don't build an HMM here. Instead we reserve a per-tile cache:
+        each span routes to the smallest power-of-two tile that leaves
+        room for flank, and the matching HMM is built on first use (see
+        `_get_nss_hmm`). This keeps memory proportional to the longest
+        span actually seen rather than a worst-case `2 * seq_len`.
+
+        Spans > `nss_patch_T_max = 2 * seq_len` are left for the
+        end-of-pipeline inframe-stop filter.
+
+        The earlier implementation built a second HMM at full `seq_len`
+        as a fallback. That path produced garbage output (a periodic
+        ``[intron, ~907][IR, ~19]`` pattern consistent with a
+        parallel-Viterbi stitching artifact in the 24-state transition
+        structure at full seq_len) and never fixed the inframe stops it
+        was meant to; the tiled approach avoids that path.
 
         Only supported for translation table 1.
-
-        The previous implementation also built a second HMM at
-        `seq_len` as a fallback for spans > 10000. That path produced
-        garbage output (a periodic ``[intron, 907] [IR, 19]`` pattern
-        consistent with a parallel-Viterbi stitching artifact in the
-        24-state transition structure at full seq_len), so we scale
-        the patch chunk to cover every realistic transcript instead.
         """
-        self.nss_patch_T = 2 * self.seq_len
-        self.nss_patch_parallel = compute_parallel_factor(self.nss_patch_T)
-        self.gene_pred_hmm_layer_nss = HMMBlock(
-            parallel=self.nss_patch_parallel,
+        self.nss_patch_T_max = 2 * self.seq_len
+        self._nss_inp_size = inp_size
+        self._nss_hmm_cache = {}
+        self._nss_predict_cache = {}
+        # Sentinel: non-None marks NSS reprediction as enabled for the
+        # various `if self.gene_pred_hmm_layer_nss is not None` guards.
+        self.gene_pred_hmm_layer_nss = self
+
+    def _choose_nss_tile(self, span_len: int) -> int | None:
+        """Smallest power-of-two tile that fits `span_len` plus some
+        flank, capped at `self.nss_patch_T_max`. Returns None if the
+        span is too long to repredict."""
+        target = max(self._NSS_MIN_TILE, int(span_len * 1.5))
+        tile = 1 << max(target - 1, 0).bit_length()
+        if tile > self.nss_patch_T_max:
+            # Cap at the exact max rather than falling to the next
+            # power of two above seq_len, so we don't skip spans that
+            # fit inside `2 * seq_len` just because they'd round up.
+            tile = self.nss_patch_T_max
+        if span_len > tile:
+            return None
+        return tile
+
+    def _get_nss_hmm(self, tile_T: int):
+        """Return a (hmm, predict_fn) pair for the given tile size,
+        building and caching both on first use."""
+        cached = self._nss_predict_cache.get(tile_T)
+        if cached is not None:
+            return cached
+        hmm = HMMBlock(
+            parallel=compute_parallel_factor(tile_T),
             mode=HMMMode.VITERBI,
             training=False,
             emitter_epsilon=self.hmm_emitter_epsilon,
@@ -560,19 +598,23 @@ class PredictionGTF:
             initial_ir_len=self.hmm_initial_ir_len,
             no_spliced_stop=True,
         )
-        self.gene_pred_hmm_layer_nss.build(
-            (self.adapted_batch_size, self.nss_patch_T, inp_size)
-        )
+        hmm.build((self.adapted_batch_size, tile_T, self._nss_inp_size))
+        self._nss_hmm_cache[tile_T] = hmm
 
-    @tf.function
-    def predict_vit_nss(self, x, y_lstm):
-        if self.lstm_model and self.hmm:
-            nuc = Cast()(x)
-            if y_lstm.ndim == 2:
-                y_lstm = y_lstm[np.newaxis, :, :]
-            return self.gene_pred_hmm_layer_nss(y_lstm, nuc)
-        nuc = tf.cast(x[:, :, :5], tf.float32)
-        return self.gene_pred_hmm_layer_nss(y_lstm, nuc)
+        lstm_present = bool(self.lstm_model and self.hmm)
+
+        @tf.function
+        def predict(x, y_lstm):
+            if lstm_present:
+                nuc = Cast()(x)
+                if y_lstm.ndim == 2:
+                    y_lstm = y_lstm[np.newaxis, :, :]
+                return hmm(y_lstm, nuc)
+            nuc = tf.cast(x[:, :, :5], tf.float32)
+            return hmm(y_lstm, nuc)
+
+        self._nss_predict_cache[tile_T] = predict
+        return predict
 
     def _run_nss_batched(self, nuc_seq, lstm_predictions, predict_fn):
         """Run `predict_fn` on (N, T, C)/(N, T, 15) inputs, padding each
@@ -670,9 +712,11 @@ class PredictionGTF:
         hmm_frame_reversed=False,
     ):
         """Detect transcripts with spliced stops on the flattened labels
-        and re-decode a chunk of length `nss_patch_T` centered on each
-        transcript using the restrictive HMM. Transcripts whose span
-        exceeds `nss_patch_T` are left for the end-of-pipeline
+        and re-decode each one with the restrictive HMM. Each span is
+        routed to the smallest cached tile (power of two, bounded by
+        `nss_patch_T_max = 2 * seq_len`) that leaves it some flank;
+        the matching HMM is built on first use. Transcripts whose span
+        exceeds `nss_patch_T_max` are left for the end-of-pipeline
         inframe-stop filter.
 
         For the bwd strand `labels`/`nuc` are in forward coord but
@@ -688,19 +732,29 @@ class PredictionGTF:
             return 0
         N, T = labels.shape
         total_len = N * T
-        patch_T = self.nss_patch_T
-        in_patch = [s for s in spans if (s.end - s.start) <= patch_T]
-        if not in_patch:
+        # Bucket spans by the tile size that will decode them. Spans
+        # too long to tile are dropped (end-filter handles them).
+        bucketed: dict[int, list] = {}
+        for span in spans:
+            tile_T = self._choose_nss_tile(span.end - span.start)
+            if tile_T is None:
+                continue
+            bucketed.setdefault(tile_T, []).append(span)
+        if not bucketed:
             return 0
         flat_x = x_one_hot.reshape(-1, x_one_hot.shape[-1])
         flat_lstm = lstm_out.reshape(-1, lstm_out.shape[-1])
-        cx, cl, bounds = self._extract_tx_chunks(
-            in_patch, flat_x, flat_lstm, T, total_len, patch_T,
-            hmm_frame_reversed,
-        )
-        labels_24 = self._run_nss_batched(cx, cl, self.predict_vit_nss)
-        labels_15 = remap_labels_24_to_15(labels_24)
-        self._write_chunk_labels(
-            labels, labels_15, bounds, T, hmm_frame_reversed,
-        )
-        return len(in_patch)
+        patched = 0
+        for tile_T, bucket_spans in bucketed.items():
+            predict_fn = self._get_nss_hmm(tile_T)
+            cx, cl, bounds = self._extract_tx_chunks(
+                bucket_spans, flat_x, flat_lstm, T, total_len, tile_T,
+                hmm_frame_reversed,
+            )
+            labels_24 = self._run_nss_batched(cx, cl, predict_fn)
+            labels_15 = remap_labels_24_to_15(labels_24)
+            self._write_chunk_labels(
+                labels, labels_15, bounds, T, hmm_frame_reversed,
+            )
+            patched += len(bucket_spans)
+        return patched

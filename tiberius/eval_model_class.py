@@ -654,12 +654,17 @@ class PredictionGTF:
                 file=sys.stderr,
             )
 
+        # Instantiate Cast once per tile and capture it in the closure.
+        # Previously `Cast()(x)` was called inside the @tf.function body,
+        # which created a new Keras layer object every call and tripped
+        # TF's retrace heuristic ("5 out of the last 5 calls triggered
+        # retracing" warnings at startup).
+        cast_layer = Cast() if lstm_present else None
+
         @tf.function
         def predict(x, y_lstm):
             if lstm_present:
-                nuc = Cast()(x)
-                if y_lstm.ndim == 2:
-                    y_lstm = y_lstm[np.newaxis, :, :]
+                nuc = cast_layer(x)
                 return hmm(y_lstm, nuc)
             nuc = tf.cast(x[:, :, :5], tf.float32)
             return hmm(y_lstm, nuc)

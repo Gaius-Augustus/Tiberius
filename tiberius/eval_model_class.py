@@ -219,6 +219,7 @@ class PredictionGTF:
         self.inp_size = self.lstm_model.output_shape[-1]
         if self.hmm and self.spliced_stop_reprediction:
             self.build_nss_hmm(inp_size=self.inp_size)
+            self._prewarm_nss_hmms()
         if summary:
             self.lstm_model.summary()
 
@@ -233,8 +234,9 @@ class PredictionGTF:
         if self.adapted_batch_size != old_adapted_batch_size:
             self.parallel_factor = compute_parallel_factor(adapted_chunksize)
             self.make_default_hmm(self.inp_size)
-            if self.spliced_stop_reprediction and self.gene_pred_hmm_layer_nss is not None:
-                self.build_nss_hmm(self.inp_size)
+            # Deliberately NOT rebuilding NSS HMMs here: they don't depend on
+            # `adapted_batch_size` (built at `_NSS_BATCH_SIZE=1`), and we
+            # want to preserve the pre-warmed cache from `load_model`.
 
 
     def load_clamsa_data(self, clamsa_prefix, seq_names, strand='', chunk_len=None, pad=False):
@@ -617,34 +619,30 @@ class PredictionGTF:
         return tile
 
     def _get_nss_hmm(self, tile_T: int):
-        """Return a (hmm, predict_fn) pair for the given tile size,
-        building and caching both on first use.
+        """Return a predict_fn for the given tile size, building and
+        caching the HMM + compiled @tf.function on first use.
 
-        The NSS HMMBlock and all of its ops are pinned to CPU to prevent
-        them from poisoning the GPU-resident main pipeline (LSTM + main
-        HMM). With NSS on GPU, Dmel took 31 min; isolating NSS on CPU
-        restores the main pipeline's throughput — the ~200 CPU-side
-        Viterbi decodes over ~16k-position tiles cost only seconds in
-        aggregate.
-        """
+        Expected to be called from `_prewarm_nss_hmms` at load time, so
+        no on-the-fly graph construction happens inside the hot
+        prediction loop. Lazy construction mid-run was observed to
+        poison the main pipeline's throughput on GPU."""
         cached = self._nss_predict_cache.get(tile_T)
         if cached is not None:
             return cached
         timing = os.environ.get("TIBERIUS_SPLICED_STOP_TIMING")
         t0 = time.perf_counter() if timing else 0.0
-        with tf.device("/CPU:0"):
-            hmm = HMMBlock(
-                parallel=compute_parallel_factor(tile_T),
-                mode=HMMMode.VITERBI,
-                training=False,
-                emitter_epsilon=self.hmm_emitter_epsilon,
-                initial_exon_len=self.hmm_initial_exon_len,
-                initial_intron_len=self.hmm_initial_intron_len,
-                initial_ir_len=self.hmm_initial_ir_len,
-                no_spliced_stop=True,
-            )
-            t1 = time.perf_counter() if timing else 0.0
-            hmm.build((self._NSS_BATCH_SIZE, tile_T, self._nss_inp_size))
+        hmm = HMMBlock(
+            parallel=compute_parallel_factor(tile_T),
+            mode=HMMMode.VITERBI,
+            training=False,
+            emitter_epsilon=self.hmm_emitter_epsilon,
+            initial_exon_len=self.hmm_initial_exon_len,
+            initial_intron_len=self.hmm_initial_intron_len,
+            initial_ir_len=self.hmm_initial_ir_len,
+            no_spliced_stop=True,
+        )
+        t1 = time.perf_counter() if timing else 0.0
+        hmm.build((self._NSS_BATCH_SIZE, tile_T, self._nss_inp_size))
         t2 = time.perf_counter() if timing else 0.0
         self._nss_hmm_cache[tile_T] = hmm
 
@@ -656,21 +654,55 @@ class PredictionGTF:
                 file=sys.stderr,
             )
 
-        # Compiled graph is MUCH faster than eager per-call dispatch; the
-        # tf.device scope keeps the compiled ops on CPU.
         @tf.function
         def predict(x, y_lstm):
-            with tf.device("/CPU:0"):
-                if lstm_present:
-                    nuc = Cast()(x)
-                    if y_lstm.ndim == 2:
-                        y_lstm = y_lstm[np.newaxis, :, :]
-                    return hmm(y_lstm, nuc)
-                nuc = tf.cast(x[:, :, :5], tf.float32)
+            if lstm_present:
+                nuc = Cast()(x)
+                if y_lstm.ndim == 2:
+                    y_lstm = y_lstm[np.newaxis, :, :]
                 return hmm(y_lstm, nuc)
+            nuc = tf.cast(x[:, :, :5], tf.float32)
+            return hmm(y_lstm, nuc)
 
         self._nss_predict_cache[tile_T] = predict
         return predict
+
+    def _prewarm_nss_hmms(self):
+        """Build + compile every NSS tile size we might encounter, upfront.
+
+        We iterate powers of two from `_NSS_MIN_TILE` up to
+        `nss_patch_T_max` and run each predict_fn once with dummy data
+        to force the @tf.function trace. All ops that would otherwise
+        be added to the TF runtime during the hot inference loop are
+        materialised here instead. If G3 holds, the main pipeline then
+        runs at main-branch speed (no "existence poisoning" from
+        mid-run graph mutation)."""
+        timing = os.environ.get("TIBERIUS_SPLICED_STOP_TIMING")
+        sizes: list[int] = []
+        t = self._NSS_MIN_TILE
+        while t < self.nss_patch_T_max:
+            sizes.append(t)
+            t *= 2
+        if self.nss_patch_T_max not in sizes:
+            sizes.append(self.nss_patch_T_max)
+        inp_channels = 6 if self.softmask else 5
+        for tile_T in sizes:
+            tp0 = time.perf_counter() if timing else 0.0
+            predict_fn = self._get_nss_hmm(tile_T)
+            dummy_x = np.zeros(
+                (self._NSS_BATCH_SIZE, tile_T, inp_channels), dtype=np.float32,
+            )
+            dummy_y = np.zeros(
+                (self._NSS_BATCH_SIZE, tile_T, self._nss_inp_size),
+                dtype=np.float32,
+            )
+            _ = predict_fn(dummy_x, dummy_y)
+            if timing:
+                print(
+                    f"[nss-prewarm] tile={tile_T} "
+                    f"total={(time.perf_counter()-tp0)*1000:.1f}ms",
+                    file=sys.stderr,
+                )
 
     def _run_nss_batched(self, nuc_seq, lstm_predictions, predict_fn):
         """Run `predict_fn` span-by-span (batch=1 each call).

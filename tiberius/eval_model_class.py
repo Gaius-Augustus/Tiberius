@@ -109,7 +109,7 @@ class PredictionGTF:
         # power of two) on demand, so memory tracks the longest span
         # actually seen, not a worst-case `2 * seq_len`. Spans longer
         # than `nss_patch_T_max` are left for the end-of-pipeline filter.
-        self.spliced_stop_reprediction = True
+        self.spliced_stop_reprediction = False
         self.nss_patch_T_max = None
         self._nss_inp_size = 15
         self._nss_hmm_cache: dict = {}

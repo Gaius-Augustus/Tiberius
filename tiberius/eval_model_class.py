@@ -109,7 +109,7 @@ class PredictionGTF:
         # power of two) on demand, so memory tracks the longest span
         # actually seen, not a worst-case `2 * seq_len`. Spans longer
         # than `nss_patch_T_max` are left for the end-of-pipeline filter.
-        self.spliced_stop_reprediction = False
+        self.spliced_stop_reprediction = True
         self.nss_patch_T_max = None
         self._nss_inp_size = 15
         self._nss_hmm_cache: dict = {}
@@ -618,24 +618,33 @@ class PredictionGTF:
 
     def _get_nss_hmm(self, tile_T: int):
         """Return a (hmm, predict_fn) pair for the given tile size,
-        building and caching both on first use."""
+        building and caching both on first use.
+
+        The NSS HMMBlock and all of its ops are pinned to CPU to prevent
+        them from poisoning the GPU-resident main pipeline (LSTM + main
+        HMM). With NSS on GPU, Dmel took 31 min; isolating NSS on CPU
+        restores the main pipeline's throughput — the ~200 CPU-side
+        Viterbi decodes over ~16k-position tiles cost only seconds in
+        aggregate.
+        """
         cached = self._nss_predict_cache.get(tile_T)
         if cached is not None:
             return cached
         timing = os.environ.get("TIBERIUS_SPLICED_STOP_TIMING")
         t0 = time.perf_counter() if timing else 0.0
-        hmm = HMMBlock(
-            parallel=compute_parallel_factor(tile_T),
-            mode=HMMMode.VITERBI,
-            training=False,
-            emitter_epsilon=self.hmm_emitter_epsilon,
-            initial_exon_len=self.hmm_initial_exon_len,
-            initial_intron_len=self.hmm_initial_intron_len,
-            initial_ir_len=self.hmm_initial_ir_len,
-            no_spliced_stop=True,
-        )
-        t1 = time.perf_counter() if timing else 0.0
-        hmm.build((self._NSS_BATCH_SIZE, tile_T, self._nss_inp_size))
+        with tf.device("/CPU:0"):
+            hmm = HMMBlock(
+                parallel=compute_parallel_factor(tile_T),
+                mode=HMMMode.VITERBI,
+                training=False,
+                emitter_epsilon=self.hmm_emitter_epsilon,
+                initial_exon_len=self.hmm_initial_exon_len,
+                initial_intron_len=self.hmm_initial_intron_len,
+                initial_ir_len=self.hmm_initial_ir_len,
+                no_spliced_stop=True,
+            )
+            t1 = time.perf_counter() if timing else 0.0
+            hmm.build((self._NSS_BATCH_SIZE, tile_T, self._nss_inp_size))
         t2 = time.perf_counter() if timing else 0.0
         self._nss_hmm_cache[tile_T] = hmm
 
@@ -647,18 +656,18 @@ class PredictionGTF:
                 file=sys.stderr,
             )
 
-        # Compiled graph is MUCH faster than eager per-call dispatch here
-        # (measured: eager made Dmel 2x slower than the compiled version).
-        # Compilation cost is paid once per tile_T on the first call.
+        # Compiled graph is MUCH faster than eager per-call dispatch; the
+        # tf.device scope keeps the compiled ops on CPU.
         @tf.function
         def predict(x, y_lstm):
-            if lstm_present:
-                nuc = Cast()(x)
-                if y_lstm.ndim == 2:
-                    y_lstm = y_lstm[np.newaxis, :, :]
+            with tf.device("/CPU:0"):
+                if lstm_present:
+                    nuc = Cast()(x)
+                    if y_lstm.ndim == 2:
+                        y_lstm = y_lstm[np.newaxis, :, :]
+                    return hmm(y_lstm, nuc)
+                nuc = tf.cast(x[:, :, :5], tf.float32)
                 return hmm(y_lstm, nuc)
-            nuc = tf.cast(x[:, :, :5], tf.float32)
-            return hmm(y_lstm, nuc)
 
         self._nss_predict_cache[tile_T] = predict
         return predict

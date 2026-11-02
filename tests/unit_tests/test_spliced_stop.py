@@ -16,7 +16,12 @@ from tiberius.spliced_stop import (
     TranscriptSpan,
     find_spliced_stop_transcripts,
     remap_labels_24_to_15,
+    repredicted_boundaries,
+    sequence_segments,
+    window_segments,
 )
+from bricks2marble.struct.fasta import Fasta, Sequence
+from bricks2marble.tools.annotate import _find_mismatches
 
 
 # Nucleotide encoding: A=0, C=1, G=2, T=3 (ACGTN).
@@ -158,3 +163,212 @@ def test_partial_transcript_at_edge_is_skipped():
     # The flattened scan still only reports complete IR-bounded transcripts.
     # The input lacks a leading IR, so the transcript is partial and skipped.
     assert spans == []
+
+
+# ---------------------------------------------------------------------------
+# Scan segments, padding and reprediction boundaries.
+#
+# Every fixture below carries an in-frame stop (TAG) in its CDS, so the old
+# behaviour (whole flattened array, no `repredicted`) flags it. The tests
+# check that the old call flags it and the new arguments do not.
+# ---------------------------------------------------------------------------
+
+
+def _padded(nuc_str: str, n_pad: int) -> np.ndarray:
+    return np.concatenate([_row(nuc_str), np.full(n_pad, -1, dtype=np.int8)])
+
+
+def _joined_rows():
+    # T=20. One CDS runs over flat [5:26], across the row 0 / row 1 edge:
+    # ATG TAG CGC CGC CGC | CGC CAG -> internal TAG at codon 1.
+    labels = np.array([[0]*5 + [4]*15, [4]*6 + [0]*14], dtype=np.int32)
+    nuc = np.stack([
+        _row("NNNNN" + "ATGTAGCGCCGCCGC"),
+        _row("CGCCAG" + "N"*14),
+    ])
+    return labels, nuc
+
+
+def _ends_at_boundary_rows():
+    # T=20. CDS is flat [5:20]; it ends exactly at the row edge (flat 20).
+    labels = np.array([[0]*5 + [4]*15, [0]*20], dtype=np.int32)
+    nuc = np.stack([_row("NNNNN" + "ATGTAGCGCCGCCGC"), _row("N"*20)])
+    return labels, nuc
+
+
+def _starts_at_boundary_rows():
+    # T=20. CDS is flat [20:35]; it starts exactly at the row edge (flat 20).
+    labels = np.array([[0]*20, [4]*15 + [0]*5], dtype=np.int32)
+    nuc = np.stack([_row("N"*20), _row("ATGTAGCGCCGCCGC" + "N"*5)])
+    return labels, nuc
+
+
+def test_partial_transcript_at_sequence_start_is_not_flagged():
+    # T=24. Row 0 is sequence A (20 bases + 4 padding), all intergenic.
+    # Row 1 is sequence B: CDS from offset 0 (cut off at the sequence start),
+    # flat [24:42]: ATG TAG CGC CGC CGC CAG. Flattened, the IR of row 0 makes
+    # it look complete; as a segment of its own it is partial and dropped.
+    labels = np.array([[0]*24, [4]*18 + [0]*6], dtype=np.int32)
+    nuc = np.stack([
+        _padded("N"*20, 4),
+        _row("ATGTAGCGCCGCCGCCAG" + "N"*6),
+    ])
+    assert find_spliced_stop_transcripts(labels, nuc, "+") == [
+        TranscriptSpan(start=24, end=42)
+    ]
+    spans = find_spliced_stop_transcripts(
+        labels, nuc, "+", segments=[(0, 20), (24, 48)],
+    )
+    assert spans == []
+
+
+def test_transcript_joined_across_sequences_is_not_flagged():
+    # Row 0 ends in CDS and row 1 starts in CDS, but they are two sequences.
+    labels, nuc = _joined_rows()
+    assert find_spliced_stop_transcripts(labels, nuc, "+") == [
+        TranscriptSpan(start=5, end=26)
+    ]
+    spans = find_spliced_stop_transcripts(
+        labels, nuc, "+", segments=[(0, 20), (20, 40)],
+    )
+    assert spans == []
+
+
+def test_cds_running_into_padding_is_not_flagged():
+    # T=30, sequence of 24 bases, 6 padding (-1). The labels stay CDS for 3
+    # padding bases and only then return to IR: CDS flat [3:27] =
+    # ATG TAG CGC CGC CGC CGC CGC + (-1 -1 -1). The last codon is dropped as
+    # the terminal one, so the TAG at codon 1 is what trips the old scan.
+    labels = np.array([[0]*3 + [4]*24 + [0]*3], dtype=np.int32)
+    nuc = _padded("NNN" + "ATGTAGCGCCGCCGCCGCCGC", 6)[None, :]
+    assert nuc.shape == labels.shape
+    assert find_spliced_stop_transcripts(labels, nuc, "+") == [
+        TranscriptSpan(start=3, end=27)
+    ]
+    spans = find_spliced_stop_transcripts(labels, nuc, "+", segments=[(0, 24)])
+    assert spans == []
+
+
+def test_reprediction_rows_are_not_joined_but_real_transcripts_are_kept():
+    # Rows 0/1 are the joined pair from above. Row 2 holds a genuine complete
+    # transcript, CDS flat [43:55] = ATG TAG CGC CAG; it must keep its
+    # flat coordinates (offset 40) under `window_segments`.
+    joined_labels, joined_nuc = _joined_rows()
+    labels = np.vstack([joined_labels, [0]*3 + [4]*12 + [0]*5])
+    nuc = np.vstack([joined_nuc, _row("NNN" + "ATGTAGCGCCAG" + "N"*5)])
+    assert labels.shape == nuc.shape == (3, 20)
+    assert window_segments(nuc) == [(0, 20), (20, 40), (40, 60)]
+    assert find_spliced_stop_transcripts(labels, nuc, "+") == [
+        TranscriptSpan(start=5, end=26), TranscriptSpan(start=43, end=55),
+    ]
+    spans = find_spliced_stop_transcripts(
+        labels, nuc, "+", segments=window_segments(nuc),
+    )
+    assert spans == [TranscriptSpan(start=43, end=55)]
+
+
+@pytest.mark.parametrize(
+    "build, span, outside",
+    [
+        (_joined_rows, TranscriptSpan(5, 26), 4),            # crosses 20
+        (_ends_at_boundary_rows, TranscriptSpan(5, 20), 21),  # ends at 20
+        (_starts_at_boundary_rows, TranscriptSpan(20, 35), 19),  # starts at 20
+    ],
+    ids=["crosses", "ends_at", "starts_at"],
+)
+def test_transcript_touching_repredicted_boundary_is_skipped(
+    build, span, outside,
+):
+    labels, nuc = build()
+
+    def scan(boundaries):
+        return find_spliced_stop_transcripts(
+            labels, nuc, "+", repredicted=np.array(boundaries, dtype=np.int64),
+        )
+
+    assert scan([20]) == []              # touches or crosses -> skipped
+    assert scan([]) == [span]            # nothing repredicted
+    assert scan([40]) == [span]          # boundary elsewhere
+    assert scan([outside]) == [span]     # one base outside the span
+    assert find_spliced_stop_transcripts(labels, nuc, "+") == [span]
+
+
+def test_cross_window_transcript_with_unflagged_boundary_is_detected():
+    # T=20, one sequence. Row 0 ends in I0 and row 1 starts in I0, so the two
+    # windows agree and the boundary is not repredicted. Flat regions:
+    # IR[0:3] CDS[3:9] intron[9:24] CDS[24:36] IR[36:40]; spliced CDS =
+    # ATGTAG + CGCCGCCGCCAG -> ATG TAG CGC CGC CGC CAG, internal TAG.
+    labels = np.array([
+        [0]*3 + [4]*6 + [1]*11,
+        [1]*4 + [4]*12 + [0]*4,
+    ], dtype=np.int32)
+    nuc = np.stack([
+        _row("NNN" + "ATGTAG" + "N"*11),
+        _row("N"*4 + "CGCCGCCGCCAG" + "N"*4),
+    ])
+    assert _find_mismatches(labels).size == 0
+    spans = find_spliced_stop_transcripts(
+        labels, nuc, "+", segments=[(0, 40)],
+        repredicted=np.array([], dtype=np.int64),
+    )
+    assert spans == [TranscriptSpan(start=3, end=36)]
+
+
+def test_window_segments_strip_trailing_padding():
+    nuc = np.array([
+        [0, 1, 2, 3, 0, 1],       # full row
+        [0, 1, 2, -1, -1, -1],    # 3 bases, 3 padding
+        [0, 1, 2, 3, 0, -1],      # 5 bases, 1 padding
+        [-1] * 6,                 # empty
+    ], dtype=np.int8)
+    assert window_segments(nuc) == [(0, 6), (6, 9), (12, 17), (18, 18)]
+
+
+def _toy_fasta(sizes, T):
+    # Same resampling as bricks2marble.io.fasta.iterate_sequences: every
+    # sequence is cut into windows of T, the last one padded with -1.
+    seqs = [
+        Sequence(np.zeros(n, dtype=np.int8), name=f"s{i}")
+        for i, n in enumerate(sizes)
+    ]
+    return Fasta(seqs).resample(T)
+
+
+def test_sequence_segments_exclude_padding():
+    # T=10: a 7-base sequence (1 window, 3 padding) followed by a 16-base
+    # sequence (2 windows, 4 padding) -> rows 0 | 1, 2.
+    fasta = _toy_fasta([7, 16], 10)
+    nuc = fasta.nuc
+    assert nuc.shape == (3, 10)
+    assert (nuc[0, 7:] == -1).all() and (nuc[2, 6:] == -1).all()
+    assert sequence_segments(fasta) == [(0, 7), (10, 26)]
+
+
+@pytest.mark.parametrize(
+    "sizes, first_row, expected",
+    [
+        ([7, 16], 1, 20),   # sequence 2 starts at row 1: (0 + 1 + 1) * 10
+        ([16, 7], 0, 10),   # sequence 1 starts at row 0: (0 + 0 + 1) * 10
+    ],
+)
+def test_repredicted_boundaries_only_within_a_sequence(
+    sizes, first_row, expected,
+):
+    # The 16-base sequence occupies rows first_row, first_row + 1 and has a
+    # genuine mismatch between them (I0 vs I1). The edge between the two
+    # sequences also mismatches (IR vs state 3) but must not be reported.
+    fasta = _toy_fasta(sizes, 10)
+    labels = np.zeros((3, 10), dtype=np.int32)
+    labels[first_row, -1] = 1
+    labels[first_row + 1, 0] = 2
+    labels[2 - first_row, 0] = 3
+    assert _find_mismatches(labels).size == 2  # naive scan sees both edges
+    boundaries = repredicted_boundaries(labels, fasta)
+    np.testing.assert_array_equal(boundaries, [expected])
+
+
+def test_repredicted_boundaries_empty_when_windows_agree():
+    fasta = _toy_fasta([7, 16], 10)
+    labels = np.zeros((3, 10), dtype=np.int32)
+    boundaries = repredicted_boundaries(labels, fasta)
+    assert boundaries.size == 0

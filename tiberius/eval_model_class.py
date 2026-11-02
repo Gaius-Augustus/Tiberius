@@ -14,6 +14,9 @@ from hidten import HMMMode
 from tiberius.hmm import HMMBlock
 from tiberius.spliced_stop import (
     find_spliced_stop_transcripts,
+    repredicted_boundaries,
+    sequence_segments,
+    window_segments,
     remap_labels_24_to_15,
 )
 import bricks2marble as b2m
@@ -49,7 +52,8 @@ class PredictionGTF:
                  hmm_factor=None,
                  annot_path='', genome_path='', genome=None, softmask=False,
                  parallel_factor=1,
-                 lstm_cfg='',):
+                 lstm_cfg='',
+                 spliced_stop_reprediction=True,):
         """
         Arguments:
             - model_path (str): Path to the main model file that includes a HMM layer.
@@ -71,6 +75,7 @@ class PredictionGTF:
             - softmask (bool): Whether to use softmasking.
             - parallel_factor (int): The parallel factor used for Viterbi.
             - lstm_cfg (str): path to lstm cfg to load weights instead of the whole model
+            - spliced_stop_reprediction (bool): Re-predict transcripts with spliced stops using the restrictive HMM.
         """
         self.model_path = model_path
         self.model_path_old = model_path_old
@@ -107,9 +112,9 @@ class PredictionGTF:
         # instead of discarding them in the post-filter. Translation
         # table 1 only. We build one HMM per distinct tile length (a
         # power of two) on demand, so memory tracks the longest span
-        # actually seen, not a worst-case `2 * seq_len`. Spans longer
-        # than `nss_patch_T_max` are left for the end-of-pipeline filter.
-        self.spliced_stop_reprediction = True
+        # actually seen, not a worst-case `seq_len`. Spans longer than
+        # `nss_patch_T_max` are left for the end-of-pipeline filter.
+        self.spliced_stop_reprediction = spliced_stop_reprediction
         self.nss_patch_T_max = None
         self._nss_inp_size = 15
         self._nss_hmm_cache: dict = {}
@@ -288,6 +293,8 @@ class PredictionGTF:
         if self.spliced_stop_reprediction and self.gene_pred_hmm_layer_nss is not None:
             self._patch_spliced_stops(
                 hmm_out_fwd, nuc, x_one_hot_fwd, lstm_out_fwd, strand="+",
+                segments=sequence_segments(fasta),
+                repredicted=repredicted_boundaries(hmm_out_fwd, fasta),
             )
         t4 = time.perf_counter() if timing else 0.0
         del lstm_out_fwd, x_one_hot_fwd
@@ -316,6 +323,8 @@ class PredictionGTF:
             self._patch_spliced_stops(
                 hmm_out_bwd, nuc, x_one_hot_bwd, lstm_out_bwd, strand="-",
                 hmm_frame_reversed=True,
+                segments=sequence_segments(fasta),
+                repredicted=repredicted_boundaries(hmm_out_bwd, fasta),
             )
         t9 = time.perf_counter() if timing else 0.0
         del lstm_out_bwd, x_one_hot_bwd
@@ -359,6 +368,7 @@ class PredictionGTF:
                 self._patch_spliced_stops(
                     hmm_out_fwd, nuc[indices_fwd],
                     x_one_hot_fwd, lstm_out_fwd, strand="+",
+                    segments=window_segments(nuc[indices_fwd]),
                 )
             del lstm_out_fwd, x_one_hot_fwd
             hmm_out_fwd_expand[indices_fwd] = hmm_out_fwd
@@ -388,6 +398,7 @@ class PredictionGTF:
                     hmm_out_bwd, nuc[indices_bwd],
                     x_one_hot_bwd, lstm_out_bwd, strand="-",
                     hmm_frame_reversed=True,
+                    segments=window_segments(nuc[indices_bwd]),
                 )
             del lstm_out_bwd, x_one_hot_bwd
             hmm_out_bwd_expand[indices_bwd] = hmm_out_bwd
@@ -570,7 +581,7 @@ class PredictionGTF:
 
     _NSS_MIN_TILE = 1 << 14   # 16384; smallest tile we ever build
     _NSS_BATCH_SIZE = 1       # HMM build shape; actual call batch is dynamic
-                              # (eager mode — no shape-lock).
+                              # (calls go through a compiled @tf.function).
 
     def build_nss_hmm(self, inp_size=15):
         """Set up on-demand build infrastructure for the restrictive
@@ -714,9 +725,10 @@ class PredictionGTF:
 
         The HMM is built for `_NSS_BATCH_SIZE=1`; running one span at a time
         keeps the call shape consistent with the build shape and avoids any
-        per-batch-size buffer issues inside HMMBlock. In eager mode there is
-        no @tf.function retracing, so the per-span dispatch cost is just
-        Python + C++ kernel launch overhead (microseconds), not compilation.
+        per-batch-size buffer issues inside HMMBlock. `predict_fn` is a
+        compiled @tf.function (see `_get_nss_hmm`) that is traced per tile
+        size in `_prewarm_nss_hmms`, so the call shape (1, tile_T, C) must
+        match the prewarmed one to avoid retracing.
         """
         out = []
         for i in range(nuc_seq.shape[0]):
@@ -793,12 +805,12 @@ class PredictionGTF:
 
     def _patch_spliced_stops(
         self, labels, nuc, x_one_hot, lstm_out, strand,
-        hmm_frame_reversed=False,
+        hmm_frame_reversed=False, segments=None, repredicted=None,
     ):
         """Detect transcripts with spliced stops on the flattened labels
         and re-decode each one with the restrictive HMM. Each span is
         routed to the smallest cached tile (power of two, bounded by
-        `nss_patch_T_max = 2 * seq_len`) that leaves it some flank;
+        `nss_patch_T_max = seq_len`) that leaves it some flank;
         the matching HMM is built on first use. Transcripts whose span
         exceeds `nss_patch_T_max` are left for the end-of-pipeline
         inframe-stop filter.
@@ -807,6 +819,14 @@ class PredictionGTF:
         `x_one_hot`/`lstm_out` are in bwd frame (complemented, per-window
         reversed). Set `hmm_frame_reversed=True`.
 
+        `segments` and `repredicted` are passed to
+        `find_spliced_stop_transcripts`. `segments` lists the flattened
+        (start, end) ranges that are contiguous in the genome, so a
+        transcript is never scanned across neighbouring sequences or
+        padding (None: all rows form one range). `repredicted` lists
+        flattened window boundaries that will be repredicted; transcripts
+        touching one are skipped (None: no skipping).
+
         Returns the number of patched transcripts.
         """
         if labels is None or labels.size == 0:
@@ -814,7 +834,9 @@ class PredictionGTF:
         timing = os.environ.get("TIBERIUS_SPLICED_STOP_TIMING")
         t_entry = time.perf_counter() if timing else 0.0
         t_scan0 = time.perf_counter() if timing else 0.0
-        spans = find_spliced_stop_transcripts(labels, nuc, strand=strand)
+        spans = find_spliced_stop_transcripts(
+            labels, nuc, strand=strand, segments=segments, repredicted=repredicted,
+        )
         t_scan = time.perf_counter() - t_scan0 if timing else 0.0
         if not spans:
             if timing:

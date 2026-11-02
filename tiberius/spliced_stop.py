@@ -7,9 +7,11 @@
 # restrictive HMM to re-predict transcripts whose standard prediction
 # contained a spliced stop, instead of discarding those transcripts.
 #
-# Detection is transcript-centric and operates on the group's flattened
-# labels (concatenation of all windows), so it catches transcripts that
-# straddle a window boundary as naturally as single-window ones.
+# Detection is transcript-centric and operates on flattened labels, so it
+# catches transcripts that straddle a window boundary as naturally as
+# single-window ones. A scan must stay within one contiguous stretch of genome:
+# neighbouring sequences and reprediction windows are not neighbours in the
+# genome, and a transcript cut off at the edge of one only looks complete.
 # ==============================================================
 
 from dataclasses import dataclass
@@ -18,6 +20,7 @@ import numpy as np
 
 from bricks2marble.struct.fasta import complement, nucleotides_to_kmers
 from bricks2marble.tools.annotate import (
+    _find_mismatches,
     _split_regions,
     _transcripts_from_regions,
 )
@@ -107,13 +110,45 @@ def _transcript_has_spliced_stop(
     return bool(np.any(np.isin(codons, STOP_CODON_CODES)))
 
 
+def sequence_segments(fasta) -> list[tuple[int, int]]:
+    """Flattened (start, end) of each sequence of a group, without padding.
+    Sequences follow each other in the flattened array but not in the genome."""
+    segments, shift = [], 0
+    for seq in fasta:
+        segments.append((shift * fasta.T, shift * fasta.T + seq.size))
+        shift += seq.N
+    return segments
+
+
+def window_segments(nuc: np.ndarray) -> list[tuple[int, int]]:
+    """Flattened (start, end) of each window without its trailing padding, for
+    a reprediction batch, where windows are not neighbours in the genome."""
+    T = nuc.shape[1]
+    is_pad = nuc == -1
+    lengths = np.where(is_pad.any(axis=1), is_pad.argmax(axis=1), T)
+    return [(i * T, i * T + int(n)) for i, n in enumerate(lengths)]
+
+
+def repredicted_boundaries(labels: np.ndarray, fasta) -> np.ndarray:
+    """Flattened positions of the window boundaries that `_annotate` will
+    repredict, because the two windows disagree there."""
+    boundaries, shift = [], 0
+    for seq in fasta:
+        mismatches = _find_mismatches(labels[shift:shift + seq.N, :])
+        boundaries.extend((mismatches + shift + 1) * fasta.T)
+        shift += seq.N
+    return np.array(boundaries, dtype=np.int64)
+
+
 def find_spliced_stop_transcripts(
     labels: np.ndarray,
     nuc: np.ndarray,
     strand: str,
+    segments: list[tuple[int, int]] | None = None,
+    repredicted: np.ndarray | None = None,
 ) -> list[TranscriptSpan]:
     """Scan a group's full labels for every transcript whose CDS contains
-    an inframe stop after splicing. Operates on the flattened labels so
+    an inframe stop after splicing. Operates on flattened labels so
     cross-window transcripts are caught as naturally as single-window ones.
 
     Returns a list of (start, end) spans (half-open) in flattened
@@ -127,19 +162,35 @@ def find_spliced_stop_transcripts(
         strand: '+' or '-'. For '-' the labels row is already aligned to
                 forward coordinates but encodes a reverse-strand gene, so
                 CDS bases are reverse-complemented before translation.
+        segments: Flattened (start, end) ranges that are contiguous in the
+                genome. A transcript cannot leave its range. Defaults to all
+                windows being one contiguous range.
+        repredicted: Flattened window boundaries that will be repredicted.
+                Transcripts touching one are skipped: their labels on the two
+                sides were decoded separately and are about to be replaced,
+                and the reprediction patches them if a stop remains.
     """
     if labels.size == 0:
         return []
     flat_labels = labels.reshape(-1)
     flat_nuc = nuc.reshape(-1)
-    regions = _split_regions(flat_labels, strand=strand)
+    if segments is None:
+        segments = [(0, flat_labels.size)]
     spans: list[TranscriptSpan] = []
-    for tx_regions in _transcripts_from_regions(regions):
-        cds_regions = [r for r in tx_regions if r.name == "CDS"]
-        if not _transcript_has_spliced_stop(cds_regions, flat_nuc, strand):
+    for seg_start, seg_end in segments:
+        if seg_end <= seg_start:
             continue
-        spans.append(TranscriptSpan(
-            start=int(tx_regions[0].start),
-            end=int(tx_regions[-1].end),
-        ))
+        regions = _split_regions(
+            flat_labels[seg_start:seg_end], offset=seg_start, strand=strand,
+        )
+        for tx_regions in _transcripts_from_regions(regions):
+            start, end = int(tx_regions[0].start), int(tx_regions[-1].end)
+            if repredicted is not None and np.any(
+                (repredicted >= start) & (repredicted <= end)
+            ):
+                continue
+            cds_regions = [r for r in tx_regions if r.name == "CDS"]
+            if not _transcript_has_spliced_stop(cds_regions, flat_nuc, strand):
+                continue
+            spans.append(TranscriptSpan(start=start, end=end))
     return spans

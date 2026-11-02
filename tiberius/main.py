@@ -499,6 +499,8 @@ def run_tiberius(args):
         else args.parallel_factor
     )
     log_config.append(f"HMM parallel factor: {parallel_factor}")
+    log_config.append(f"Spliced stop reprediction: {not args.no_spliced_stop_reprediction}")
+    log_config.append(f"Remove transcripts with inframe stops: {not args.keep_inframe_stops}")
     logging.info("")
     start_time = time.time()
 
@@ -520,6 +522,7 @@ def run_tiberius(args):
         genome=None,
         softmask=softmasking,
         parallel_factor=parallel_factor,
+        spliced_stop_reprediction=not args.no_spliced_stop_reprediction,
     )
 
     pred_gtf.load_model(summary=0)
@@ -538,9 +541,10 @@ def run_tiberius(args):
         b2m.tools.check_min_coding_length(
             annot, 200, remove=True
         )
-        b2m.tools.check_inframe_stop_codons(
-            annot, fasta, remove=True
-        )
+        if not args.keep_inframe_stops:
+            b2m.tools.check_inframe_stop_codons(
+                annot, fasta, remove=True
+            )
         if args.codingseq:
             annot.sequence_to_file(target="coding", fasta=fasta, path=args.codingseq, mode="a")
         if args.protseq:

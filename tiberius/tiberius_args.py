@@ -76,6 +76,10 @@ def parseCmd():
         help='Prefix for gene and transcript IDs in output file(s). Works for both GTF and GFF3.')
     tiberius_grp.add_argument('--min_genome_seqlen', type=int, default=1000,
         help='Minimum length of input sequences used for predictions.')
+    tiberius_grp.add_argument('--no_spliced_stop_reprediction', action='store_true',
+        help='Do not re-predict transcripts with spliced in-frame stops using the restrictive HMM.')
+    tiberius_grp.add_argument('--keep_inframe_stops', action='store_true',
+        help='Keep transcripts with in-frame stop codons in the output instead of removing them.')
     tiberius_grp.add_argument('--singularity', action='store_true',
         help='Run Tiberius inside the Singularity image (auto-download if missing).')
     tiberius_grp.add_argument('--cleanup_old_singularity_images', action='store_true',
